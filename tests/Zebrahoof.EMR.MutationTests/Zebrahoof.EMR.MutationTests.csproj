@@ -13,14 +13,12 @@
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.0" />
-    <PackageReference Include="System.Text.Json" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="8.0.1" />
+    <PackageReference Include="System.Text.Json" Version="8.0.1" />
     <PackageReference Include="FluentAssertions" Version="6.12.0" />
     <PackageReference Include="Moq" Version="4.20.69" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <!-- Stryker.NET for mutation testing -->
-    <PackageReference Include="Stryker.Core" Version="3.11.0" />
-    <PackageReference Include="Stryker.DotnetCli" Version="3.11.0" />
+    <!-- Stryker.NET: install as a dotnet tool (e.g. dotnet tool install -g dotnet-stryker), not a PackageReference. -->
   </ItemGroup>
 
   <ItemGroup>

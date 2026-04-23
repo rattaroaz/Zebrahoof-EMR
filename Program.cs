@@ -165,7 +165,11 @@ builder.Services.AddHostedService<ClinicalDataPersistenceInitializer>();
 // Add user mapping and auth sync services
 builder.Services.AddScoped<UserMappingService>();
 builder.Services.AddScoped<AuthSyncService>();
-builder.Services.AddHttpClient<GrokApiService>();
+builder.Services.AddHttpClient<GrokApiService>(client =>
+{
+    // Multi-agent / reasoning runs can take many minutes; xAI docs suggest up to 3600s.
+    client.Timeout = TimeSpan.FromMinutes(30);
+});
 builder.Services.AddScoped<PatientRecordUpdateService>();
 builder.Services.AddScoped<EncounterMessageService>();
 builder.Services.AddScoped<GrokSessionStateService>();

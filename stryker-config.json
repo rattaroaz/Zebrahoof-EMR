@@ -2,7 +2,7 @@
   "stryker-config": {
     "reporters": ["html", "json", "progress"],
     "test-runner": "vstest",
-    "solution": "../../Zebrahoof EMR.sln",
+    "solution": "Zebrahoof EMR.sln",
     "test-projects": [
       "Zebrahoof.EMR.UnitTests",
       "Zebrahoof.EMR.ApiTests"

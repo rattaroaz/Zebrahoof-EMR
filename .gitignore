@@ -1,0 +1,79 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+artifacts/
+
+# .NET
+project.lock.json
+project.fragment.lock.json
+*.snupkg
+*.nuget.props
+*.nuget.targets
+*.sourcelink.json
+
+# Test / coverage
+[Tt]est[Rr]esult*/
+*.trx
+.coverage
+.coverage*
+coverage*.json
+*.coveragexml
+BenchmarkDotNet.Artifacts/
+
+# User-specific (Visual Studio, VS Code, Rider, etc.)
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.userprefs
+*.rsuser
+*.pubxml
+*.publishproj
+*.*proj.user
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+
+# Secrets and local config (keep .env.example; do not commit real keys)
+.env
+.env.*
+!.env.example
+
+# Local databases (regenerated in development)
+App_Data/*.db
+App_Data/*.db-shm
+App_Data/*.db-wal
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+._*
+
+# Linux
+.directory
+.Trash-*
+
+# Optional tooling
+*.tgz
+local.settings.json
+secrets.json

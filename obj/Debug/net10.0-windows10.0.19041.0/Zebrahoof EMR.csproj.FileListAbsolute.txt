@@ -1,2 +1,0 @@
-C:\Users\kimri\OneDrive\Desktop\cloned repos\Zebrahoof EMR\obj\Debug\net10.0-windows10.0.19041.0\EmbeddedAttribute.cs
-C:\Users\kimri\OneDrive\Desktop\cloned repos\Zebrahoof EMR\obj\Debug\net10.0-windows10.0.19041.0\ValidatableTypeAttribute.cs
