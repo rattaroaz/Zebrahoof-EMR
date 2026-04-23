@@ -1,0 +1,483 @@
+@page "/tasks"
+@inject MockTaskService TaskService
+@inject NotificationService Notifications
+@inject IDialogService DialogService
+
+<PageTitle>Tasks - Zebrahoof EMR</PageTitle>
+
+@* Header *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <MudText Typo="Typo.h4">Tasks</MudText>
+    <MudButton Variant="Variant.Filled" 
+               Color="Color.Primary" 
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenNewTaskDialog">
+        New Task
+    </MudButton>
+</MudStack>
+
+@* Summary Cards *@
+<MudGrid Spacing="3" Class="mb-4">
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="1" Class="pa-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Pending</MudText>
+                    <MudText Typo="Typo.h4">@_pendingCount</MudText>
+                </div>
+                <MudAvatar Color="Color.Warning" Variant="Variant.Outlined" Size="Size.Large">
+                    <MudIcon Icon="@Icons.Material.Filled.PendingActions" />
+                </MudAvatar>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="1" Class="pa-4 cursor-pointer" @onclick="() => SetFilter(TaskFilter.Overdue)">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Overdue</MudText>
+                    <MudText Typo="Typo.h4" Color="@(_overdueCount > 0 ? Color.Error : Color.Default)">@_overdueCount</MudText>
+                </div>
+                <MudAvatar Color="Color.Error" Variant="Variant.Outlined" Size="Size.Large">
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" />
+                </MudAvatar>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="1" Class="pa-4 cursor-pointer" @onclick="() => SetFilter(TaskFilter.DueToday)">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Due Today</MudText>
+                    <MudText Typo="Typo.h4">@_dueTodayCount</MudText>
+                </div>
+                <MudAvatar Color="Color.Info" Variant="Variant.Outlined" Size="Size.Large">
+                    <MudIcon Icon="@Icons.Material.Filled.Today" />
+                </MudAvatar>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" sm="6" md="3">
+        <MudPaper Elevation="1" Class="pa-4 cursor-pointer" @onclick="() => SetFilter(TaskFilter.Completed)">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <div>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Completed Today</MudText>
+                    <MudText Typo="Typo.h4">@_completedTodayCount</MudText>
+                </div>
+                <MudAvatar Color="Color.Success" Variant="Variant.Outlined" Size="Size.Large">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                </MudAvatar>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@* Filters Bar *@
+<MudPaper Elevation="1" Class="pa-3 mb-4">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Spacing="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary">
+                <MudButton OnClick="@(() => SetFilter(TaskFilter.All))" 
+                           Variant="@(_currentFilter == TaskFilter.All ? Variant.Filled : Variant.Outlined)">
+                    All
+                </MudButton>
+                <MudButton OnClick="@(() => SetFilter(TaskFilter.Pending))" 
+                           Variant="@(_currentFilter == TaskFilter.Pending ? Variant.Filled : Variant.Outlined)">
+                    Pending
+                </MudButton>
+                <MudButton OnClick="@(() => SetFilter(TaskFilter.Overdue))" 
+                           Variant="@(_currentFilter == TaskFilter.Overdue ? Variant.Filled : Variant.Outlined)"
+                           Color="@(_overdueCount > 0 ? Color.Error : Color.Primary)">
+                    Overdue @if (_overdueCount > 0) { <MudBadge Content="@_overdueCount" Color="Color.Error" Overlap="true" Class="ml-2" /> }
+                </MudButton>
+                <MudButton OnClick="@(() => SetFilter(TaskFilter.Completed))" 
+                           Variant="@(_currentFilter == TaskFilter.Completed ? Variant.Filled : Variant.Outlined)">
+                    Completed
+                </MudButton>
+            </MudButtonGroup>
+        </MudStack>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudSelect Value="_selectedType" 
+                       Label="Type" 
+                       Variant="Variant.Outlined" 
+                       Margin="Margin.Dense"
+                       Style="min-width: 160px;"
+                       ValueChanged="@((ClinicalTaskType? v) => OnTypeChanged(v))">
+                <MudSelectItem Value="@((ClinicalTaskType?)null)">All Types</MudSelectItem>
+                @foreach (var type in Enum.GetValues<ClinicalTaskType>())
+                {
+                    <MudSelectItem Value="@((ClinicalTaskType?)type)">@GetTypeLabel(type)</MudSelectItem>
+                }
+            </MudSelect>
+            <MudSelect Value="_selectedAssignee" 
+                       Label="Assignee" 
+                       Variant="Variant.Outlined" 
+                       Margin="Margin.Dense"
+                       Style="min-width: 180px;"
+                       ValueChanged="@((string v) => OnAssigneeChanged(v))">
+                <MudSelectItem Value="@("All")">All Assignees</MudSelectItem>
+                @foreach (var assignee in MockTaskService.Assignees)
+                {
+                    <MudSelectItem Value="@assignee">@assignee</MudSelectItem>
+                }
+            </MudSelect>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@* Task List *@
+@if (_isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">@GetFilterTitle()</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">@GetFilteredTasks().Count() tasks</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudToggleIconButton @bind-Toggled="_showCompact"
+                                 Icon="@Icons.Material.Filled.ViewList"
+                                 ToggledIcon="@Icons.Material.Filled.ViewModule"
+                                 Size="Size.Small"
+                                  />
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent Class="pa-0">
+        @{
+            var filteredTasks = GetFilteredTasks().ToList();
+        }
+        @if (filteredTasks.Count == 0)
+        {
+            <MudAlert Severity="Severity.Success" Class="ma-4">
+                <MudText>No tasks to display. You're all caught up!</MudText>
+            </MudAlert>
+        }
+        else if (_showCompact)
+        {
+            @* Compact Table View *@
+            <MudTable Items="@filteredTasks"
+                      Hover="true"
+                      Dense="true"
+                      OnRowClick="@((TableRowClickEventArgs<ClinicalTask> args) => OpenTaskDetail(args.Item!))">
+                <HeaderContent>
+                    <MudTh>Priority</MudTh>
+                    <MudTh>Task</MudTh>
+                    <MudTh>Type</MudTh>
+                    <MudTh>Patient</MudTh>
+                    <MudTh>Assigned To</MudTh>
+                    <MudTh>Due Date</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Priority">
+                        <MudIcon Icon="@Icons.Material.Filled.Flag" Color="@GetPriorityColor(context.Priority)" Size="Size.Small" />
+                    </MudTd>
+                    <MudTd DataLabel="Task">
+                        <MudText Typo="Typo.body2">@context.Title</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Type">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@GetTypeLabel(context.Type)</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Patient">
+                        @if (context.PatientName != null)
+                        {
+                            <MudLink Href="@($"/patients/{context.PatientId}/chart")" Typo="Typo.body2">@context.PatientName</MudLink>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">—</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Assigned To">
+                        <MudText Typo="Typo.body2">@context.AssignedTo</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Due Date">
+                        @if (context.DueDate.HasValue)
+                        {
+                            <MudText Typo="Typo.body2" Color="@(IsOverdue(context) ? Color.Error : Color.Default)">
+                                @context.DueDate.Value.ToShortDateString()
+                            </MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        @if (context.Status != ClinicalTaskStatus.Completed && context.Status != ClinicalTaskStatus.Cancelled)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" 
+                                           Color="Color.Success" 
+                                           Size="Size.Small"
+                                           OnClick="@(() => CompleteTask(context.Id))"
+                                            />
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+        else
+        {
+            @* Card View *@
+            <div class="pa-4">
+                <MudStack Spacing="2">
+                    @foreach (var task in filteredTasks)
+                    {
+                        <div class="task-card @(IsOverdue(task) ? "overdue" : "")" @onclick="() => OpenTaskDetail(task)">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                                    <MudAvatar Size="Size.Medium" Color="@GetPriorityColor(task.Priority)" Variant="Variant.Outlined">
+                                        <MudIcon Icon="@GetTaskIcon(task.Type)" Size="Size.Small" />
+                                    </MudAvatar>
+                                    <div>
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudText Typo="Typo.subtitle2">@task.Title</MudText>
+                                            @if (IsOverdue(task))
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Error">Overdue</MudChip>
+                                            }
+                                        </MudStack>
+                                        <MudText Typo="Typo.body2" Class="mud-text-secondary">@task.Description</MudText>
+                                        <MudStack Row="true" Spacing="2" Class="mt-1">
+                                            @if (task.PatientName != null)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.Person">@task.PatientName</MudChip>
+                                            }
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Icon="@Icons.Material.Filled.PersonPin">@task.AssignedTo</MudChip>
+                                        </MudStack>
+                                    </div>
+                                </MudStack>
+                                <MudStack AlignItems="AlignItems.End" Spacing="1">
+                                    <MudStack Row="true" Spacing="1">
+                                        @if (task.DueDate.HasValue)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" 
+                                                     Color="@(IsOverdue(task) ? Color.Error : (task.DueDate.Value.Date == DateTime.Today ? Color.Warning : Color.Default))">
+                                                @(task.DueDate.Value.Date == DateTime.Today ? "Today" : task.DueDate.Value.ToShortDateString())
+                                            </MudChip>
+                                        }
+                                        <MudChip T="string" Size="Size.Small" Color="@GetPriorityColor(task.Priority)">@task.Priority</MudChip>
+                                    </MudStack>
+                                    @if (task.Status != ClinicalTaskStatus.Completed && task.Status != ClinicalTaskStatus.Cancelled)
+                                    {
+                                        <div @onclick:stopPropagation="true">
+                                            <MudButton Variant="Variant.Outlined" 
+                                                       Size="Size.Small" 
+                                                       Color="Color.Success"
+                                                       StartIcon="@Icons.Material.Filled.Check"
+                                                       OnClick="@(() => CompleteTask(task.Id))">
+                                                Complete
+                                            </MudButton>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(task.Status)">@task.Status</MudChip>
+                                    }
+                                </MudStack>
+                            </MudStack>
+                        </div>
+                    }
+                </MudStack>
+            </div>
+        }
+    </MudCardContent>
+</MudCard>
+
+@* Task Detail Drawer *@
+<TaskDetailDrawer @ref="_detailDrawer" OnTaskChanged="LoadTasks" />
+
+<style>
+    .task-card {
+        padding: 16px;
+        border-radius: 8px;
+        border: 1px solid var(--mud-palette-lines-default);
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    
+    .task-card:hover {
+        background-color: var(--mud-palette-action-default-hover);
+        border-color: var(--mud-palette-primary);
+    }
+    
+    .task-card.overdue {
+        border-left: 4px solid var(--mud-palette-error);
+    }
+    
+    .cursor-pointer {
+        cursor: pointer;
+    }
+    
+    .cursor-pointer:hover {
+        background-color: var(--mud-palette-action-default-hover);
+    }
+</style>
+
+@code {
+    private enum TaskFilter { All, Pending, Overdue, DueToday, Completed }
+    
+    private List<ClinicalTask> _allTasks = new();
+    private TaskFilter _currentFilter = TaskFilter.Pending;
+    private ClinicalTaskType? _selectedType;
+    private string _selectedAssignee = "All";
+    private bool _isLoading;
+    private bool _showCompact;
+    private int _pendingCount;
+    private int _overdueCount;
+    private int _dueTodayCount;
+    private int _completedTodayCount;
+    private TaskDetailDrawer _detailDrawer = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTasks();
+    }
+
+    private async Task LoadTasks()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        _allTasks = await TaskService.GetAllTasksAsync();
+        
+        _pendingCount = _allTasks.Count(t => t.Status == ClinicalTaskStatus.Pending || t.Status == ClinicalTaskStatus.InProgress);
+        _overdueCount = _allTasks.Count(t => IsOverdue(t));
+        _dueTodayCount = _allTasks.Count(t => t.DueDate?.Date == DateTime.Today && 
+                                              t.Status != ClinicalTaskStatus.Completed && 
+                                              t.Status != ClinicalTaskStatus.Cancelled);
+        _completedTodayCount = _allTasks.Count(t => t.CompletedAt?.Date == DateTime.Today);
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private IEnumerable<ClinicalTask> GetFilteredTasks()
+    {
+        var tasks = _currentFilter switch
+        {
+            TaskFilter.All => _allTasks,
+            TaskFilter.Pending => _allTasks.Where(t => t.Status == ClinicalTaskStatus.Pending || t.Status == ClinicalTaskStatus.InProgress),
+            TaskFilter.Overdue => _allTasks.Where(t => IsOverdue(t)),
+            TaskFilter.DueToday => _allTasks.Where(t => t.DueDate?.Date == DateTime.Today && 
+                                                        t.Status != ClinicalTaskStatus.Completed && 
+                                                        t.Status != ClinicalTaskStatus.Cancelled),
+            TaskFilter.Completed => _allTasks.Where(t => t.Status == ClinicalTaskStatus.Completed),
+            _ => _allTasks
+        };
+
+        if (_selectedType.HasValue)
+        {
+            tasks = tasks.Where(t => t.Type == _selectedType.Value);
+        }
+
+        if (_selectedAssignee != "All")
+        {
+            tasks = tasks.Where(t => t.AssignedTo == _selectedAssignee);
+        }
+
+        return tasks.OrderByDescending(t => t.Priority).ThenBy(t => t.DueDate).ThenByDescending(t => t.CreatedAt);
+    }
+
+    private void SetFilter(TaskFilter filter)
+    {
+        _currentFilter = filter;
+        StateHasChanged();
+    }
+
+    private void OnTypeChanged(ClinicalTaskType? type)
+    {
+        _selectedType = type;
+        StateHasChanged();
+    }
+
+    private void OnAssigneeChanged(string assignee)
+    {
+        _selectedAssignee = assignee;
+        StateHasChanged();
+    }
+
+    private string GetFilterTitle() => _currentFilter switch
+    {
+        TaskFilter.All => "All Tasks",
+        TaskFilter.Pending => "Pending Tasks",
+        TaskFilter.Overdue => "Overdue Tasks",
+        TaskFilter.DueToday => "Due Today",
+        TaskFilter.Completed => "Completed Tasks",
+        _ => "Tasks"
+    };
+
+    private bool IsOverdue(ClinicalTask task) =>
+        task.DueDate.HasValue && 
+        task.DueDate.Value.Date < DateTime.Today && 
+        task.Status != ClinicalTaskStatus.Completed &&
+        task.Status != ClinicalTaskStatus.Cancelled;
+
+    private async Task OpenNewTaskDialog()
+    {
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<NewTaskDialog>("New Task", options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            Notifications.ShowSuccess("Task created!");
+            await LoadTasks();
+        }
+    }
+
+    private void OpenTaskDetail(ClinicalTask task)
+    {
+        _detailDrawer.Open(task);
+    }
+
+    private async Task CompleteTask(int taskId)
+    {
+        await TaskService.CompleteTaskAsync(taskId);
+        Notifications.ShowSuccess("Task completed!");
+        await LoadTasks();
+    }
+
+    private Color GetStatusColor(ClinicalTaskStatus status) => status switch
+    {
+        ClinicalTaskStatus.Pending => Color.Default,
+        ClinicalTaskStatus.InProgress => Color.Primary,
+        ClinicalTaskStatus.Completed => Color.Success,
+        ClinicalTaskStatus.Cancelled => Color.Error,
+        _ => Color.Default
+    };
+
+    private Color GetPriorityColor(ClinicalTaskPriority priority) => priority switch
+    {
+        ClinicalTaskPriority.Urgent => Color.Error,
+        ClinicalTaskPriority.High => Color.Warning,
+        ClinicalTaskPriority.Normal => Color.Info,
+        ClinicalTaskPriority.Low => Color.Default,
+        _ => Color.Default
+    };
+
+    private string GetTaskIcon(ClinicalTaskType type) => type switch
+    {
+        ClinicalTaskType.SignNote => Icons.Material.Filled.Edit,
+        ClinicalTaskType.ReviewResults => Icons.Material.Filled.Science,
+        ClinicalTaskType.MedicationRenewal => Icons.Material.Filled.Medication,
+        ClinicalTaskType.Referral => Icons.Material.Filled.Send,
+        ClinicalTaskType.PhoneCall => Icons.Material.Filled.Phone,
+        _ => Icons.Material.Filled.Task
+    };
+
+    private string GetTypeLabel(ClinicalTaskType type) => type switch
+    {
+        ClinicalTaskType.SignNote => "Sign Note",
+        ClinicalTaskType.ReviewResults => "Review Results",
+        ClinicalTaskType.MedicationRenewal => "Medication Renewal",
+        ClinicalTaskType.Referral => "Referral",
+        ClinicalTaskType.PhoneCall => "Phone Call",
+        ClinicalTaskType.Other => "Other",
+        _ => type.ToString()
+    };
+}

@@ -1,0 +1,521 @@
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.EntityFrameworkCore
+@using Zebrahoof_EMR.Data
+@using Zebrahoof_EMR.Models
+@using Zebrahoof_EMR.Services
+
+@inject ApplicationDbContext Db
+@inject NotificationService NotificationService
+
+@* Patient Documents - Scanned documents, forms, etc. *@
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Documents</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Upload"
+                       OnClick="OpenUploadDialog">
+                Upload Document
+            </MudButton>
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent Class="pa-0">
+        <MudTable Items="@_documents" Hover="true" Dense="true">
+            <HeaderContent>
+                <MudTh>Document</MudTh>
+                <MudTh>Category</MudTh>
+                <MudTh>Date</MudTh>
+                <MudTh>Uploaded By</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Document">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudIcon Icon="@GetDocumentIcon(context.Type)" Size="Size.Small" Color="Color.Primary" />
+                        @if (HasViewableContent(context))
+                        {
+                            <MudLink Href="@GetViewUrl(context)"
+                                     Target="_blank"
+                                     Underline="Underline.Hover"
+                                     title="Open document">
+                                @context.Name
+                            </MudLink>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2">@context.Name</MudText>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Category">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Category</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Date">@context.Date.ToString("MM/dd/yyyy")</MudTd>
+                <MudTd DataLabel="By">@context.UploadedBy</MudTd>
+                <MudTd>
+                    <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                   Size="Size.Small"
+                                   title="View"
+                                   Href="@GetViewUrl(context)"
+                                   Target="_blank"
+                                   Disabled="@(!HasViewableContent(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                   Size="Size.Small"
+                                   title="Download"
+                                   Href="@GetDownloadUrl(context)"
+                                   Target="_blank"
+                                   Disabled="@(!HasViewableContent(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                   Size="Size.Small"
+                                   title="Rename / Edit"
+                                   OnClick="@(() => OpenEditDialog(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                   Size="Size.Small"
+                                   Color="Color.Error"
+                                   title="Delete"
+                                   OnClick="@(() => DeleteDocument(context))" />
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4">No documents uploaded</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudCardContent>
+</MudCard>
+
+@* Edit Document Dialog *@
+<MudDialog @bind-Visible="_showEditDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Edit Document</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_editForm" @bind-IsValid="_editFormValid">
+            <MudStack Spacing="2">
+                <MudTextField @bind-Value="_editName"
+                              Label="Document Name"
+                              Required="true"
+                              RequiredError="Document name is required"
+                              Variant="Variant.Outlined" />
+                <MudTextField T="string"
+                              @bind-Value="_editCategory"
+                              Label="Category"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="Category is required"
+                              Immediate="true"
+                              Placeholder="Type a category (e.g., Insurance, Consent, Lab, Consult, Immunizations)"
+                              HelperText="Enter a predefined or custom category" />
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="CloseEditDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_editFormValid)" OnClick="SaveDocumentEdits">
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Upload Document Dialog *@
+<MudDialog @bind-Visible="_showUploadDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.CloudUpload" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Upload Document</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_uploadForm" @bind-IsValid="_uploadFormValid">
+            <MudStack Spacing="2">
+                <MudTextField @bind-Value="_uploadName"
+                              Label="Document Name"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="Document name is required" />
+                <MudSelect T="string"
+                           @bind-Value="_uploadCategorySelection"
+                           Label="Category"
+                           Variant="Variant.Outlined"
+                           Required="true"
+                           RequiredError="Category is required">
+                    @foreach (var category in _categoryOptions)
+                    {
+                        <MudSelectItem Value="@category">@category</MudSelectItem>
+                    }
+                    <MudSelectItem Value="@CustomCategoryKey">Custom...</MudSelectItem>
+                </MudSelect>
+                @if (_uploadCategorySelection == CustomCategoryKey)
+                {
+                    <MudTextField @bind-Value="_uploadCustomCategory"
+                                  Label="Custom Category"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  RequiredError="Enter a category"
+                                  Immediate="true" />
+                }
+                <MudTextField @bind-Value="_uploadBy"
+                              Label="Uploaded By"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="Uploader is required" />
+                <InputFile OnChange="HandleFileSelected" />
+                @if (!string.IsNullOrEmpty(_uploadFileName))
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        Selected file: @_uploadFileName (@FormatBytes(_uploadFileBytes?.LongLength ?? 0))
+                    </MudAlert>
+                }
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="CloseUploadDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(!_uploadFormValid || _uploadFileBytes is null || _isSavingUpload)"
+                   OnClick="SaveUploadedDocument">
+            @(_isSavingUpload ? "Uploading..." : "Upload")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    private const long MaxUploadBytes = 25L * 1024 * 1024; // 25 MB
+    private readonly string[] _categoryOptions = ["Insurance", "Consent", "Lab", "Consult", "Immunizations", "Imaging"];
+    private const string CustomCategoryKey = "__custom";
+
+    private List<Document> _documents = new();
+    private int? _loadedPatientId;
+
+    private bool _showEditDialog;
+    private Document? _editingDocument;
+    private string _editName = string.Empty;
+    private string _editCategory = string.Empty;
+    private MudForm? _editForm;
+    private bool _editFormValid;
+
+    private bool _showUploadDialog;
+    private MudForm? _uploadForm;
+    private bool _uploadFormValid;
+    private string _uploadName = string.Empty;
+    private string _uploadCategorySelection = string.Empty;
+    private string _uploadCustomCategory = string.Empty;
+    private string _uploadBy = "Front Desk";
+    private string _uploadFileName = string.Empty;
+    private string _uploadFileType = string.Empty;
+    private byte[]? _uploadFileBytes;
+    private bool _isSavingUpload;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedPatientId == PatientId)
+        {
+            return;
+        }
+
+        _loadedPatientId = PatientId;
+        await LoadDocumentsAsync();
+    }
+
+    private async Task LoadDocumentsAsync()
+    {
+        _documents = await Db.Documents
+            .AsNoTracking()
+            .Where(d => d.PatientId == PatientId)
+            .OrderByDescending(d => d.Date)
+            .Select(d => new Document
+            {
+                Id = d.Id,
+                PatientId = d.PatientId,
+                Name = d.Name,
+                Category = d.Category,
+                Type = d.Type,
+                Date = d.Date,
+                UploadedBy = d.UploadedBy,
+                FileName = d.FileName,
+                // Content and ExtractedText are heavy; skip them in the list view.
+            })
+            .ToListAsync();
+    }
+
+    private void OpenUploadDialog()
+    {
+        _uploadName = string.Empty;
+        _uploadCategorySelection = string.Empty;
+        _uploadCustomCategory = string.Empty;
+        _uploadBy = "Front Desk";
+        _uploadFileName = string.Empty;
+        _uploadFileType = string.Empty;
+        _uploadFileBytes = null;
+        _uploadFormValid = false;
+        _showUploadDialog = true;
+    }
+
+    private void CloseUploadDialog()
+    {
+        _showUploadDialog = false;
+    }
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs args)
+    {
+        var file = args.File;
+        if (file is null)
+        {
+            _uploadFileName = string.Empty;
+            _uploadFileBytes = null;
+            _uploadFileType = string.Empty;
+            return;
+        }
+
+        if (file.Size > MaxUploadBytes)
+        {
+            NotificationService.ShowError($"File is too large. Maximum size is {FormatBytes(MaxUploadBytes)}.");
+            _uploadFileName = string.Empty;
+            _uploadFileBytes = null;
+            _uploadFileType = string.Empty;
+            return;
+        }
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: MaxUploadBytes);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+
+            _uploadFileBytes = memory.ToArray();
+            _uploadFileName = file.Name;
+            _uploadFileType = DetectFileType(file.Name, file.ContentType);
+
+            if (string.IsNullOrWhiteSpace(_uploadName))
+            {
+                _uploadName = System.IO.Path.GetFileNameWithoutExtension(file.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.ShowError($"Failed to read file: {ex.Message}");
+            _uploadFileBytes = null;
+            _uploadFileName = string.Empty;
+            _uploadFileType = string.Empty;
+        }
+    }
+
+    private async Task SaveUploadedDocument()
+    {
+        if (_uploadForm is not null)
+        {
+            await _uploadForm.Validate();
+            if (!_uploadFormValid)
+            {
+                return;
+            }
+        }
+
+        if (_uploadFileBytes is null || _uploadFileBytes.Length == 0)
+        {
+            NotificationService.ShowWarning("Please choose a file to upload.");
+            return;
+        }
+
+        _isSavingUpload = true;
+        try
+        {
+            var newDocument = new Document
+            {
+                PatientId = PatientId,
+                Name = _uploadName.Trim(),
+                Category = GetUploadCategoryValue(),
+                Type = _uploadFileType,
+                Date = DateTime.Now,
+                UploadedBy = _uploadBy.Trim(),
+                FileName = _uploadFileName,
+                Content = _uploadFileBytes
+            };
+
+            Db.Documents.Add(newDocument);
+            await Db.SaveChangesAsync();
+
+            _documents.Insert(0, new Document
+            {
+                Id = newDocument.Id,
+                PatientId = newDocument.PatientId,
+                Name = newDocument.Name,
+                Category = newDocument.Category,
+                Type = newDocument.Type,
+                Date = newDocument.Date,
+                UploadedBy = newDocument.UploadedBy,
+                FileName = newDocument.FileName
+            });
+
+            NotificationService.ShowSuccess("Document uploaded");
+            _showUploadDialog = false;
+        }
+        catch (Exception ex)
+        {
+            NotificationService.ShowError($"Failed to upload document: {ex.Message}");
+        }
+        finally
+        {
+            _isSavingUpload = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetUploadCategoryValue()
+    {
+        if (_uploadCategorySelection == CustomCategoryKey)
+        {
+            return _uploadCustomCategory.Trim();
+        }
+
+        return _uploadCategorySelection;
+    }
+
+    private static string DetectFileType(string fileName, string? contentType)
+    {
+        var ext = System.IO.Path.GetExtension(fileName).ToLowerInvariant();
+        return ext switch
+        {
+            ".pdf" => "pdf",
+            ".png" or ".jpg" or ".jpeg" or ".gif" or ".bmp" or ".webp" or ".svg" => "image",
+            ".txt" or ".csv" or ".log" => "text",
+            _ when !string.IsNullOrEmpty(contentType) && contentType.StartsWith("image/") => "image",
+            _ when contentType == "application/pdf" => "pdf",
+            _ when !string.IsNullOrEmpty(contentType) && contentType.StartsWith("text/") => "text",
+            _ => "other"
+        };
+    }
+
+    private string GetDocumentIcon(string type) => type switch
+    {
+        "pdf" => Icons.Material.Filled.PictureAsPdf,
+        "image" => Icons.Material.Filled.Image,
+        "text" => Icons.Material.Filled.Description,
+        _ => Icons.Material.Filled.InsertDriveFile
+    };
+
+    private static bool HasViewableContent(Document document)
+    {
+        // Legacy seed rows with Id > 0 but no upload exist only in-memory; DB-backed
+        // documents always have a real Id from the database.
+        return document.Id > 0;
+    }
+
+    private static string GetViewUrl(Document document) => $"/api/documents/{document.Id}";
+
+    private static string GetDownloadUrl(Document document) => $"/api/documents/{document.Id}/download";
+
+    private void OpenEditDialog(Document document)
+    {
+        _editingDocument = document;
+        _editName = document.Name;
+        _editCategory = document.Category;
+        _editFormValid = true;
+        _showEditDialog = true;
+    }
+
+    private void CloseEditDialog()
+    {
+        _showEditDialog = false;
+        _editingDocument = null;
+        _editName = string.Empty;
+        _editCategory = string.Empty;
+    }
+
+    private async Task SaveDocumentEdits()
+    {
+        if (_editForm is not null)
+        {
+            await _editForm.Validate();
+            if (!_editFormValid)
+            {
+                return;
+            }
+        }
+
+        if (_editingDocument is null)
+        {
+            return;
+        }
+
+        var newName = _editName.Trim();
+        var newCategory = _editCategory.Trim();
+
+        try
+        {
+            var persisted = await Db.Documents.FirstOrDefaultAsync(d => d.Id == _editingDocument.Id);
+            if (persisted is null)
+            {
+                NotificationService.ShowError("Document no longer exists");
+                _documents.Remove(_editingDocument);
+            }
+            else
+            {
+                persisted.Name = newName;
+                persisted.Category = newCategory;
+                await Db.SaveChangesAsync();
+
+                _editingDocument.Name = newName;
+                _editingDocument.Category = newCategory;
+                NotificationService.ShowSuccess("Document updated");
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.ShowError($"Failed to save changes: {ex.Message}");
+            return;
+        }
+        finally
+        {
+            _showEditDialog = false;
+            _editingDocument = null;
+            _editName = string.Empty;
+            _editCategory = string.Empty;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteDocument(Document document)
+    {
+        try
+        {
+            var persisted = await Db.Documents.FirstOrDefaultAsync(d => d.Id == document.Id);
+            if (persisted is not null)
+            {
+                Db.Documents.Remove(persisted);
+                await Db.SaveChangesAsync();
+            }
+
+            _documents.Remove(document);
+            NotificationService.ShowSuccess("Document deleted");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.ShowError($"Failed to delete document: {ex.Message}");
+        }
+    }
+
+    private static string FormatBytes(long bytes)
+    {
+        if (bytes <= 0) return "0 B";
+        string[] units = ["B", "KB", "MB", "GB"];
+        double size = bytes;
+        int unit = 0;
+        while (size >= 1024 && unit < units.Length - 1)
+        {
+            size /= 1024;
+            unit++;
+        }
+        return $"{size:0.##} {units[unit]}";
+    }
+}

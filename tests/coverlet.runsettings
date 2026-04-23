@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage" enabled="True">
+        <Configuration>
+          <!-- Healthcare applications require high coverage due to critical nature -->
+          <Format>cobertura</Format>
+          <Format>json</Format>
+          <Format>lcov</Format>
+          
+          <!-- Increased thresholds for healthcare application quality assurance -->
+          <Threshold>95</Threshold> <!-- Overall coverage threshold -->
+          <ThresholdType>line</ThresholdType>
+          
+          <!-- Module-specific thresholds for critical healthcare components -->
+          <ModuleThreshold>90</ModuleThreshold> <!-- Minimum per-module coverage -->
+          
+          <!-- Critical healthcare modules require even higher coverage -->
+          <IncludeDirectories>
+            <Directory>./</Directory>
+          </IncludeDirectories>
+          
+          <!-- Exclude test projects from coverage calculation -->
+          <ExcludeFromCodeCoverage>
+            <File>**/*.Tests.csproj</File>
+            <File>**/test/**</File>
+            <File>**/*Tests.cs</File>
+            <File>**/*Test*.cs</File>
+            <File>**/obj/**</File>
+            <File>**/bin/**</File>
+            <File>**/Migrations/**</File>
+            <File>**/Program.cs</File>
+            <File>**/Startup.cs</File>
+          </ExcludeFromCodeCoverage>
+          
+          <!-- Include only production code -->
+          <Include>[Zebrahoof.EMR]*</Include>
+          
+          <!-- Exclude auto-generated code and third-party code -->
+          <Exclude>[Zebrahoof.EMR]*.Migrations</Exclude>
+          <Exclude>[Zebrahoof.EMR]*.obj</Exclude>
+          <Exclude>[Zebrahoof.EMR]*.bin</Exclude>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

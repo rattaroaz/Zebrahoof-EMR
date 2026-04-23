@@ -1,0 +1,199 @@
+@using Zebrahoof_EMR.Models
+@using Zebrahoof_EMR.Services
+@inject IJSRuntime JS
+@inject PatientStickyNoteService NoteService
+@inject AuthStateService AuthState
+@implements IDisposable
+
+
+@if (_note != null && _note.IsVisible)
+{
+    <div class="patient-sticky-note @GetColorClass()" 
+         id="@_elementId"
+         style="left: @(_note.X)px; top: @(_note.Y)px; position: fixed; z-index: 10000; pointer-events: auto; width: 220px; min-height: 180px; border-radius: 4px; box-shadow: 3px 3px 10px rgba(0,0,0,0.2); display: flex; flex-direction: column; cursor: move; user-select: none;">
+        
+        <div class="sticky-header" 
+             @onmousedown="OnHeaderMouseDown"
+             @onmousedown:stopPropagation="true">
+            <span class="note-number">Patient Note</span>
+            <div class="sticky-controls">
+                @foreach (var color in Enum.GetValues<NoteColor>())
+                {
+                    <button class="color-dot @color.ToString().ToLower() @(_note.Color == color ? "selected" : "")" 
+                            @onclick="() => ChangeColor(color)"
+                            @onclick:stopPropagation="true"
+                            title="@color"></button>
+                }
+            </div>
+            <button class="sticky-close" @onclick="Hide" @onclick:stopPropagation="true" title="Close note">
+                <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+            </button>
+        </div>
+        
+        <textarea class="sticky-content" 
+                  @bind="_content" 
+                  @bind:event="oninput"
+                  @onblur="SaveContent"
+                  placeholder="Add note for this patient..."></textarea>
+        
+        <div class="sticky-footer">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">@_note.CreatedAt.ToString("MMM dd")</MudText>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int PatientId { get; set; }
+
+    private PatientStickyNote? _note;
+    private string _content = string.Empty;
+    private string _elementId = $"patient-sticky-{Guid.NewGuid():N}";
+    private DotNetObjectReference<PatientStickyNoteCard>? _objRef;
+    private string? _userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userId = AuthState.CurrentUser?.Username;
+        _objRef = DotNetObjectReference.Create(this);
+        
+        if (!string.IsNullOrEmpty(_userId))
+        {
+            _note = await NoteService.GetNoteAsync(_userId, PatientId);
+            if (_note != null)
+            {
+                _content = _note.Content;
+            }
+        }
+        
+        NoteService.OnNoteChanged += OnNoteChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(_userId))
+        {
+            _note = await NoteService.GetNoteAsync(_userId, PatientId);
+            if (_note != null)
+            {
+                _content = _note.Content;
+            }
+        }
+    }
+
+    private async void OnNoteChanged()
+    {
+        if (!string.IsNullOrEmpty(_userId))
+        {
+            _note = await NoteService.GetNoteAsync(_userId, PatientId);
+            if (_note != null)
+            {
+                _content = _note.Content;
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string GetColorClass() => _note != null ? $"sticky-{_note.Color.ToString().ToLower()}" : "sticky-pink";
+
+    private async Task OnHeaderMouseDown(MouseEventArgs e)
+    {
+        if (_objRef != null)
+        {
+            await JS.InvokeVoidAsync("stickyNoteDrag.startDrag", _elementId, _objRef, e.ClientX, e.ClientY);
+        }
+    }
+
+    [JSInvokable]
+    public async Task UpdatePosition(double x, double y)
+    {
+        if (_note != null && !string.IsNullOrEmpty(_userId))
+        {
+            _note.X = x;
+            _note.Y = y;
+            await NoteService.UpdatePositionAsync(_userId, PatientId, x, y);
+        }
+    }
+
+    private async Task SaveContent()
+    {
+        if (!string.IsNullOrEmpty(_userId) && _note != null)
+        {
+            _note = await NoteService.CreateOrUpdateNoteAsync(_userId, PatientId, _content);
+        }
+    }
+
+    private async Task Hide()
+    {
+        if (!string.IsNullOrEmpty(_userId))
+        {
+            await NoteService.HideNoteAsync(_userId, PatientId);
+            if (_note != null)
+            {
+                _note.IsVisible = false;
+            }
+        }
+    }
+
+    private async Task ChangeColor(NoteColor color)
+    {
+        if (_note != null && !string.IsNullOrEmpty(_userId))
+        {
+            await NoteService.UpdateColorAsync(_userId, PatientId, color);
+            _note.Color = color;
+        }
+    }
+
+    public async Task CreateOrShowNote()
+    {
+        try
+        {
+            var user = AuthState.CurrentUser;
+            
+            // Try Username first, then Id, then fallback to "default"
+            _userId = user?.Username;
+            if (string.IsNullOrEmpty(_userId))
+            {
+                _userId = user?.Id > 0 ? user.Id.ToString() : null;
+            }
+            if (string.IsNullOrEmpty(_userId))
+            {
+                _userId = "default";
+            }
+            Console.WriteLine($"CreateOrShowNote - UserId: {_userId}, PatientId: {PatientId}");
+            
+            
+            _note = await NoteService.GetNoteAsync(_userId, PatientId);
+            Console.WriteLine($"GetNoteAsync returned: {(_note != null ? "note exists" : "null")}");
+            
+            if (_note == null)
+            {
+                _note = await NoteService.CreateOrUpdateNoteAsync(_userId, PatientId, "");
+                _content = "";
+                Console.WriteLine($"Created new note. IsVisible: {_note?.IsVisible}");
+            }
+            else
+            {
+                _note = await NoteService.ShowNoteAsync(_userId, PatientId);
+                _content = _note?.Content ?? "";
+                Console.WriteLine($"Showed existing note. IsVisible: {_note?.IsVisible}");
+            }
+            
+            Console.WriteLine($"Final state - Note: {(_note != null ? "exists" : "null")}, IsVisible: {_note?.IsVisible}");
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ERROR in CreateOrShowNote: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+        }
+    }
+
+    public bool HasNote => _note != null;
+    public bool IsVisible => _note?.IsVisible ?? false;
+
+    public void Dispose()
+    {
+        NoteService.OnNoteChanged -= OnNoteChanged;
+        _objRef?.Dispose();
+    }
+}

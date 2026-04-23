@@ -1,0 +1,70 @@
+@inject AuthStateService AuthState
+
+<MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+    <ActivatorContent>
+        <MudButton Color="Color.Inherit" Class="px-2">
+            <MudAvatar Size="Size.Small" Color="Color.Primary" Class="mr-2">
+                @(AuthState.CurrentUser?.FullName?.Split(' ').FirstOrDefault()?[..1] ?? "U")
+            </MudAvatar>
+            <MudStack Spacing="0" AlignItems="AlignItems.Start" Class="d-none d-md-flex">
+                <MudText Typo="Typo.body2">@(AuthState.CurrentUser?.FullName ?? "User")</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@GetRoleDisplay()</MudText>
+            </MudStack>
+            <MudIcon Icon="@Icons.Material.Filled.ArrowDropDown" Size="Size.Small" />
+        </MudButton>
+    </ActivatorContent>
+    <ChildContent>
+        <MudMenuItem Icon="@Icons.Material.Filled.Person" Href="/profile">My Profile</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Filled.Settings" Href="/preferences">Preferences</MudMenuItem>
+        
+        <MudDivider />
+        
+        <MudStack Class="px-4 py-2" Spacing="1">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">Current Role</MudText>
+            <MudChip T="string" Color="Color.Primary" Icon="@GetRoleIcon(AuthState.CurrentUser?.Role ?? UserRole.Physician)">
+                @GetRoleDisplay()
+            </MudChip>
+        </MudStack>
+
+        <MudDivider />
+
+        <MudMenuItem Icon="@Icons.Material.Filled.Logout" Href="/logout">
+            Log out
+        </MudMenuItem>
+    </ChildContent>
+</MudMenu>
+
+@code {
+    private string GetRoleDisplay()
+    {
+        return AuthState.CurrentUser?.Role switch
+        {
+            UserRole.Physician => "Physician",
+            UserRole.Nurse => "Nurse",
+            UserRole.MedicalAssistant => "Medical Assistant",
+            UserRole.LabTechnician => "Lab Technician",
+            UserRole.Admin => "Administrator",
+            UserRole.FrontDesk => "Front Desk",
+            UserRole.Billing => "Billing",
+            UserRole.Patient => "Patient",
+            _ => "User"
+        };
+    }
+
+    private string GetRoleIcon(UserRole role)
+    {
+        return role switch
+        {
+            UserRole.Physician => Icons.Material.Filled.LocalHospital,
+            UserRole.Nurse => Icons.Material.Filled.MedicalServices,
+            UserRole.MedicalAssistant => Icons.Material.Filled.HealthAndSafety,
+            UserRole.LabTechnician => Icons.Material.Filled.Science,
+            UserRole.Admin => Icons.Material.Filled.AdminPanelSettings,
+            UserRole.FrontDesk => Icons.Material.Filled.SupportAgent,
+            UserRole.Billing => Icons.Material.Filled.Receipt,
+            UserRole.Patient => Icons.Material.Filled.Person,
+            _ => Icons.Material.Filled.Person
+        };
+    }
+
+}

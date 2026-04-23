@@ -1,0 +1,85 @@
+@* Encounter Banner - Shows visit type, date/time, location, provider, and status *@
+
+<MudPaper Elevation="2" Class="pa-3 mb-4" Style="border-left: 4px solid var(--mud-palette-primary);">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+            <MudIcon Icon="@Icons.Material.Filled.EventNote" Size="Size.Large" Color="Color.Primary" />
+            <div>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.h6">@Encounter.VisitType</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(Encounter.Status)">
+                        @GetStatusText(Encounter.Status)
+                    </MudChip>
+                </MudStack>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @Encounter.DateTime.ToString("MMMM d, yyyy 'at' h:mm tt")
+                </MudText>
+            </div>
+        </MudStack>
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+            <div class="text-right">
+                <MudText Typo="Typo.body2">
+                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
+                    @Encounter.Provider
+                </MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Small" Class="mr-1" />
+                    @Encounter.Location
+                </MudText>
+            </div>
+
+            <MudDivider Vertical="true" FlexItem="true" />
+
+            @if (Encounter.Status == EncounterStatus.InProgress)
+            {
+                <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+                    <MudButton Color="Color.Success" StartIcon="@Icons.Material.Filled.Check" OnClick="@OnSign">
+                        Sign Note
+                    </MudButton>
+                    <MudButton Color="Color.Default" StartIcon="@Icons.Material.Filled.Save" OnClick="@OnSaveDraft">
+                        Save Draft
+                    </MudButton>
+                </MudButtonGroup>
+            }
+            else
+            {
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit" OnClick="@OnAddendum">
+                    Add Addendum
+                </MudButton>
+            }
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public Encounter Encounter { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback OnSign { get; set; }
+
+    [Parameter]
+    public EventCallback OnSaveDraft { get; set; }
+
+    [Parameter]
+    public EventCallback OnAddendum { get; set; }
+
+    private Color GetStatusColor(EncounterStatus status) => status switch
+    {
+        EncounterStatus.InProgress => Color.Warning,
+        EncounterStatus.Signed => Color.Success,
+        EncounterStatus.Addended => Color.Info,
+        EncounterStatus.Cosigned => Color.Primary,
+        _ => Color.Default
+    };
+
+    private string GetStatusText(EncounterStatus status) => status switch
+    {
+        EncounterStatus.InProgress => "In Progress",
+        EncounterStatus.Signed => "Signed",
+        EncounterStatus.Addended => "Addended",
+        EncounterStatus.Cosigned => "Cosigned",
+        _ => status.ToString()
+    };
+}

@@ -1,0 +1,95 @@
+.patient-sticky-note {
+    font-family: 'Segoe UI', sans-serif;
+    background: #f8bbd9;
+}
+
+.patient-sticky-note.sticky-yellow { background: #fff9c4 !important; }
+.patient-sticky-note.sticky-pink { background: #f8bbd9 !important; }
+.patient-sticky-note.sticky-blue { background: #bbdefb !important; }
+.patient-sticky-note.sticky-green { background: #c8e6c9 !important; }
+.patient-sticky-note.sticky-orange { background: #ffe0b2 !important; }
+
+.patient-sticky-note .sticky-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+    cursor: move;
+    gap: 8px;
+}
+
+.patient-sticky-note .note-number {
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(0,0,0,0.6);
+    flex-shrink: 0;
+}
+
+.patient-sticky-note .sticky-controls {
+    display: flex;
+    gap: 4px;
+    flex: 1;
+    justify-content: center;
+}
+
+.patient-sticky-note .color-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.1s;
+}
+
+.patient-sticky-note .color-dot:hover {
+    transform: scale(1.2);
+}
+
+.patient-sticky-note .color-dot.selected {
+    border-color: rgba(0,0,0,0.4);
+}
+
+.patient-sticky-note .color-dot.yellow { background: #fff9c4; }
+.patient-sticky-note .color-dot.pink { background: #f8bbd9; }
+.patient-sticky-note .color-dot.blue { background: #bbdefb; }
+.patient-sticky-note .color-dot.green { background: #c8e6c9; }
+.patient-sticky-note .color-dot.orange { background: #ffe0b2; }
+
+.patient-sticky-note .sticky-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    opacity: 0.6;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.patient-sticky-note .sticky-close:hover {
+    opacity: 1;
+}
+
+.patient-sticky-note .sticky-content {
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 10px;
+    resize: none;
+    font-family: inherit;
+    font-size: 14px;
+    min-height: 100px;
+    outline: none;
+}
+
+.patient-sticky-note .sticky-content::placeholder {
+    color: rgba(0,0,0,0.4);
+}
+
+.patient-sticky-note .sticky-footer {
+    padding: 6px 10px;
+    border-top: 1px solid rgba(0,0,0,0.1);
+    display: flex;
+    justify-content: flex-end;
+}

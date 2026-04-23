@@ -1,0 +1,21 @@
+{
+  "stryker-config": {
+    "reporters": ["html", "json", "progress"],
+    "test-runner": "dotnet",
+    "solution": "Zebrahoof EMR.sln",
+    "test-projects": [
+      "Zebrahoof.EMR.UnitTests",
+      "Zebrahoof.EMR.ApiTests"
+    ],
+    "thresholds": {
+      "high": 95,
+      "low": 85,
+      "break": 80
+    },
+    "ignore-dirs": ["**/bin/**", "**/obj/**", "**/Migrations/**"],
+    "ignore-methods": ["*.ToString()", "*.Equals(*)", "*.GetHashCode()", "*.Dispose()"],
+    "log-level": "info",
+    "concurrency": 4,
+    "timeout-ms": 30000
+  }
+}

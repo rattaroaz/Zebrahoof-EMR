@@ -1,0 +1,261 @@
+@inject MockAppointmentService AppointmentService
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+
+<MudDrawer @bind-Open="_isOpen" Anchor="Anchor.End" Width="420px" Elevation="2" Variant="DrawerVariant.Temporary">
+    @if (_appointment != null)
+    {
+        <MudDrawerHeader Class="d-flex justify-space-between align-center">
+            <MudText Typo="Typo.h6">Appointment Details</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="Close" Size="Size.Small" />
+        </MudDrawerHeader>
+        
+        <MudDivider />
+        
+        <div class="pa-4">
+            @* Patient Info Section *@
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-4">
+                <MudAvatar Size="Size.Large" Color="Color.Primary">
+                    @(_appointment.PatientName.Split(' ').FirstOrDefault()?[0])@(_appointment.PatientName.Split(' ').LastOrDefault()?[0])
+                </MudAvatar>
+                <div>
+                    <MudText Typo="Typo.h6">@_appointment.PatientName</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Patient ID: @_appointment.PatientId</MudText>
+                </div>
+            </MudStack>
+
+            @* Status Chip *@
+            <MudChip T="string" Color="@GetStatusColor(_appointment.Status)" Size="Size.Medium" Class="mb-4">
+                @GetStatusText(_appointment.Status)
+            </MudChip>
+
+            @* Appointment Details *@
+            <MudList T="string" Dense="true" Class="mb-4">
+                <MudListItem Icon="@Icons.Material.Filled.CalendarToday">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Date & Time</MudText>
+                    <MudText Typo="Typo.body1">@_appointment.DateTime.ToString("dddd, MMMM d, yyyy")</MudText>
+                    <MudText Typo="Typo.body1">@_appointment.DateTime.ToString("h:mm tt") - @_appointment.DateTime.AddMinutes(_appointment.DurationMinutes).ToString("h:mm tt")</MudText>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.MedicalServices">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Visit Type</MudText>
+                    <MudText Typo="Typo.body1">@_appointment.VisitType</MudText>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Person">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Provider</MudText>
+                    <MudText Typo="Typo.body1">@_appointment.Provider</MudText>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Room">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Location</MudText>
+                    <MudText Typo="Typo.body1">@_appointment.Location</MudText>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Timer">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Duration</MudText>
+                    <MudText Typo="Typo.body1">@_appointment.DurationMinutes minutes</MudText>
+                </MudListItem>
+                @if (!string.IsNullOrWhiteSpace(_appointment.Notes))
+                {
+                    <MudListItem Icon="@Icons.Material.Filled.Notes">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Notes</MudText>
+                        <MudText Typo="Typo.body1">@_appointment.Notes</MudText>
+                    </MudListItem>
+                }
+            </MudList>
+
+            <MudDivider Class="mb-4" />
+
+            @* Quick Actions *@
+            <MudText Typo="Typo.subtitle2" Class="mb-3">Quick Actions</MudText>
+            <MudStack Spacing="2">
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.FolderOpen"
+                           OnClick="OpenChart">
+                    Open Patient Chart
+                </MudButton>
+
+                @if (_appointment.Status == AppointmentStatus.Scheduled)
+                {
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Success" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.CheckCircle"
+                               OnClick="() => UpdateStatus(AppointmentStatus.CheckedIn)">
+                        Check In
+                    </MudButton>
+                }
+                
+                @if (_appointment.Status == AppointmentStatus.CheckedIn)
+                {
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Info" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.MeetingRoom"
+                               OnClick="() => UpdateStatus(AppointmentStatus.InRoom)">
+                        Move to Room
+                    </MudButton>
+                }
+                
+                @if (_appointment.Status == AppointmentStatus.InRoom)
+                {
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Primary" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               OnClick="StartEncounter">
+                        Start Encounter
+                    </MudButton>
+                }
+                
+                @if (_appointment.Status == AppointmentStatus.InProgress)
+                {
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Success" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.Done"
+                               OnClick="() => UpdateStatus(AppointmentStatus.Completed)">
+                        Complete Visit
+                    </MudButton>
+                }
+
+                @if (_appointment.Status != AppointmentStatus.Completed && 
+                     _appointment.Status != AppointmentStatus.Cancelled &&
+                     _appointment.Status != AppointmentStatus.NoShow)
+                {
+                    <MudDivider Class="my-2" />
+                    
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Default" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.Edit"
+                               OnClick="EditAppointment">
+                        Reschedule
+                    </MudButton>
+
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Outlined" 
+                                   Color="Color.Warning" 
+                                   FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.PersonOff"
+                                   OnClick="() => UpdateStatus(AppointmentStatus.NoShow)">
+                            No Show
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" 
+                                   Color="Color.Error" 
+                                   FullWidth="true"
+                                   StartIcon="@Icons.Material.Filled.Cancel"
+                                   OnClick="CancelAppointment">
+                            Cancel
+                        </MudButton>
+                    </MudStack>
+                }
+            </MudStack>
+        </div>
+    }
+</MudDrawer>
+
+@code {
+    [Parameter]
+    public EventCallback OnAppointmentChanged { get; set; }
+
+    private bool _isOpen;
+    private Appointment? _appointment;
+
+    public void Open(Appointment appointment)
+    {
+        _appointment = appointment;
+        _isOpen = true;
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        _isOpen = false;
+        StateHasChanged();
+    }
+
+    private void OpenChart()
+    {
+        if (_appointment != null)
+        {
+            Navigation.NavigateTo($"/patients/{_appointment.PatientId}/chart");
+        }
+    }
+
+    private void StartEncounter()
+    {
+        if (_appointment != null)
+        {
+            Navigation.NavigateTo($"/patients/{_appointment.PatientId}/encounters/new");
+        }
+    }
+
+    private async Task UpdateStatus(AppointmentStatus status)
+    {
+        if (_appointment != null)
+        {
+            await AppointmentService.UpdateStatusAsync(_appointment.Id, status);
+            _appointment.Status = status;
+            await OnAppointmentChanged.InvokeAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task EditAppointment()
+    {
+        if (_appointment == null) return;
+
+        var parameters = new DialogParameters<NewAppointmentDialog>
+        {
+            { x => x.ExistingAppointment, _appointment }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<NewAppointmentDialog>("Edit Appointment", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: Appointment updated })
+        {
+            _appointment = updated;
+            await OnAppointmentChanged.InvokeAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelAppointment()
+    {
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Cancel Appointment",
+            "Are you sure you want to cancel this appointment?",
+            yesText: "Yes, Cancel", cancelText: "No");
+
+        if (confirm == true)
+        {
+            await UpdateStatus(AppointmentStatus.Cancelled);
+            Close();
+        }
+    }
+
+    private Color GetStatusColor(AppointmentStatus status) => status switch
+    {
+        AppointmentStatus.Completed => Color.Success,
+        AppointmentStatus.InProgress => Color.Primary,
+        AppointmentStatus.InRoom => Color.Info,
+        AppointmentStatus.CheckedIn => Color.Warning,
+        AppointmentStatus.NoShow => Color.Error,
+        AppointmentStatus.Cancelled => Color.Default,
+        _ => Color.Default
+    };
+
+    private string GetStatusText(AppointmentStatus status) => status switch
+    {
+        AppointmentStatus.Scheduled => "Scheduled",
+        AppointmentStatus.CheckedIn => "Checked In",
+        AppointmentStatus.InRoom => "In Room",
+        AppointmentStatus.InProgress => "In Progress",
+        AppointmentStatus.Completed => "Completed",
+        AppointmentStatus.NoShow => "No Show",
+        AppointmentStatus.Cancelled => "Cancelled",
+        _ => status.ToString()
+    };
+}

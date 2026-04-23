@@ -1,0 +1,48 @@
+@inject NavigationManager Navigation
+@inject MockPatientService PatientService
+
+<MudAutocomplete T="Patient"
+                 Label="Search patients..."
+                 SearchFunc="@SearchPatients"
+                 ToStringFunc="@(p => p?.FullName ?? "")"
+                 Dense="true"
+                 Variant="Variant.Outlined"
+                 Margin="Margin.Dense"
+                 Class="global-search"
+                 Style="min-width: 300px; max-width: 400px;"
+                 Clearable="true"
+                 Adornment="Adornment.Start"
+                 AdornmentIcon="@Icons.Material.Filled.Search"
+                 ValueChanged="@OnPatientSelected">
+    <ItemTemplate Context="patient">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudAvatar Size="Size.Small" Color="Color.Primary">@patient.FirstName[0]@patient.LastName[0]</MudAvatar>
+            <MudStack Spacing="0">
+                <MudText Typo="Typo.body2">@patient.FullName</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">MRN: @patient.MRN | DOB: @patient.DateOfBirth.ToShortDateString()</MudText>
+            </MudStack>
+        </MudStack>
+    </ItemTemplate>
+    <NoItemsTemplate>
+        <MudText Typo="Typo.body2" Class="pa-2 mud-text-secondary">No patients found</MudText>
+    </NoItemsTemplate>
+</MudAutocomplete>
+
+@code {
+    private async Task<IEnumerable<Patient>> SearchPatients(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length < 2)
+            return Enumerable.Empty<Patient>();
+
+        var results = await PatientService.SearchPatientsAsync(value);
+        return results.Take(10);
+    }
+
+    private void OnPatientSelected(Patient? patient)
+    {
+        if (patient != null)
+        {
+            Navigation.NavigateTo($"/patients/{patient.Id}");
+        }
+    }
+}

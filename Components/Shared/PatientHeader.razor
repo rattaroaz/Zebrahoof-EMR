@@ -1,0 +1,101 @@
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+
+<MudCard Elevation="2" Class="mb-4">
+    <MudCardContent Class="py-3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
+                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/patients"))">
+                    Back
+                </MudButton>
+                <MudDivider Vertical="true" FlexItem="true" />
+                <MudAvatar Size="Size.Large" Color="Color.Primary">
+                    @Patient.FirstName[0]@Patient.LastName[0]
+                </MudAvatar>
+                <div>
+                    <MudText Typo="Typo.h5">@Patient.FullName</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        <strong>MRN:</strong> @Patient.MRN | 
+                        <strong>DOB:</strong> @Patient.DateOfBirth.ToString("MM/dd/yyyy") (@Patient.Age y/o) | 
+                        <strong>Sex:</strong> @Patient.Sex |
+                        <strong>Provider:</strong> @Patient.PrimaryProvider
+                    </MudText>
+                </div>
+            </MudStack>
+            
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                @* Allergies *@
+                @if (Patient.Allergies.Any())
+                {
+                    <MudTooltip>
+                        <ChildContent>
+                            <MudChip T="string" Color="Color.Error" Icon="@Icons.Material.Filled.Warning" Size="Size.Small">
+                                @Patient.Allergies.Count Allergy(ies)
+                            </MudChip>
+                        </ChildContent>
+                        <TooltipContent>
+                            <MudText Typo="Typo.subtitle2" Class="mb-1">Allergies:</MudText>
+                            @foreach (var allergy in Patient.Allergies)
+                            {
+                                <MudText Typo="Typo.body2">• @allergy</MudText>
+                            }
+                        </TooltipContent>
+                    </MudTooltip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.Check" Size="Size.Small">NKA</MudChip>
+                }
+
+                @* Alerts *@
+                @foreach (var alert in Patient.Alerts)
+                {
+                    <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.Info" Size="Size.Small">@alert</MudChip>
+                }
+                
+                <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+
+                @* Quick Actions *@
+                <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+                    <MudButton StartIcon="@Icons.Material.Filled.NoteAdd">New Note</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.EventAvailable" OnClick="@ShowAppointments">Appointments</MudButton>
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true">
+                        <MudMenuItem Icon="@Icons.Material.Filled.Print">Print Summary</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.Send">Send Message</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.Assignment">Create Task</MudMenuItem>
+                    </MudMenu>
+                </MudButtonGroup>
+            </MudStack>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public Patient Patient { get; set; } = null!;
+
+    private async Task ShowAppointments()
+    {
+        var parameters = new DialogParameters
+        {
+            ["PatientId"] = Patient.Id
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<PatientAppointmentsDialog>("Appointments", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled && result.Data?.ToString() == "schedule")
+        {
+            // TODO: Open new appointment dialog
+            // For now, just navigate to the schedule page
+            Navigation.NavigateTo("/schedule");
+        }
+    }
+}

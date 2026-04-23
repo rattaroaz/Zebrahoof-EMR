@@ -1,0 +1,188 @@
+@inject MockAppointmentService AppointmentService
+@inject IDialogService DialogService
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.EventAvailable" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Upcoming Appointments</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="4">
+            @if (_appointments == null || _appointments.Count == 0)
+            {
+                <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                    <MudIcon Icon="@Icons.Material.Filled.EventBusy" Size="Size.Large" Class="mud-text-secondary" />
+                    <MudText Typo="Typo.h6" Class="mud-text-secondary">No upcoming appointments</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary text-center">
+                        This patient has no scheduled appointments.
+                    </MudText>
+                </MudStack>
+            }
+            else
+            {
+                <MudStack Spacing="3">
+                    @foreach (var appointment in _appointments.OrderBy(a => a.DateTime))
+                    {
+                        <MudPaper Elevation="1" Class="pa-3">
+                            <MudStack Spacing="2">
+                                <!-- Appointment Header -->
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudChip T="string" Size="Size.Small" Color="@GetAppointmentStatusColor(appointment.Status)">
+                                            @appointment.Status
+                                        </MudChip>
+                                        <MudText Typo="Typo.h6">@appointment.VisitType</MudText>
+                                    </MudStack>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        ID: #@appointment.Id
+                                    </MudText>
+                                </MudStack>
+
+                                <!-- Appointment Details -->
+                                <MudStack Spacing="1">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Class="mud-text-secondary" />
+                                        <MudText Typo="Typo.body2">
+                                            @appointment.DateTime.ToString("dddd, MMMM dd, yyyy") at @appointment.DateTime.ToString("h:mm tt")
+                                        </MudText>
+                                    </MudStack>
+                                    
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Small" Class="mud-text-secondary" />
+                                        <MudText Typo="Typo.body2">
+                                            Duration: @appointment.DurationMinutes minutes
+                                        </MudText>
+                                    </MudStack>
+                                    
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mud-text-secondary" />
+                                        <MudText Typo="Typo.body2">
+                                            Provider: @appointment.Provider
+                                        </MudText>
+                                    </MudStack>
+                                    
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                        <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Small" Class="mud-text-secondary" />
+                                        <MudText Typo="Typo.body2">
+                                            Location: @appointment.Location
+                                        </MudText>
+                                    </MudStack>
+                                </MudStack>
+
+                                <!-- Notes -->
+                                @if (!string.IsNullOrEmpty(appointment.Notes))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mt-2">
+                                        <strong>Notes:</strong> @appointment.Notes
+                                    </MudText>
+                                }
+
+                                <!-- Actions -->
+                                @if (appointment.Status == AppointmentStatus.Scheduled)
+                                {
+                                    <MudStack Row="true" Spacing="1" Class="mt-2">
+                                        <MudButton Variant="Variant.Text" Size="Size.Small" 
+                                                  StartIcon="@Icons.Material.Filled.Edit"
+                                                  OnClick="@(() => EditAppointment(appointment))">
+                                            Edit
+                                        </MudButton>
+                                        <MudButton Variant="Variant.Text" Size="Size.Small" 
+                                                  StartIcon="@Icons.Material.Filled.Cancel"
+                                                  Color="Color.Error"
+                                                  OnClick="@(() => CancelAppointment(appointment))">
+                                            Cancel
+                                        </MudButton>
+                                    </MudStack>
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudStack>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Outlined" OnClick="ScheduleNewAppointment">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" />
+            Schedule New Appointment
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public int PatientId { get; set; }
+
+    private List<Appointment>? _appointments;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAppointments();
+    }
+
+    private async Task LoadAppointments()
+    {
+        var allAppointments = await AppointmentService.GetAppointmentsByPatientAsync(PatientId);
+        _appointments = allAppointments.Where(a => 
+            a.DateTime >= DateTime.Now && 
+            a.Status != AppointmentStatus.Cancelled && 
+            a.Status != AppointmentStatus.Completed && 
+            a.Status != AppointmentStatus.NoShow
+        ).ToList();
+    }
+
+    private void Close()
+    {
+        MudDialog.Close();
+    }
+
+    private void ScheduleNewAppointment()
+    {
+        // Close this dialog and open the new appointment dialog
+        MudDialog.Close(DialogResult.Ok("schedule"));
+    }
+
+    private void EditAppointment(Appointment appointment)
+    {
+        // TODO: Implement edit appointment functionality
+        // For now, just show a message
+    }
+
+    private async Task CancelAppointment(Appointment appointment)
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Cancel Appointment",
+            $"Are you sure you want to cancel the {appointment.VisitType} appointment on {appointment.DateTime:MMM dd, yyyy at h:mm tt}?",
+            yesText: "Cancel Appointment",
+            cancelText: "Keep Appointment",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small }
+        );
+
+        if (result == true)
+        {
+            await AppointmentService.UpdateStatusAsync(appointment.Id, AppointmentStatus.Cancelled);
+            await LoadAppointments();
+        }
+    }
+
+    private Color GetAppointmentStatusColor(AppointmentStatus status)
+    {
+        return status switch
+        {
+            AppointmentStatus.Scheduled => Color.Primary,
+            AppointmentStatus.CheckedIn => Color.Info,
+            AppointmentStatus.InRoom => Color.Warning,
+            AppointmentStatus.InProgress => Color.Warning,
+            AppointmentStatus.Completed => Color.Success,
+            AppointmentStatus.NoShow => Color.Error,
+            AppointmentStatus.Cancelled => Color.Default,
+            _ => Color.Default
+        };
+    }
+}

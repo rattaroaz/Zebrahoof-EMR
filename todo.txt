@@ -1,0 +1,11 @@
+Zebrahoof EMR - a modern, responsive, and desktop-first EMR built with Blazor Server and .NET 10.
+This document represents the UI of the program.
+
+remove input for patients
+add grok api
+upload files
+
+Login:  Userprofile@zebrahoof.com Password: password
+example:  Admin@zebrahoof.com Password: password
+
+In the demographics for each patient, have a button next to the patient name.  when the 

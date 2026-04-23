@@ -1,0 +1,265 @@
+@inject MockClinicalDataService ClinicalDataService
+@inject AuthStateService AuthState
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@(IsViewOnly ? Icons.Material.Filled.Visibility : Icons.Material.Filled.NoteAdd)" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">
+                @(IsViewOnly ? "View Clinical Note" : (IsEdit ? "Edit Clinical Note" : "New Clinical Note"))
+            </MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="4" Class="pa-2">
+            @if (IsViewOnly)
+            {
+                <!-- Note metadata for view mode -->
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Note ID</MudText>
+                            <MudText Typo="Typo.body2">#@note.Id</MudText>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Author</MudText>
+                            <MudText Typo="Typo.body2">@note.AuthorName</MudText>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Created</MudText>
+                            <MudText Typo="Typo.body2">@note.CreatedAt.ToString("MMM dd, yyyy HH:mm")</MudText>
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Status</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="@GetNoteStatusColor(note.Status)">
+                                @note.Status
+                            </MudChip>
+                        </MudItem>
+                        @if (note.SignedAt.HasValue)
+                        {
+                            <MudItem xs="12">
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Signed</MudText>
+                                <MudText Typo="Typo.body2">✓ @note.SignedAt?.ToString("MMM dd, yyyy HH:mm")</MudText>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudPaper>
+            }
+            
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="note.ChiefComplaint" 
+                                  Label="Chief Complaint" 
+                                  Variant="Variant.Outlined" 
+                                  Required="true"
+                                  Disabled="@IsViewOnly"
+                                  Class="@(@IsViewOnly ? "dark-disabled-text" : "")" />
+                </MudItem>
+            </MudGrid>
+
+            <MudTextField @bind-Value="note.HistoryOfPresentIllness" 
+                          Label="History of Present Illness" 
+                          Variant="Variant.Outlined" 
+                          Lines="4" 
+                          Required="true"
+                          Disabled="@IsViewOnly"
+                          Immediate="true"
+                          Class="@(@IsViewOnly ? "dark-disabled-text" : "")" />
+
+            <MudTextField @bind-Value="note.ReviewOfSystems" 
+                          Label="Review of Systems" 
+                          Variant="Variant.Outlined" 
+                          Lines="3" 
+                          Disabled="@IsViewOnly"
+                          Immediate="true"
+                          Class="@(@IsViewOnly ? "dark-disabled-text" : "")" />
+
+            <MudTextField @bind-Value="note.PhysicalExam" 
+                          Label="Physical Examination" 
+                          Variant="Variant.Outlined" 
+                          Lines="4" 
+                          Disabled="@IsViewOnly"
+                          Immediate="true"
+                          Class="@(@IsViewOnly ? "dark-disabled-text" : "")" />
+
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="note.Assessment" 
+                                  Label="Assessment" 
+                                  Variant="Variant.Outlined" 
+                                  Lines="3" 
+                                  Disabled="@IsViewOnly"
+                                  Immediate="true"
+                                  Class="@(@IsViewOnly ? "dark-disabled-text" : "")" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="note.Plan" 
+                                  Label="Plan" 
+                                  Variant="Variant.Outlined" 
+                                  Lines="3" 
+                                  Disabled="@IsViewOnly"
+                                  Immediate="true"
+                                  Class="@(@IsViewOnly ? "dark-disabled-text" : "")" />
+                </MudItem>
+            </MudGrid>
+
+            @if (!IsViewOnly)
+            {
+                <MudDivider Class="my-2" />
+                
+                <MudSwitch @bind-Value="signNote" T="bool" Label="Sign Note (Finalize)" />
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        @if (IsViewOnly)
+        {
+            <MudButton OnClick="Cancel">Close</MudButton>
+        }
+        else
+        {
+            <MudButton Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@SaveNote">
+                @(IsEdit ? "Update Note" : "Create Note")
+            </MudButton>
+        }
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public int PatientId { get; set; }
+
+    [Parameter]
+    public ClinicalNote? Note { get; set; }
+
+    [Parameter]
+    public bool IsEdit { get; set; }
+
+    [Parameter]
+    public bool IsViewOnly { get; set; }
+
+    private ClinicalNote note = new();
+    private bool signNote = false;
+
+    protected override void OnInitialized()
+    {
+        Console.WriteLine($"ClinicalNoteDialog initialized - IsViewOnly: {IsViewOnly}, IsEdit: {IsEdit}, Note ID: {Note?.Id}");
+        
+        if ((IsEdit || IsViewOnly) && Note != null)
+        {
+            Console.WriteLine($"Loading existing note - ID: {Note.Id}, Chief Complaint: {Note.ChiefComplaint}");
+            note = new ClinicalNote
+            {
+                Id = Note.Id,
+                PatientId = Note.PatientId,
+                EncounterId = Note.EncounterId,
+                AuthorName = Note.AuthorName,
+                ChiefComplaint = Note.ChiefComplaint,
+                HistoryOfPresentIllness = Note.HistoryOfPresentIllness,
+                ReviewOfSystems = Note.ReviewOfSystems,
+                PhysicalExam = Note.PhysicalExam,
+                Assessment = Note.Assessment,
+                Plan = Note.Plan,
+                Status = Note.Status,
+                SignedAt = Note.SignedAt,
+                CreatedAt = Note.CreatedAt
+            };
+        }
+        else
+        {
+            Console.WriteLine($"Creating new note - PatientId: {PatientId}");
+            note = new ClinicalNote
+            {
+                PatientId = PatientId,
+                AuthorName = AuthState.CurrentUser?.FullName ?? "Unknown",
+                CreatedAt = DateTime.UtcNow,
+                Status = NoteStatus.InProgress
+            };
+        }
+
+        if (!IsEdit)
+        {
+            signNote = false;
+        }
+        else if (note.Status == NoteStatus.Signed)
+        {
+            signNote = true;
+        }
+        
+        Console.WriteLine($"Dialog initialization complete - Chief Complaint: {note.ChiefComplaint}, HPI: {note.HistoryOfPresentIllness?.Substring(0, Math.Min(50, note.HistoryOfPresentIllness?.Length ?? 0))}...");
+    }
+
+    private async Task SaveNote()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(note.ChiefComplaint))
+            {
+                // Show validation error
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(note.HistoryOfPresentIllness))
+            {
+                // Show validation error
+                return;
+            }
+
+            // Set status based on user choice
+            if (signNote && CanSignNote())
+            {
+                note.SignedAt = DateTime.UtcNow;
+                note.Status = NoteStatus.Signed;
+            }
+            else
+            {
+                note.Status = NoteStatus.InProgress;
+                note.SignedAt = null;
+            }
+
+            if (IsEdit)
+            {
+                await ClinicalDataService.UpdateNoteAsync(note);
+            }
+            else
+            {
+                await ClinicalDataService.CreateNoteAsync(note);
+            }
+
+            MudDialog.Close(DialogResult.Ok(note));
+        }
+        catch (Exception)
+        {
+            // Handle error
+            // Could show a snackbar or alert
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private bool CanSignNote()
+    {
+        return AuthState.CurrentUser?.Role == UserRole.Physician ||
+               AuthState.CurrentUser?.Role == UserRole.Nurse ||
+               AuthState.CurrentUser?.Role == UserRole.MedicalAssistant;
+    }
+
+    private Color GetNoteStatusColor(NoteStatus status)
+    {
+        return status switch
+        {
+            NoteStatus.InProgress => Color.Warning,
+            NoteStatus.Signed => Color.Success,
+            NoteStatus.Addended => Color.Info,
+            NoteStatus.Cosigned => Color.Primary,
+            _ => Color.Default
+        };
+    }
+}

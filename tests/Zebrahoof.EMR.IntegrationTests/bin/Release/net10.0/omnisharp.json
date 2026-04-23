@@ -1,0 +1,12 @@
+{
+  "RoslynExtensionsOptions": {
+    "EnableAnalyzersSupport": true,
+    "AnalyzeOpenDocumentsOnly": true
+  },
+  "MsBuild": {
+    "LoadProjectsOnDemand": true
+  },
+  "FormattingOptions": {
+    "EnableEditorConfigSupport": true
+  }
+}

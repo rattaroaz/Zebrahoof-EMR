@@ -1,0 +1,22 @@
+@page "/encounter/{EncounterId:int}"
+@inject NavigationManager Navigation
+
+<PageTitle>Encounter - Zebrahoof EMR</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@GoBack">
+        Back
+    </MudButton>
+</MudStack>
+
+<EncounterWorkspace EncounterId="EncounterId" />
+
+@code {
+    [Parameter]
+    public int EncounterId { get; set; }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("javascript:history.back()");
+    }
+}

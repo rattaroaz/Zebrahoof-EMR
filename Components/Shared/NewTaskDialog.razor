@@ -1,0 +1,257 @@
+@inject MockTaskService TaskService
+@inject MockPatientService PatientService
+@inject AuthStateService AuthState
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.AddTask" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">@(_isEditing ? "Edit Task" : "New Task")</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid Spacing="2">
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_task.Title"
+                                  Label="Title"
+                                  Required="true"
+                                  RequiredError="Title is required"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_task.Description"
+                                  Label="Description"
+                                  Variant="Variant.Outlined"
+                                  Lines="2" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Task Details</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_task.Type"
+                               Label="Type"
+                               Required="true"
+                               Variant="Variant.Outlined">
+                        @foreach (var type in Enum.GetValues<ClinicalTaskType>())
+                        {
+                            <MudSelectItem Value="@type">@GetTypeLabel(type)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_task.Priority"
+                               Label="Priority"
+                               Required="true"
+                               Variant="Variant.Outlined">
+                        @foreach (var priority in Enum.GetValues<ClinicalTaskPriority>())
+                        {
+                            <MudSelectItem Value="@priority">@priority</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_task.AssignedTo"
+                               Label="Assign To"
+                               Required="true"
+                               RequiredError="Assignee is required"
+                               Variant="Variant.Outlined">
+                        @foreach (var assignee in MockTaskService.Assignees)
+                        {
+                            <MudSelectItem Value="@assignee">@assignee</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_dueDate"
+                                   Label="Due Date"
+                                   Variant="Variant.Outlined"
+                                   MinDate="DateTime.Today"
+                                   DateFormat="MM/dd/yyyy" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Patient (Optional)</MudText>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudAutocomplete T="Patient"
+                                     @bind-Value="_selectedPatient"
+                                     Label="Search Patient"
+                                     SearchFunc="SearchPatients"
+                                     ToStringFunc="@(p => p?.FullName ?? string.Empty)"
+                                     Variant="Variant.Outlined"
+                                     Clearable="true"
+                                     ShowProgressIndicator="true"
+                                     Disabled="@(PreselectedPatientId.HasValue)">
+                        <ItemTemplate Context="patient">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudAvatar Size="Size.Small" Color="Color.Primary">@patient.FirstName[0]@patient.LastName[0]</MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.body2">@patient.FullName</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@patient.MRN</MudText>
+                                </div>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                </MudItem>
+
+                @if (_isEditing)
+                {
+                    <MudItem xs="12">
+                        <MudDivider Class="my-2" />
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">Status</MudText>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudSelect @bind-Value="_task.Status"
+                                   Label="Status"
+                                   Variant="Variant.Outlined">
+                            @foreach (var status in Enum.GetValues<ClinicalTaskStatus>())
+                            {
+                                <MudSelectItem Value="@status">@status</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="Submit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(!_isValid || _isSaving)">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(_isEditing ? "Update Task" : "Create Task")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public ClinicalTask? ExistingTask { get; set; }
+
+    [Parameter]
+    public int? PreselectedPatientId { get; set; }
+
+    [Parameter]
+    public string? PreselectedPatientName { get; set; }
+
+    private MudForm _form = null!;
+    private ClinicalTask _task = new() { Priority = ClinicalTaskPriority.Normal, Status = ClinicalTaskStatus.Pending };
+    private Patient? _selectedPatient;
+    private DateTime? _dueDate;
+    private bool _isValid;
+    private bool _isSaving;
+    private bool _isEditing;
+    private List<Patient> _patients = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _patients = await PatientService.GetAllPatientsAsync();
+        
+        // Set default assignee to current user
+        _task.AssignedTo = MockTaskService.Assignees.FirstOrDefault() ?? "";
+        _task.CreatedBy = AuthState.CurrentUser?.FullName ?? "Unknown";
+
+        if (ExistingTask != null)
+        {
+            _isEditing = true;
+            _task = new ClinicalTask
+            {
+                Id = ExistingTask.Id,
+                Title = ExistingTask.Title,
+                Description = ExistingTask.Description,
+                Type = ExistingTask.Type,
+                Priority = ExistingTask.Priority,
+                Status = ExistingTask.Status,
+                PatientId = ExistingTask.PatientId,
+                PatientName = ExistingTask.PatientName,
+                AssignedTo = ExistingTask.AssignedTo,
+                CreatedBy = ExistingTask.CreatedBy,
+                CreatedAt = ExistingTask.CreatedAt,
+                DueDate = ExistingTask.DueDate,
+                CompletedAt = ExistingTask.CompletedAt
+            };
+            _dueDate = ExistingTask.DueDate;
+            if (ExistingTask.PatientId.HasValue)
+            {
+                _selectedPatient = _patients.FirstOrDefault(p => p.Id == ExistingTask.PatientId);
+            }
+        }
+        else
+        {
+            _dueDate = DateTime.Today;
+            
+            if (PreselectedPatientId.HasValue)
+            {
+                _selectedPatient = _patients.FirstOrDefault(p => p.Id == PreselectedPatientId);
+                _task.PatientId = PreselectedPatientId;
+                _task.PatientName = PreselectedPatientName;
+            }
+        }
+    }
+
+    private async Task<IEnumerable<Patient>> SearchPatients(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return _patients.Take(10);
+
+        return await PatientService.SearchPatientsAsync(value);
+    }
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_isValid) return;
+
+        _isSaving = true;
+
+        if (_selectedPatient != null)
+        {
+            _task.PatientId = _selectedPatient.Id;
+            _task.PatientName = _selectedPatient.FullName;
+        }
+        else
+        {
+            _task.PatientId = null;
+            _task.PatientName = null;
+        }
+        
+        _task.DueDate = _dueDate;
+
+        if (_isEditing)
+        {
+            await TaskService.UpdateTaskAsync(_task);
+        }
+        else
+        {
+            await TaskService.AddTaskAsync(_task);
+        }
+
+        _isSaving = false;
+        MudDialog.Close(DialogResult.Ok(_task));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private string GetTypeLabel(ClinicalTaskType type) => type switch
+    {
+        ClinicalTaskType.SignNote => "Sign Note",
+        ClinicalTaskType.ReviewResults => "Review Results",
+        ClinicalTaskType.MedicationRenewal => "Medication Renewal",
+        ClinicalTaskType.Referral => "Referral",
+        ClinicalTaskType.PhoneCall => "Phone Call",
+        ClinicalTaskType.Other => "Other",
+        _ => type.ToString()
+    };
+}

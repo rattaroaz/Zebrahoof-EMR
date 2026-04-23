@@ -1,0 +1,186 @@
+@page "/admin"
+@using Zebrahoof_EMR.Models
+@inject MockClinicalDataService ClinicalDataService
+@inject NavigationManager Navigation
+
+<PageTitle>Administration - Zebrahoof EMR</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Administration</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6" lg="3">
+        <MudCard Elevation="2" Class="cursor-pointer" @onclick="@(() => Navigation.NavigateTo("/admin/users"))">
+            <MudCardContent>
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.People" Size="Size.Large" Color="Color.Primary" />
+                    <MudText Typo="Typo.h6">Users & Roles</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                        Manage user accounts, roles, and permissions
+                    </MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@_userCount users</MudChip>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6" lg="3">
+        <MudCard Elevation="2" Class="cursor-pointer" @onclick="@(() => Navigation.NavigateTo("/admin/locations"))">
+            <MudCardContent>
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Large" Color="Color.Success" />
+                    <MudText Typo="Typo.h6">Locations & Departments</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                        Configure clinic locations and departments
+                    </MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@_locationCount locations</MudChip>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6" lg="3">
+        <MudCard Elevation="2" Class="cursor-pointer" @onclick="@(() => Navigation.NavigateTo("/admin/templates"))">
+            <MudCardContent>
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Large" Color="Color.Warning" />
+                    <MudText Typo="Typo.h6">Templates & Order Sets</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                        Manage note templates, smart phrases, and order sets
+                    </MudText>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning">@_templateCount templates</MudChip>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6" lg="3">
+        <MudCard Elevation="2" Class="cursor-pointer" @onclick="@(() => Navigation.NavigateTo("/admin/settings"))">
+            <MudCardContent>
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.Settings" Size="Size.Large" Color="Color.Info" />
+                    <MudText Typo="Typo.h6">Global Settings</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                        Configure system-wide settings and preferences
+                    </MudText>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.h5" Class="mt-6 mb-3">Quick Stats</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="4">
+        <MudCard Elevation="1">
+            <MudCardContent>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Active Users</MudText>
+                        <MudText Typo="Typo.h4">@_activeUserCount</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.PersonOutline" Size="Size.Large" Color="Color.Primary" />
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudCard Elevation="1">
+            <MudCardContent>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Active Locations</MudText>
+                        <MudText Typo="Typo.h4">@_activeLocationCount</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.Business" Size="Size.Large" Color="Color.Success" />
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudCard Elevation="1">
+            <MudCardContent>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Shared Templates</MudText>
+                        <MudText Typo="Typo.h4">@_sharedTemplateCount</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.ContentCopy" Size="Size.Large" Color="Color.Warning" />
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.h5" Class="mt-6 mb-3">System Information</MudText>
+
+<MudCard Elevation="1">
+    <MudCardContent>
+        <MudSimpleTable Dense="true" Hover="true">
+            <tbody>
+                <tr>
+                    <td><strong>Organization Name</strong></td>
+                    <td>@_settings.OrganizationName</td>
+                </tr>
+                <tr>
+                    <td><strong>Default Timezone</strong></td>
+                    <td>@_settings.DefaultTimezone</td>
+                </tr>
+                <tr>
+                    <td><strong>Date Format</strong></td>
+                    <td>@_settings.DateFormat</td>
+                </tr>
+                <tr>
+                    <td><strong>Session Timeout</strong></td>
+                    <td>@_settings.SessionTimeoutMinutes minutes</td>
+                </tr>
+                <tr>
+                    <td><strong>Patient Portal</strong></td>
+                    <td>
+                        <MudChip T="string" Size="Size.Small" Color="@(_settings.EnablePatientPortal ? Color.Success : Color.Default)">
+                            @(_settings.EnablePatientPortal ? "Enabled" : "Disabled")
+                        </MudChip>
+                    </td>
+                </tr>
+                <tr>
+                    <td><strong>E-Prescribing</strong></td>
+                    <td>
+                        <MudChip T="string" Size="Size.Small" Color="@(_settings.EnableElectronicPrescribing ? Color.Success : Color.Default)">
+                            @(_settings.EnableElectronicPrescribing ? "Enabled" : "Disabled")
+                        </MudChip>
+                    </td>
+                </tr>
+            </tbody>
+        </MudSimpleTable>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private int _userCount;
+    private int _activeUserCount;
+    private int _locationCount;
+    private int _activeLocationCount;
+    private int _templateCount;
+    private int _sharedTemplateCount;
+    private SystemSettings _settings = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var users = await ClinicalDataService.GetSystemUsersAsync();
+        _userCount = users.Count;
+        _activeUserCount = users.Count(u => u.Status == UserStatus.Active);
+
+        var locations = await ClinicalDataService.GetLocationsAsync();
+        _locationCount = locations.Count;
+        _activeLocationCount = locations.Count(l => l.IsActive);
+
+        var templates = await ClinicalDataService.GetNoteTemplatesAsync();
+        var orderSets = await ClinicalDataService.GetOrderSetsAsync();
+        _templateCount = templates.Count + orderSets.Count;
+        _sharedTemplateCount = templates.Count(t => t.IsShared) + orderSets.Count(o => o.IsShared);
+
+        _settings = await ClinicalDataService.GetSystemSettingsAsync();
+    }
+}

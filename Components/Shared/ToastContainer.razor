@@ -1,0 +1,32 @@
+@inject NotificationService Notifications
+@inject ISnackbar Snackbar
+
+@code {
+    protected override void OnInitialized()
+    {
+        Notifications.OnNotification += ShowNotification;
+    }
+
+    private void ShowNotification(Notification notification)
+    {
+        var severity = notification.Type switch
+        {
+            NotificationType.Success => Severity.Success,
+            NotificationType.Error => Severity.Error,
+            NotificationType.Warning => Severity.Warning,
+            NotificationType.Info => Severity.Info,
+            _ => Severity.Normal
+        };
+
+        Snackbar.Add(notification.Message, severity, config =>
+        {
+            config.ShowCloseIcon = true;
+            config.VisibleStateDuration = 5000;
+        });
+    }
+
+    public void Dispose()
+    {
+        Notifications.OnNotification -= ShowNotification;
+    }
+}

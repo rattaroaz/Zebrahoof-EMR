@@ -1,0 +1,191 @@
+@inject MockClinicalDataService ClinicalDataService
+@inject AuthStateService AuthState
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>Clinical Notes Tree View - Zebrahoof EMR</PageTitle>
+
+<MudStack Spacing="4">
+    <!-- Header -->
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudText Typo="Typo.h5">Clinical Notes - Tree View</MudText>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.List" @onclick="@NavigateToListView">
+            Show List View
+        </MudButton>
+    </MudStack>
+
+    <!-- Notes List - Each visit on one line -->
+    @if (_notes == null || _notes.Count == 0)
+    {
+        <MudPaper Elevation="2">
+            <MudCardContent>
+                <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                    <MudIcon Icon="@Icons.Material.Filled.NoteAdd" Size="Size.Large" Class="mud-text-secondary" />
+                    <MudText Typo="Typo.h6" Class="mud-text-secondary">No clinical notes found</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary text-center">
+                        No notes available for this patient.
+                    </MudText>
+                </MudStack>
+            </MudCardContent>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Elevation="2">
+            <MudCardContent>
+                <MudStack Spacing="1">
+                    @foreach (var note in _notes.OrderByDescending(n => n.CreatedAt))
+                    {
+                        <MudPaper Elevation="0" Class="pa-3 cursor-pointer hover-bg-grey-100" Style="border-bottom: 1px solid #e0e0e0;" @onclick="@(() => ViewNote(note))">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <!-- Date and Chief Complaint -->
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="flex-grow-1">
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary" Style="min-width: 120px;">
+                                        @note.CreatedAt.ToString("MMM dd, yyyy")
+                                    </MudText>
+                                    <MudText Typo="Typo.body1" Class="flex-grow-1">
+                                        @(note.ChiefComplaint ?? "Clinical Note")
+                                    </MudText>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetNoteStatusColor(note.Status)">
+                                        @note.Status
+                                    </MudChip>
+                                </MudStack>
+                                
+                                <!-- Actions (only show for in-progress notes) -->
+                                @if (note.Status == NoteStatus.InProgress)
+                                {
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" @onclick:stopPropagation>
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" 
+                                                      @onclick="@(() => EditNote(note))" title="Edit Note" />
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" 
+                                                      @onclick="@(() => DeleteNote(note))" title="Delete Note" />
+                                        @if (CanSignNote())
+                                        {
+                                            <MudIconButton Icon="@Icons.Material.Filled.HowToReg" Size="Size.Small" 
+                                                          Color="Color.Primary"
+                                                          @onclick="@(() => SignNote(note))" title="Sign Note" />
+                                        }
+                                    </MudStack>
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudStack>
+            </MudCardContent>
+        </MudPaper>
+    }
+</MudStack>
+
+@code {
+    [Parameter]
+    public int PatientId { get; set; }
+
+    private List<ClinicalNote>? _notes;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNotes();
+    }
+
+    private async Task LoadNotes()
+    {
+        _notes = await ClinicalDataService.GetPatientNotesAsync(PatientId);
+    }
+
+    private void NavigateToListView()
+    {
+        Navigation.NavigateTo($"/patients/{PatientId}/notes");
+    }
+
+    private async Task ViewNote(ClinicalNote note)
+    {
+        Console.WriteLine($"ViewNote called for note ID: {note.Id}, Chief Complaint: {note.ChiefComplaint}");
+        
+        var parameters = new DialogParameters
+        {
+            ["Note"] = note,
+            ["IsViewOnly"] = true
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        Console.WriteLine("About to show dialog...");
+        await DialogService.ShowAsync<ClinicalNoteDialog>("Clinical Note", parameters, options);
+        Console.WriteLine("Dialog shown successfully");
+    }
+
+    private async Task EditNote(ClinicalNote note)
+    {
+        var parameters = new DialogParameters
+        {
+            ["PatientId"] = PatientId,
+            ["Note"] = note,
+            ["IsEdit"] = true
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<ClinicalNoteDialog>("Edit Clinical Note", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            await LoadNotes();
+        }
+    }
+
+    private async Task DeleteNote(ClinicalNote note)
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Delete Note",
+            $"Are you sure you want to delete this clinical note? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel",
+            options: new DialogOptions { MaxWidth = MaxWidth.Small }
+        );
+
+        if (result == true)
+        {
+            await ClinicalDataService.DeleteNoteAsync(note.Id);
+            await LoadNotes();
+        }
+    }
+
+    private async Task SignNote(ClinicalNote note)
+    {
+        note.SignedAt = DateTime.UtcNow;
+        note.Status = NoteStatus.Signed;
+
+        await ClinicalDataService.UpdateNoteAsync(note);
+        await LoadNotes();
+    }
+
+    private bool CanSignNote()
+    {
+        return AuthState.CurrentUser?.Role == UserRole.Physician ||
+               AuthState.CurrentUser?.Role == UserRole.Nurse ||
+               AuthState.CurrentUser?.Role == UserRole.MedicalAssistant;
+    }
+
+    private Color GetNoteStatusColor(NoteStatus status)
+    {
+        return status switch
+        {
+            NoteStatus.InProgress => Color.Warning,
+            NoteStatus.Signed => Color.Success,
+            NoteStatus.Addended => Color.Info,
+            NoteStatus.Cosigned => Color.Primary,
+            _ => Color.Default
+        };
+    }
+}

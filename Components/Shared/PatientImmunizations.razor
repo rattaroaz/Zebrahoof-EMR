@@ -1,0 +1,110 @@
+@inject MockClinicalDataService ClinicalDataService
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Immunizations</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">
+                Administer Vaccine
+            </MudButton>
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent Class="pa-0">
+        @if (_immunizations.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Class="ma-4">No immunizations on file</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@_immunizations" Hover="true" Dense="true">
+                <HeaderContent>
+                    <MudTh>Vaccine</MudTh>
+                    <MudTh>Date</MudTh>
+                    <MudTh>Manufacturer</MudTh>
+                    <MudTh>Lot #</MudTh>
+                    <MudTh>Site</MudTh>
+                    <MudTh>Route</MudTh>
+                    <MudTh>Administered By</MudTh>
+                    <MudTh>Status</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Vaccine">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudIcon Icon="@Icons.Material.Filled.Vaccines" Size="Size.Small" Color="Color.Success" />
+                            @context.VaccineName
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Date">@context.AdministeredDate.ToString("MM/dd/yyyy")</MudTd>
+                    <MudTd DataLabel="Manufacturer">@(context.Manufacturer ?? "—")</MudTd>
+                    <MudTd DataLabel="Lot">@(context.LotNumber ?? "—")</MudTd>
+                    <MudTd DataLabel="Site">@(context.Site ?? "—")</MudTd>
+                    <MudTd DataLabel="Route">@(context.Route ?? "—")</MudTd>
+                    <MudTd DataLabel="By">@(context.AdministeredBy ?? "—")</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Class="pa-4">No immunizations found</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        }
+    </MudCardContent>
+</MudCard>
+
+@* Recommended Immunizations Section *@
+<MudCard Elevation="2" Class="mt-4">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Recommended Immunizations</MudText>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+            <MudText Typo="Typo.body2">The following immunizations are recommended based on patient age and history:</MudText>
+        </MudAlert>
+        <MudStack Spacing="2">
+            <MudPaper Elevation="0" Class="pa-3 mud-background">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <div>
+                        <MudText Typo="Typo.subtitle2">Influenza (Annual)</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Recommended annually for all adults</MudText>
+                    </div>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add">Order</MudButton>
+                </MudStack>
+            </MudPaper>
+            <MudPaper Elevation="0" Class="pa-3 mud-background">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                    <div>
+                        <MudText Typo="Typo.subtitle2">COVID-19 Booster</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Updated booster recommended if > 6 months since last dose</MudText>
+                    </div>
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add">Order</MudButton>
+                </MudStack>
+            </MudPaper>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    private List<Immunization> _immunizations = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _immunizations = await ClinicalDataService.GetImmunizationsByPatientAsync(PatientId);
+    }
+
+    private Color GetStatusColor(ImmunizationStatus status) => status switch
+    {
+        ImmunizationStatus.Completed => Color.Success,
+        ImmunizationStatus.Historical => Color.Info,
+        ImmunizationStatus.Refused => Color.Warning,
+        ImmunizationStatus.NotGiven => Color.Error,
+        _ => Color.Default
+    };
+}

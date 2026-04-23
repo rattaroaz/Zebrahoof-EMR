@@ -1,0 +1,344 @@
+@using Zebrahoof_EMR.Models
+@inject MockClinicalDataService ClinicalDataService
+@inject NavigationManager Navigation
+
+<MudGrid>
+    @* Left Column - Problems & Medications *@
+    <MudItem xs="12" md="6" lg="4">
+        @* Active Problems *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.LocalHospital" Color="Color.Primary" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Active Problems</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => Navigation.NavigateTo($"/patients/{PatientId}/problems"))" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_problems.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="ma-3">No active problems</MudAlert>
+                }
+                else
+                {
+                    <MudList T="Problem" Dense="true">
+                        @foreach (var problem in _problems.Take(5))
+                        {
+                            <MudListItem>
+                                <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                                    <div>
+                                        <MudText Typo="Typo.body2">@problem.Name</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @problem.IcdCode • Since @problem.OnsetDate.ToString("MM/yyyy")
+                                        </MudText>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(problem.Severity))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="@GetSeverityColor(problem.Severity)">@problem.Severity</MudChip>
+                                    }
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                    @if (_problems.Count > 5)
+                    {
+                        <MudButton Variant="Variant.Text" FullWidth="true" Class="mt-2" OnClick="@(() => Navigation.NavigateTo($"/patients/{PatientId}/problems"))">
+                            View All (@_problems.Count)
+                        </MudButton>
+                    }
+                }
+            </MudCardContent>
+        </MudCard>
+
+        @* Current Medications *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Medication" Color="Color.Success" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Current Medications</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => Navigation.NavigateTo($"/patients/{PatientId}/medications"))" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_medications.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="ma-3">No active medications</MudAlert>
+                }
+                else
+                {
+                    <MudList T="Medication" Dense="true">
+                        @foreach (var med in _medications.Take(5))
+                        {
+                            <MudListItem>
+                                <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                                    <div>
+                                        <MudText Typo="Typo.body2">
+                                            @med.Name @med.Dose
+                                            @if (med.IsHighRisk)
+                                            {
+                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Small" />
+                                            }
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@med.Frequency • @med.Route</MudText>
+                                    </div>
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                    @if (_medications.Count > 5)
+                    {
+                        <MudButton Variant="Variant.Text" FullWidth="true" Class="mt-2" OnClick="@(() => Navigation.NavigateTo($"/patients/{PatientId}/medications"))">
+                            View All (@_medications.Count)
+                        </MudButton>
+                    }
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    @* Center Column - Allergies & Recent Labs *@
+    <MudItem xs="12" md="6" lg="4">
+        @* Allergies *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Allergies</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => Navigation.NavigateTo($"/patients/{PatientId}/allergies"))" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_allergies.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Success" Dense="true" Class="ma-3">
+                        <MudIcon Icon="@Icons.Material.Filled.Check" Class="mr-2" /> No Known Allergies (NKA)
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudList T="Allergy" Dense="true">
+                        @foreach (var allergy in _allergies)
+                        {
+                            <MudListItem>
+                                <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                                    <div>
+                                        <MudText Typo="Typo.body2">@allergy.Allergen</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@allergy.Reaction</MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetAllergySeverityColor(allergy.Severity)">@allergy.Severity</MudChip>
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudCardContent>
+        </MudCard>
+
+        @* Recent Labs *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Science" Color="Color.Warning" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Recent Labs</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => Navigation.NavigateTo($"/patients/{PatientId}/labs"))" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_labs.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="ma-3">No recent lab results</MudAlert>
+                }
+                else
+                {
+                    <MudList T="LabResult" Dense="true">
+                        @foreach (var lab in _labs.Take(5))
+                        {
+                            <MudListItem>
+                                <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                                    <div>
+                                        <MudText Typo="Typo.body2">@lab.TestName</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@lab.CollectedAt.ToString("MM/dd/yyyy")</MudText>
+                                    </div>
+                                    <MudText Typo="Typo.body2" Color="@(lab.IsAbnormal ? Color.Error : Color.Default)" Style="@(lab.IsCritical ? "font-weight: bold;" : "")">
+                                        @lab.Value @lab.Units
+                                        @if (lab.IsCritical)
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.PriorityHigh" Size="Size.Small" Color="Color.Error" />
+                                        }
+                                    </MudText>
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                    @if (_labs.Count > 5)
+                    {
+                        <MudButton Variant="Variant.Text" FullWidth="true" Class="mt-2" OnClick="@(() => Navigation.NavigateTo($"/patients/{PatientId}/labs"))">
+                            View All
+                        </MudButton>
+                    }
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    @* Right Column - Vitals & Recent Encounters *@
+    <MudItem xs="12" md="12" lg="4">
+        @* Latest Vitals *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.MonitorHeart" Color="Color.Info" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Latest Vitals</MudText>
+                    @if (_latestVitals != null)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@_latestVitals.RecordedAt.ToString("MM/dd/yyyy h:mm tt")</MudText>
+                    }
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" OnClick="@(() => Navigation.NavigateTo($"/patients/{PatientId}/vitals"))" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                @if (_latestVitals == null)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">No vitals recorded</MudAlert>
+                }
+                else
+                {
+                    <MudGrid Spacing="2">
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Blood Pressure</MudText>
+                            <MudText Typo="Typo.body1">@_latestVitals.SystolicBP/@_latestVitals.DiastolicBP mmHg</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Heart Rate</MudText>
+                            <MudText Typo="Typo.body1">@_latestVitals.HeartRate bpm</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Temperature</MudText>
+                            <MudText Typo="Typo.body1">@_latestVitals.Temperature °F</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">SpO2</MudText>
+                            <MudText Typo="Typo.body1">@_latestVitals.OxygenSaturation%</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Weight</MudText>
+                            <MudText Typo="Typo.body1">@_latestVitals.Weight lbs</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">BMI</MudText>
+                            <MudText Typo="Typo.body1">@_latestVitals.BMI</MudText>
+                        </MudItem>
+                    </MudGrid>
+                }
+            </MudCardContent>
+        </MudCard>
+
+        @* Recent Encounters *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.EventNote" Color="Color.Secondary" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Recent Encounters</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_encounters.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="ma-3">No encounters recorded</MudAlert>
+                }
+                else
+                {
+                    <MudTimeline TimelinePosition="TimelinePosition.Start" Class="pa-2">
+                        @foreach (var encounter in _encounters.Take(4))
+                        {
+                            <MudTimelineItem Size="Size.Small" Color="@(encounter.Status == EncounterStatus.Signed ? Color.Success : Color.Warning)">
+                                <MudText Typo="Typo.body2">@encounter.VisitType</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @encounter.DateTime.ToString("MM/dd/yyyy") • @encounter.Provider
+                                </MudText>
+                            </MudTimelineItem>
+                        }
+                    </MudTimeline>
+                }
+            </MudCardContent>
+        </MudCard>
+
+        @* Risk Scores *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Assessment" Color="Color.Warning" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Risk Scores</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <RiskScorePanel Scores="_riskScores" />
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    private List<Problem> _problems = new();
+    private List<Medication> _medications = new();
+    private List<Allergy> _allergies = new();
+    private List<LabResult> _labs = new();
+    private VitalSigns? _latestVitals;
+    private List<Encounter> _encounters = new();
+    private List<RiskScoreEntry> _riskScores = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _problems = await ClinicalDataService.GetActiveProblemsByPatientAsync(PatientId);
+        _medications = await ClinicalDataService.GetMedicationListAsync(PatientId);
+        _allergies = await ClinicalDataService.GetActiveAllergiesByPatientAsync(PatientId);
+        _labs = await ClinicalDataService.GetRecentLabResultsByPatientAsync(PatientId, 5);
+        _latestVitals = await ClinicalDataService.GetLatestVitalsByPatientAsync(PatientId);
+        _encounters = await ClinicalDataService.GetEncountersByPatientAsync(PatientId);
+        _riskScores = await ClinicalDataService.GetRiskScoresByPatientAsync(PatientId);
+    }
+
+    private Color GetSeverityColor(string severity) => severity?.ToLower() switch
+    {
+        "severe" => Color.Error,
+        "moderate" => Color.Warning,
+        "mild" => Color.Info,
+        _ => Color.Default
+    };
+
+    private Color GetAllergySeverityColor(AllergySeverity severity) => severity switch
+    {
+        AllergySeverity.LifeThreatening => Color.Error,
+        AllergySeverity.Severe => Color.Error,
+        AllergySeverity.Moderate => Color.Warning,
+        AllergySeverity.Mild => Color.Info,
+        _ => Color.Default
+    };
+}

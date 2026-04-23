@@ -1,0 +1,290 @@
+@inject MockTaskService TaskService
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+
+<MudDrawer @bind-Open="_isOpen" Anchor="Anchor.End" Width="420px" Elevation="2" Variant="DrawerVariant.Temporary">
+    @if (_task != null)
+    {
+        <MudDrawerHeader Class="d-flex justify-space-between align-center">
+            <MudText Typo="Typo.h6">Task Details</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.Close" OnClick="Close" Size="Size.Small" />
+        </MudDrawerHeader>
+        
+        <MudDivider />
+        
+        <div class="pa-4">
+            @* Task Header *@
+            <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="3" Class="mb-4">
+                <MudAvatar Size="Size.Large" Color="@GetPriorityColor(_task.Priority)" Variant="Variant.Outlined">
+                    <MudIcon Icon="@GetTaskIcon(_task.Type)" />
+                </MudAvatar>
+                <div style="flex: 1;">
+                    <MudText Typo="Typo.h6">@_task.Title</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@_task.Description</MudText>
+                </div>
+            </MudStack>
+
+            @* Status & Priority Chips *@
+            <MudStack Row="true" Spacing="2" Class="mb-4">
+                <MudChip T="string" Color="@GetStatusColor(_task.Status)" Size="Size.Medium">
+                    @GetStatusText(_task.Status)
+                </MudChip>
+                <MudChip T="string" Color="@GetPriorityColor(_task.Priority)" Size="Size.Medium" Variant="Variant.Outlined">
+                    @_task.Priority Priority
+                </MudChip>
+                @if (_task.DueDate.HasValue && _task.DueDate.Value.Date < DateTime.Today && 
+                     _task.Status != ClinicalTaskStatus.Completed && _task.Status != ClinicalTaskStatus.Cancelled)
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Medium">
+                        Overdue
+                    </MudChip>
+                }
+            </MudStack>
+
+            @* Task Details *@
+            <MudList T="string" Dense="true" Class="mb-4">
+                <MudListItem Icon="@Icons.Material.Filled.Category">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Type</MudText>
+                    <MudText Typo="Typo.body1">@GetTypeLabel(_task.Type)</MudText>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Person">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Assigned To</MudText>
+                    <MudText Typo="Typo.body1">@_task.AssignedTo</MudText>
+                </MudListItem>
+                @if (_task.DueDate.HasValue)
+                {
+                    <MudListItem Icon="@Icons.Material.Filled.Event">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Due Date</MudText>
+                        <MudText Typo="Typo.body1" Color="@(_task.DueDate.Value.Date < DateTime.Today ? Color.Error : Color.Default)">
+                            @_task.DueDate.Value.ToString("dddd, MMMM d, yyyy")
+                            @if (_task.DueDate.Value.Date == DateTime.Today)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Warning"> (Today)</MudText>
+                            }
+                        </MudText>
+                    </MudListItem>
+                }
+                @if (_task.PatientName != null)
+                {
+                    <MudListItem Icon="@Icons.Material.Filled.PersonPin">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Patient</MudText>
+                        <MudLink Typo="Typo.body1" Href="@($"/patients/{_task.PatientId}/chart")">@_task.PatientName</MudLink>
+                    </MudListItem>
+                }
+                <MudListItem Icon="@Icons.Material.Filled.PersonAdd">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Created By</MudText>
+                    <MudText Typo="Typo.body1">@_task.CreatedBy</MudText>
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Schedule">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Created</MudText>
+                    <MudText Typo="Typo.body1">@_task.CreatedAt.ToString("g")</MudText>
+                </MudListItem>
+                @if (_task.CompletedAt.HasValue)
+                {
+                    <MudListItem Icon="@Icons.Material.Filled.CheckCircle">
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Completed</MudText>
+                        <MudText Typo="Typo.body1">@_task.CompletedAt.Value.ToString("g")</MudText>
+                    </MudListItem>
+                }
+            </MudList>
+
+            <MudDivider Class="mb-4" />
+
+            @* Quick Actions *@
+            <MudText Typo="Typo.subtitle2" Class="mb-3">Actions</MudText>
+            <MudStack Spacing="2">
+                @if (_task.Status == ClinicalTaskStatus.Pending)
+                {
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Primary" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               OnClick="() => UpdateStatus(ClinicalTaskStatus.InProgress)">
+                        Start Working
+                    </MudButton>
+                }
+                
+                @if (_task.Status == ClinicalTaskStatus.Pending || _task.Status == ClinicalTaskStatus.InProgress)
+                {
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Success" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.CheckCircle"
+                               OnClick="() => UpdateStatus(ClinicalTaskStatus.Completed)">
+                        Mark Complete
+                    </MudButton>
+                }
+
+                @if (_task.PatientId.HasValue)
+                {
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Primary" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.FolderOpen"
+                               OnClick="OpenPatientChart">
+                        Open Patient Chart
+                    </MudButton>
+                }
+
+                @if (_task.Status != ClinicalTaskStatus.Completed && _task.Status != ClinicalTaskStatus.Cancelled)
+                {
+                    <MudDivider Class="my-2" />
+                    
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Default" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.Edit"
+                               OnClick="EditTask">
+                        Edit Task
+                    </MudButton>
+
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Error" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.Cancel"
+                               OnClick="CancelTask">
+                        Cancel Task
+                    </MudButton>
+                }
+
+                @if (_task.Status == ClinicalTaskStatus.Completed)
+                {
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Warning" 
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.Undo"
+                               OnClick="() => UpdateStatus(ClinicalTaskStatus.Pending)">
+                        Reopen Task
+                    </MudButton>
+                }
+            </MudStack>
+        </div>
+    }
+</MudDrawer>
+
+@code {
+    [Parameter]
+    public EventCallback OnTaskChanged { get; set; }
+
+    private bool _isOpen;
+    private ClinicalTask? _task;
+
+    public void Open(ClinicalTask task)
+    {
+        _task = task;
+        _isOpen = true;
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        _isOpen = false;
+        StateHasChanged();
+    }
+
+    private void OpenPatientChart()
+    {
+        if (_task?.PatientId != null)
+        {
+            Navigation.NavigateTo($"/patients/{_task.PatientId}/chart");
+        }
+    }
+
+    private async Task UpdateStatus(ClinicalTaskStatus status)
+    {
+        if (_task != null)
+        {
+            await TaskService.UpdateStatusAsync(_task.Id, status);
+            _task.Status = status;
+            if (status == ClinicalTaskStatus.Completed)
+            {
+                _task.CompletedAt = DateTime.Now;
+            }
+            await OnTaskChanged.InvokeAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task EditTask()
+    {
+        if (_task == null) return;
+
+        var parameters = new DialogParameters<NewTaskDialog>
+        {
+            { x => x.ExistingTask, _task }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<NewTaskDialog>("Edit Task", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: ClinicalTask updated })
+        {
+            _task = updated;
+            await OnTaskChanged.InvokeAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelTask()
+    {
+        bool? confirm = await DialogService.ShowMessageBox(
+            "Cancel Task",
+            "Are you sure you want to cancel this task?",
+            yesText: "Yes, Cancel", cancelText: "No");
+
+        if (confirm == true)
+        {
+            await UpdateStatus(ClinicalTaskStatus.Cancelled);
+            Close();
+        }
+    }
+
+    private Color GetStatusColor(ClinicalTaskStatus status) => status switch
+    {
+        ClinicalTaskStatus.Pending => Color.Default,
+        ClinicalTaskStatus.InProgress => Color.Primary,
+        ClinicalTaskStatus.Completed => Color.Success,
+        ClinicalTaskStatus.Cancelled => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetStatusText(ClinicalTaskStatus status) => status switch
+    {
+        ClinicalTaskStatus.Pending => "Pending",
+        ClinicalTaskStatus.InProgress => "In Progress",
+        ClinicalTaskStatus.Completed => "Completed",
+        ClinicalTaskStatus.Cancelled => "Cancelled",
+        _ => status.ToString()
+    };
+
+    private Color GetPriorityColor(ClinicalTaskPriority priority) => priority switch
+    {
+        ClinicalTaskPriority.Urgent => Color.Error,
+        ClinicalTaskPriority.High => Color.Warning,
+        ClinicalTaskPriority.Normal => Color.Info,
+        ClinicalTaskPriority.Low => Color.Default,
+        _ => Color.Default
+    };
+
+    private string GetTaskIcon(ClinicalTaskType type) => type switch
+    {
+        ClinicalTaskType.SignNote => Icons.Material.Filled.Edit,
+        ClinicalTaskType.ReviewResults => Icons.Material.Filled.Science,
+        ClinicalTaskType.MedicationRenewal => Icons.Material.Filled.Medication,
+        ClinicalTaskType.Referral => Icons.Material.Filled.Send,
+        ClinicalTaskType.PhoneCall => Icons.Material.Filled.Phone,
+        _ => Icons.Material.Filled.Task
+    };
+
+    private string GetTypeLabel(ClinicalTaskType type) => type switch
+    {
+        ClinicalTaskType.SignNote => "Sign Note",
+        ClinicalTaskType.ReviewResults => "Review Results",
+        ClinicalTaskType.MedicationRenewal => "Medication Renewal",
+        ClinicalTaskType.Referral => "Referral",
+        ClinicalTaskType.PhoneCall => "Phone Call",
+        ClinicalTaskType.Other => "Other",
+        _ => type.ToString()
+    };
+}

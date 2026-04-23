@@ -1,0 +1,167 @@
+@using Zebrahoof_EMR.Models
+@inject IJSRuntime JS
+
+<div class="sticky-note @GetColorClass()" 
+     id="@_elementId"
+     style="left: @(Note.X)px; top: @(Note.Y)px; position: fixed; z-index: 10000; pointer-events: auto; width: 220px; min-height: 180px; border-radius: 4px; box-shadow: 3px 3px 10px rgba(0,0,0,0.2); display: flex; flex-direction: column; cursor: move; user-select: none;">
+    
+    <div class="sticky-header" 
+         @onmousedown="OnHeaderMouseDown"
+         @onmousedown:stopPropagation="true">
+        <span class="note-number">Note #@Note.NoteNumber</span>
+        <div class="sticky-controls">
+            @foreach (var color in Enum.GetValues<NoteColor>())
+            {
+                <button class="color-dot @color.ToString().ToLower() @(Note.Color == color ? "selected" : "")" 
+                        @onclick="() => ChangeColor(color)"
+                        @onclick:stopPropagation="true"
+                        title="@color"></button>
+            }
+        </div>
+        <button class="sticky-close" @onclick="Hide" @onclick:stopPropagation="true" title="Close note">
+            <MudIcon Icon="@Icons.Material.Filled.Close" Size="Size.Small" />
+        </button>
+    </div>
+    
+    <textarea class="sticky-content" 
+              @bind="Content" 
+              @bind:event="oninput"
+              @onblur="SaveContent"
+              placeholder="Write your note..."
+              @onmousedown:stopPropagation="true"></textarea>
+    
+    <div class="sticky-footer">
+        <div class="reminder-section">
+            @if (Note.ReminderDate.HasValue)
+            {
+                <MudChip T="string" Size="Size.Small" Color="@GetReminderChipColor()" OnClose="ClearReminder" Class="reminder-chip">
+                    <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" Size="Size.Small" Class="mr-1" />
+                    @Note.ReminderDate.Value.ToString("MMM d, yyyy")
+                </MudChip>
+            }
+            else
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Schedule" 
+                               Size="Size.Small" 
+                               title="Set reminder"
+                               OnClick="OpenDatePicker"
+                               Class="reminder-btn" />
+            }
+        </div>
+        <span class="sticky-date">@Note.CreatedAt.ToString("MMM d")</span>
+    </div>
+    
+    @if (_showDatePicker)
+    {
+        <div class="date-picker-overlay" @onclick="CloseDatePicker" @onclick:stopPropagation="true">
+            <div class="date-picker-popup" @onclick:stopPropagation="true">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Note to Self - Set Reminder</MudText>
+                <MudDatePicker @bind-Date="_selectedDate" 
+                               MinDate="DateTime.Today.AddDays(1)" 
+                               Placeholder="Select future date"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense" />
+                <div class="date-picker-actions">
+                    <MudButton Size="Size.Small" OnClick="CloseDatePicker">Cancel</MudButton>
+                    <MudButton Size="Size.Small" Color="Color.Primary" OnClick="SetReminder" Disabled="@(_selectedDate == null)">Set</MudButton>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public required StickyNote Note { get; set; }
+    [Parameter] public EventCallback<Guid> OnHide { get; set; }
+    [Parameter] public EventCallback<(Guid Id, string Content)> OnContentChanged { get; set; }
+    [Parameter] public EventCallback<(Guid Id, double X, double Y)> OnPositionChanged { get; set; }
+    [Parameter] public EventCallback<(Guid Id, DateTime? Date)> OnReminderChanged { get; set; }
+    [Parameter] public EventCallback<(Guid Id, NoteColor Color)> OnColorChanged { get; set; }
+
+    private string Content { get; set; } = string.Empty;
+    private bool _showDatePicker = false;
+    private DateTime? _selectedDate;
+    private string _elementId = $"sticky-{Guid.NewGuid():N}";
+    private DotNetObjectReference<StickyNoteCard>? _objRef;
+
+    protected override void OnInitialized()
+    {
+        Content = Note.Content;
+        _objRef = DotNetObjectReference.Create(this);
+    }
+
+    private string GetColorClass() => $"sticky-{Note.Color.ToString().ToLower()}";
+
+    private async Task OnHeaderMouseDown(MouseEventArgs e)
+    {
+        if (_objRef != null)
+        {
+            await JS.InvokeVoidAsync("stickyNoteDrag.startDrag", _elementId, _objRef, e.ClientX, e.ClientY);
+        }
+    }
+
+    [JSInvokable]
+    public async Task UpdatePosition(double x, double y)
+    {
+        await OnPositionChanged.InvokeAsync((Note.Id, x, y));
+    }
+
+    private async Task SaveContent()
+    {
+        if (Content != Note.Content)
+        {
+            await OnContentChanged.InvokeAsync((Note.Id, Content));
+        }
+    }
+
+    private async Task Hide()
+    {
+        // Save content before hiding
+        if (Content != Note.Content)
+        {
+            await OnContentChanged.InvokeAsync((Note.Id, Content));
+        }
+        await OnHide.InvokeAsync(Note.Id);
+    }
+
+    private async Task ChangeColor(NoteColor color)
+    {
+        await OnColorChanged.InvokeAsync((Note.Id, color));
+    }
+
+    private void OpenDatePicker()
+    {
+        _selectedDate = DateTime.Today.AddDays(1);
+        _showDatePicker = true;
+    }
+
+    private void CloseDatePicker()
+    {
+        _showDatePicker = false;
+    }
+
+    private async Task SetReminder()
+    {
+        if (_selectedDate.HasValue)
+        {
+            await OnReminderChanged.InvokeAsync((Note.Id, _selectedDate));
+            _showDatePicker = false;
+        }
+    }
+
+    private async Task ClearReminder()
+    {
+        await OnReminderChanged.InvokeAsync((Note.Id, null));
+    }
+
+    private Color GetReminderChipColor()
+    {
+        if (!Note.ReminderDate.HasValue) return Color.Default;
+        return Note.ReminderDate.Value <= DateTime.Today ? Color.Warning : Color.Info;
+    }
+
+    public void Dispose()
+    {
+        _objRef?.Dispose();
+    }
+}

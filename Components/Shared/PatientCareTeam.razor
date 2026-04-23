@@ -1,0 +1,98 @@
+@inject MockClinicalDataService ClinicalDataService
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Care Team</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd">
+                Add Provider
+            </MudButton>
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (_careTeam.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">No care team members on file</MudAlert>
+        }
+        else
+        {
+            <MudGrid>
+                @foreach (var member in _careTeam)
+                {
+                    <MudItem xs="12" md="6" lg="4">
+                        <MudCard Elevation="1" Class="h-100">
+                            <MudCardContent>
+                                <MudStack Row="true" AlignItems="AlignItems.Start" Spacing="3">
+                                    <MudAvatar Size="Size.Large" Color="@(member.IsPrimary ? Color.Primary : Color.Default)">
+                                        @GetInitials(member.Name)
+                                    </MudAvatar>
+                                    <div style="flex: 1;">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                            <MudText Typo="Typo.subtitle1">@member.Name</MudText>
+                                            @if (member.IsPrimary)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Primary">Primary</MudChip>
+                                            }
+                                        </MudStack>
+                                        <MudText Typo="Typo.body2" Color="Color.Primary">@member.Role</MudText>
+                                        @if (!string.IsNullOrEmpty(member.Specialty))
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@member.Specialty</MudText>
+                                        }
+                                        @if (!string.IsNullOrEmpty(member.Organization))
+                                        {
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@member.Organization</MudText>
+                                        }
+                                        <MudDivider Class="my-2" />
+                                        <MudStack Spacing="1">
+                                            @if (!string.IsNullOrEmpty(member.Phone))
+                                            {
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Class="mud-text-secondary" />
+                                                    <MudText Typo="Typo.caption">@member.Phone</MudText>
+                                                </MudStack>
+                                            }
+                                            @if (!string.IsNullOrEmpty(member.Fax))
+                                            {
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Fax" Size="Size.Small" Class="mud-text-secondary" />
+                                                    <MudText Typo="Typo.caption">@member.Fax</MudText>
+                                                </MudStack>
+                                            }
+                                        </MudStack>
+                                    </div>
+                                </MudStack>
+                            </MudCardContent>
+                            <MudCardActions>
+                                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Send">Message</MudButton>
+                                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Edit">Edit</MudButton>
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    private List<CareTeamMember> _careTeam = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _careTeam = await ClinicalDataService.GetCareTeamByPatientAsync(PatientId);
+    }
+
+    private string GetInitials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[^1][0]}";
+        return parts.Length > 0 ? parts[0][0].ToString() : "?";
+    }
+}

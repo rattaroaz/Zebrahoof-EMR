@@ -1,0 +1,164 @@
+@using Zebrahoof_EMR.Models
+
+<MudExpansionPanels MultiExpansion="true">
+    @foreach (var examSection in Sections)
+    {
+        <MudExpansionPanel Text="@examSection.Name"
+                           Style="background-color: var(--mud-palette-background);">
+            <MudStack Spacing="2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudSwitch T="bool"
+                               Value="@examSection.IsNormal"
+                               ValueChanged="@((bool value) => ToggleSectionNormalAsync(examSection, value))"
+                               ReadOnly="@IsReadOnly"
+                               Color="Color.Success"
+                               Label="@(examSection.IsNormal ? "Normal" : "Abnormal")" />
+                    @if (!examSection.IsNormal)
+                    {
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Small" Variant="Variant.Filled">
+                            Abnormal
+                        </MudChip>
+                    }
+                </MudStack>
+
+                @if (!examSection.IsNormal)
+                {
+                    <MudDivider />
+                    @foreach (var finding in examSection.Findings)
+                    {
+                        <MudPaper Class="pa-2" Elevation="0">
+                            <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudCheckBox T="bool"
+                                             Value="@(!finding.IsNormal)"
+                                             ValueChanged="@((bool value) => ToggleFindingAsync(finding, !value))"
+                                             ReadOnly="@IsReadOnly"
+                                             Color="Color.Warning"
+                                             Label="@finding.Label" />
+                                @if (!finding.IsNormal)
+                                {
+                                    <MudTextField T="string"
+                                                  Value="@finding.Details"
+                                                  ValueChanged="@((string? value) => UpdateFindingDetailsAsync(finding, value))"
+                                                  ReadOnly="@IsReadOnly"
+                                                  Placeholder="Details..."
+                                                  Variant="Variant.Outlined"
+                                                  Margin="Margin.Dense"
+                                                  Class="flex-grow-1" />
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+                }
+
+                <MudTextField T="string"
+                              Value="@examSection.Notes"
+                              ValueChanged="@((string? value) => UpdateSectionNotesAsync(examSection, value))"
+                              ReadOnly="@IsReadOnly"
+                              Placeholder="Additional notes..."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Lines="2" />
+            </MudStack>
+        </MudExpansionPanel>
+    }
+</MudExpansionPanels>
+
+@code {
+    [Parameter]
+    public List<PhysicalExamSection> Sections { get; set; } = new();
+
+    [Parameter]
+    public bool IsReadOnly { get; set; }
+
+    [Parameter]
+    public EventCallback<List<PhysicalExamSection>> SectionsChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<string> SummaryChanged { get; set; }
+
+    private async Task ToggleSectionNormalAsync(PhysicalExamSection section, bool isNormal)
+    {
+        section.IsNormal = isNormal;
+        if (isNormal)
+        {
+            foreach (var finding in section.Findings)
+            {
+                finding.IsNormal = true;
+                finding.Details = null;
+            }
+        }
+        await NotifyChangesAsync();
+    }
+
+    private async Task ToggleFindingAsync(PhysicalExamFinding finding, bool isNormal)
+    {
+        finding.IsNormal = isNormal;
+        if (isNormal)
+        {
+            finding.Details = null;
+        }
+        await NotifyChangesAsync();
+    }
+
+    private async Task UpdateFindingDetailsAsync(PhysicalExamFinding finding, string? value)
+    {
+        finding.Details = value;
+        await NotifyChangesAsync();
+    }
+
+    private async Task UpdateSectionNotesAsync(PhysicalExamSection section, string? value)
+    {
+        section.Notes = value;
+        await NotifyChangesAsync();
+    }
+
+    private async Task NotifyChangesAsync()
+    {
+        if (SectionsChanged.HasDelegate)
+        {
+            await SectionsChanged.InvokeAsync(Sections);
+        }
+
+        if (SummaryChanged.HasDelegate)
+        {
+            await SummaryChanged.InvokeAsync(BuildSummary());
+        }
+    }
+
+    private string BuildSummary()
+    {
+        var parts = new List<string>();
+
+        foreach (var section in Sections)
+        {
+            if (section.IsNormal)
+            {
+                parts.Add($"{section.Name}: Normal");
+            }
+            else
+            {
+                var abnormalFindings = section.Findings
+                    .Where(f => !f.IsNormal)
+                    .Select(f => string.IsNullOrWhiteSpace(f.Details)
+                        ? f.Label
+                        : $"{f.Label} - {f.Details}")
+                    .ToList();
+
+                if (abnormalFindings.Count > 0)
+                {
+                    parts.Add($"{section.Name}: {string.Join(", ", abnormalFindings)}");
+                }
+                else if (!string.IsNullOrWhiteSpace(section.Notes))
+                {
+                    parts.Add($"{section.Name}: {section.Notes}");
+                }
+                else
+                {
+                    parts.Add($"{section.Name}: Abnormal");
+                }
+            }
+        }
+
+        return string.Join("\n", parts);
+    }
+}

@@ -1,0 +1,195 @@
+@page "/admin/settings"
+@using Zebrahoof_EMR.Models
+@inject MockClinicalDataService ClinicalDataService
+@inject ISnackbar Snackbar
+
+<PageTitle>System Settings - Zebrahoof EMR</PageTitle>
+
+<MudBreadcrumbs Items="_breadcrumbs" Class="mb-4" />
+
+<MudText Typo="Typo.h5" Class="mb-4">Global Settings</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Business" Color="Color.Primary" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Organization</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudTextField T="string" @bind-Value="_settings.OrganizationName" Label="Organization Name"
+                                  Variant="Variant.Outlined" />
+                    <MudTextField T="string" @bind-Value="_settings.OrganizationLogo" Label="Logo URL"
+                                  Variant="Variant.Outlined" Placeholder="https://..." />
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Warning" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Date & Time</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudSelect T="string" @bind-Value="_settings.DateFormat" Label="Date Format" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("MM/dd/yyyy")">MM/dd/yyyy (12/28/2025)</MudSelectItem>
+                        <MudSelectItem Value="@("dd/MM/yyyy")">dd/MM/yyyy (28/12/2025)</MudSelectItem>
+                        <MudSelectItem Value="@("yyyy-MM-dd")">yyyy-MM-dd (2025-12-28)</MudSelectItem>
+                    </MudSelect>
+                    <MudSelect T="string" @bind-Value="_settings.TimeFormat" Label="Time Format" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("h:mm tt")">12-hour (4:30 PM)</MudSelectItem>
+                        <MudSelectItem Value="@("HH:mm")">24-hour (16:30)</MudSelectItem>
+                    </MudSelect>
+                    <MudSelect T="string" @bind-Value="_settings.DefaultTimezone" Label="Timezone" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("America/New_York")">Eastern Time (ET)</MudSelectItem>
+                        <MudSelectItem Value="@("America/Chicago")">Central Time (CT)</MudSelectItem>
+                        <MudSelectItem Value="@("America/Denver")">Mountain Time (MT)</MudSelectItem>
+                        <MudSelectItem Value="@("America/Los_Angeles")">Pacific Time (PT)</MudSelectItem>
+                    </MudSelect>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Security" Color="Color.Error" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Security</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudNumericField T="int" @bind-Value="_settings.SessionTimeoutMinutes" Label="Session Timeout (minutes)"
+                                     Variant="Variant.Outlined" Min="5" Max="480" />
+                    <MudSwitch T="bool" @bind-Value="_settings.RequireTwoFactor" Label="Require Two-Factor Authentication"
+                               Color="Color.Primary" />
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Dashboard" Color="Color.Info" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">User Experience</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudSelect T="string" @bind-Value="_settings.DefaultLandingPage" Label="Default Landing Page" Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("/dashboard")">Dashboard</MudSelectItem>
+                        <MudSelectItem Value="@("/schedule")">Schedule</MudSelectItem>
+                        <MudSelectItem Value="@("/inbox")">Inbox</MudSelectItem>
+                        <MudSelectItem Value="@("/patients")">Patient Search</MudSelectItem>
+                    </MudSelect>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Extension" Color="Color.Success" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Features</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <div>
+                                    <MudText Typo="Typo.subtitle2">Patient Portal</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Allow patients to access their health information online</MudText>
+                                </div>
+                                <MudSwitch T="bool" @bind-Value="_settings.EnablePatientPortal" Color="Color.Primary" />
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <div>
+                                    <MudText Typo="Typo.subtitle2">E-Prescribing</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Send prescriptions electronically to pharmacies</MudText>
+                                </div>
+                                <MudSwitch T="bool" @bind-Value="_settings.EnableElectronicPrescribing" Color="Color.Primary" />
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudPaper Class="pa-4" Elevation="0" Outlined="true">
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                <div>
+                                    <MudText Typo="Typo.subtitle2">Lab Integration</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Receive lab results electronically</MudText>
+                                </div>
+                                <MudSwitch T="bool" Value="true" Color="Color.Primary" Disabled="true" />
+                            </MudStack>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+<MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4">
+    <MudButton Variant="Variant.Outlined" OnClick="ResetSettings">Reset to Defaults</MudButton>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+               OnClick="SaveSettings">
+        Save Settings
+    </MudButton>
+</MudStack>
+
+@code {
+    private SystemSettings _settings = new();
+
+    private List<BreadcrumbItem> _breadcrumbs = new()
+    {
+        new("Admin", "/admin", icon: Icons.Material.Filled.AdminPanelSettings),
+        new("Settings", "/admin/settings", disabled: true)
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await ClinicalDataService.GetSystemSettingsAsync();
+    }
+
+    private async Task SaveSettings()
+    {
+        await ClinicalDataService.UpdateSystemSettingsAsync(_settings);
+        Snackbar.Add("Settings saved successfully", Severity.Success);
+    }
+
+    private async Task ResetSettings()
+    {
+        _settings = new SystemSettings();
+        await ClinicalDataService.UpdateSystemSettingsAsync(_settings);
+        Snackbar.Add("Settings reset to defaults", Severity.Info);
+    }
+}

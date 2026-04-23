@@ -1,0 +1,310 @@
+@inject MockClinicalDataService ClinicalDataService
+@inject MockPatientService PatientService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+@if (_isLoading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else if (_encounter == null)
+{
+    <MudAlert Severity="Severity.Error">Encounter not found.</MudAlert>
+}
+else
+{
+    @* Encounter Banner *@
+    <EncounterBanner Encounter="_encounter" 
+                     OnSign="@SignNote" 
+                     OnSaveDraft="@SaveDraft"
+                     OnAddendum="@AddAddendum" />
+
+    @* Multi-Panel Layout *@
+    <MudGrid Spacing="3">
+        @* Left Panel - Patient Context *@
+        <MudItem xs="12" lg="3">
+            <MudStack Spacing="3">
+                @* Patient Info Card *@
+                <MudCard Elevation="2">
+                    <MudCardHeader Class="pb-0">
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle2">Patient</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_patient != null)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudAvatar Color="Color.Primary">@_patient.FirstName[0]@_patient.LastName[0]</MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.subtitle1">@_patient.FullName</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @_patient.Age y/o @_patient.Sex • MRN: @_patient.MRN
+                                    </MudText>
+                                </div>
+                            </MudStack>
+                        }
+                    </MudCardContent>
+                </MudCard>
+
+                @* Active Problems *@
+                <MudCard Elevation="2">
+                    <MudCardHeader Class="pb-0">
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle2">Active Problems</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent Class="pa-0">
+                        <MudList T="Problem" Dense="true">
+                            @foreach (var problem in _problems.Take(5))
+                            {
+                                <MudListItem Dense="true">
+                                    <MudText Typo="Typo.body2">@problem.Name</MudText>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    </MudCardContent>
+                </MudCard>
+
+                @* Medications *@
+                <MudCard Elevation="2">
+                    <MudCardHeader Class="pb-0">
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle2">Current Medications</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent Class="pa-0">
+                        <MudList T="Medication" Dense="true">
+                            @foreach (var med in _medications.Take(5))
+                            {
+                                <MudListItem Dense="true">
+                                    <MudText Typo="Typo.body2">@med.Name @med.Dose</MudText>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    </MudCardContent>
+                </MudCard>
+
+                @* Allergies *@
+                <MudCard Elevation="2">
+                    <MudCardHeader Class="pb-0">
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle2">Allergies</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_allergies.Count == 0)
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small">NKA</MudChip>
+                        }
+                        else
+                        {
+                            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                @foreach (var allergy in _allergies)
+                                {
+                                    <MudChip T="string" Color="Color.Error" Size="Size.Small">@allergy.Allergen</MudChip>
+                                }
+                            </MudStack>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudStack>
+        </MudItem>
+
+        @* Center Panel - Note Editor *@
+        <MudItem xs="12" lg="6">
+            <NoteEditor Note="_note" PatientId="@_encounter.PatientId" IsReadOnly="@(_encounter.Status != EncounterStatus.InProgress)" />
+        </MudItem>
+
+        @* Right Panel - Orders & Reference *@
+        <MudItem xs="12" lg="3">
+            <MudStack Spacing="3">
+                @* Quick Orders *@
+                <MudCard Elevation="2">
+                    <MudCardHeader Class="pb-0">
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle2">Quick Orders</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudStack Spacing="2">
+                            <MudButton Variant="Variant.Outlined" FullWidth="true" StartIcon="@Icons.Material.Filled.Medication" Size="Size.Small">
+                                Order Medication
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined" FullWidth="true" StartIcon="@Icons.Material.Filled.Science" Size="Size.Small">
+                                Order Labs
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined" FullWidth="true" StartIcon="@Icons.Material.Filled.Image" Size="Size.Small">
+                                Order Imaging
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined" FullWidth="true" StartIcon="@Icons.Material.Filled.Send" Size="Size.Small">
+                                Order Referral
+                            </MudButton>
+                        </MudStack>
+                    </MudCardContent>
+                </MudCard>
+
+                @* Pending Orders *@
+                <MudCard Elevation="2">
+                    <MudCardHeader Class="pb-0">
+                        <CardHeaderContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudText Typo="Typo.subtitle2">Pending Orders</MudText>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary">@_pendingOrders.Count</MudChip>
+                            </MudStack>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent Class="pa-0">
+                        @if (_pendingOrders.Count == 0)
+                        {
+                            <MudText Class="pa-4 mud-text-secondary" Typo="Typo.body2">No pending orders</MudText>
+                        }
+                        else
+                        {
+                            <MudList T="string" Dense="true">
+                                @foreach (var order in _pendingOrders)
+                                {
+                                    <MudListItem Dense="true">
+                                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                            <MudText Typo="Typo.body2">@order</MudText>
+                                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" />
+                                        </MudStack>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        }
+                    </MudCardContent>
+                </MudCard>
+
+                @* Latest Vitals *@
+                <MudCard Elevation="2">
+                    <MudCardHeader Class="pb-0">
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle2">Latest Vitals</MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" />
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_latestVitals != null)
+                        {
+                            <MudGrid Spacing="1">
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">BP</MudText>
+                                    <MudText Typo="Typo.body2">@_latestVitals.SystolicBP/@_latestVitals.DiastolicBP</MudText>
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">HR</MudText>
+                                    <MudText Typo="Typo.body2">@_latestVitals.HeartRate bpm</MudText>
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Temp</MudText>
+                                    <MudText Typo="Typo.body2">@_latestVitals.Temperature °F</MudText>
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">SpO2</MudText>
+                                    <MudText Typo="Typo.body2">@_latestVitals.OxygenSaturation%</MudText>
+                                </MudItem>
+                            </MudGrid>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">No vitals recorded</MudText>
+                        }
+                    </MudCardContent>
+                </MudCard>
+
+                @* Recent Notes *@
+                <MudCard Elevation="2">
+                    <MudCardHeader Class="pb-0">
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.subtitle2">Recent Notes</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent Class="pa-0">
+                        <MudList T="Encounter" Dense="true">
+                            @foreach (var enc in _recentEncounters.Take(3))
+                            {
+                                <MudListItem Dense="true" OnClick="@(() => Navigation.NavigateTo($"/encounter/{enc.Id}"))">
+                                    <div>
+                                        <MudText Typo="Typo.body2">@enc.VisitType</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@enc.DateTime.ToString("MM/dd/yyyy")</MudText>
+                                    </div>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    </MudCardContent>
+                </MudCard>
+            </MudStack>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public int EncounterId { get; set; }
+
+    private bool _isLoading = true;
+    private Encounter? _encounter;
+    private Patient? _patient;
+    private ClinicalNote _note = new();
+    private List<Problem> _problems = new();
+    private List<Medication> _medications = new();
+    private List<Allergy> _allergies = new();
+    private VitalSigns? _latestVitals;
+    private List<Encounter> _recentEncounters = new();
+    private List<string> _pendingOrders = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _isLoading = true;
+
+        _encounter = await ClinicalDataService.GetEncounterByIdAsync(EncounterId);
+        
+        if (_encounter != null)
+        {
+            _patient = await PatientService.GetPatientByIdAsync(_encounter.PatientId);
+            _problems = await ClinicalDataService.GetActiveProblemsByPatientAsync(_encounter.PatientId);
+            _medications = await ClinicalDataService.GetActiveMedicationsByPatientAsync(_encounter.PatientId);
+            _allergies = await ClinicalDataService.GetActiveAllergiesByPatientAsync(_encounter.PatientId);
+            _latestVitals = await ClinicalDataService.GetLatestVitalsByPatientAsync(_encounter.PatientId);
+            _recentEncounters = await ClinicalDataService.GetEncountersByPatientAsync(_encounter.PatientId);
+
+            // Load existing note or create new one
+            var notes = await ClinicalDataService.GetNotesByEncounterAsync(EncounterId);
+            _note = notes.FirstOrDefault() ?? new ClinicalNote
+            {
+                EncounterId = EncounterId,
+                PatientId = _encounter.PatientId,
+                AuthorName = _encounter.Provider,
+                CreatedAt = DateTime.Now,
+                Status = NoteStatus.InProgress,
+                ChiefComplaint = _encounter.ChiefComplaint
+            };
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task SignNote()
+    {
+        _note.Status = NoteStatus.Signed;
+        _note.SignedAt = DateTime.Now;
+        _encounter!.Status = EncounterStatus.Signed;
+        Snackbar.Add("Note signed successfully", Severity.Success);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SaveDraft()
+    {
+        Snackbar.Add("Draft saved", Severity.Info);
+        await Task.CompletedTask;
+    }
+
+    private async Task AddAddendum()
+    {
+        Snackbar.Add("Addendum mode - not yet implemented", Severity.Info);
+        await Task.CompletedTask;
+    }
+}

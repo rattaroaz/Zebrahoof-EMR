@@ -1,0 +1,286 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  DOTNET_VERSION: '10.0'
+  NODE_VERSION: '20'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zebrahoof_emr_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        cache: true
+        cache-dependency-path: '**/packages.lock.json'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Install .NET dependencies
+      run: dotnet restore
+
+    - name: Install Node dependencies
+      run: npm ci
+      working-directory: .
+
+    - name: Build application
+      run: dotnet build --no-restore --configuration Release
+
+    - name: Run unit tests with coverage
+      run: |
+        dotnet test tests/Zebrahoof.EMR.UnitTests/Zebrahoof.EMR.UnitTests.csproj \
+          --no-build --configuration Release \
+          --logger:"junit;LogFilePath=../test-results/unit-tests.xml" \
+          --results-directory ./test-results \
+          --collect:"XPlat Code Coverage"
+
+    - name: Run integration tests
+      run: |
+        dotnet test tests/Zebrahoof.EMR.IntegrationTests/Zebrahoof.EMR.IntegrationTests.csproj \
+          --no-build --configuration Release \
+          --logger:"junit;LogFilePath=../test-results/integration-tests.xml" \
+          --results-directory ./test-results \
+          --collect:"XPlat Code Coverage"
+
+    - name: Install Playwright browsers
+      run: npx playwright install --with-deps
+      working-directory: tests/Zebrahoof.EMR.UiSmokeTests
+
+    - name: Start application for UI tests
+      run: |
+        dotnet run --configuration Release --no-build &
+        sleep 30
+      env:
+        ASPNETCORE_ENVIRONMENT: Testing
+        ConnectionStrings__DefaultConnection: "Host=localhost;Database=zebrahoof_emr_test;Username=postgres;Password=postgres"
+        UI_SMOKE_BASEURL: "http://localhost:5000"
+        PLAYWRIGHT_USERNAME: "testuser"
+        PLAYWRIGHT_PASSWORD: "TestPassword123!"
+
+    - name: Run UI smoke tests
+      run: |
+        dotnet test tests/Zebrahoof.EMR.UiSmokeTests/Zebrahoof.EMR.UiSmokeTests.csproj \
+          --no-build --configuration Release \
+          --logger:"junit;LogFilePath=../test-results/ui-tests.xml" \
+          --results-directory ./test-results
+      env:
+        UI_SMOKE_BASEURL: "http://localhost:5000"
+        PLAYWRIGHT_USERNAME: "testuser"
+        PLAYWRIGHT_PASSWORD: "TestPassword123!"
+        PLAYWRIGHT_ARTIFACTS_DIR: "./playwright-artifacts"
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: test-results/
+        retention-days: 30
+
+    - name: Upload Playwright artifacts
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: playwright-artifacts
+        path: tests/Zebrahoof.EMR.UiSmokeTests/playwright-artifacts/
+        retention-days: 7
+
+    - name: Install global tools
+      run: |
+        dotnet tool install --global dotnet-coverage
+        dotnet tool install --global dotnet-reportgenerator-globaltool
+
+    - name: Merge coverage reports
+      run: |
+        dotnet coverage merge \
+          tests/Zebrahoof.EMR.UnitTests/TestResults/*/coverage.cobertura.xml \
+          tests/Zebrahoof.EMR.IntegrationTests/TestResults/*/coverage.cobertura.xml \
+          --output-file coverage/merged.coverage.xml \
+          --output-format cobertura
+
+    - name: Generate coverage report
+      run: |
+        reportgenerator \
+          -reports:coverage/merged.coverage.xml \
+          -targetdir:coverage/report \
+          -reporttypes:Html;HtmlSummary;Cobertura
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage/report/
+        retention-days: 30
+
+    - name: Publish coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: coverage/merged.coverage.xml
+        flags: unittests
+        name: zebrahoof-emr-coverage
+
+    - name: Check coverage thresholds
+      run: |
+        # Extract coverage values from XML
+        COVERAGE_LINE=$(grep 'line-rate=' coverage/merged.coverage.xml | sed 's/.*line-rate="\([0-9.]*\)".*/\1/')
+        COVERAGE_BRANCH=$(grep 'branch-rate=' coverage/merged.coverage.xml | sed 's/.*branch-rate="\([0-9.]*\)".*/\1/')
+        
+        # Convert to percentage
+        LINE_PERCENTAGE=$(echo "$COVERAGE_LINE * 100" | bc -l)
+        BRANCH_PERCENTAGE=$(echo "$COVERAGE_BRANCH * 100" | bc -l)
+        
+        echo "Line coverage: $LINE_PERCENTAGE%"
+        echo "Branch coverage: $BRANCH_PERCENTAGE%"
+        
+        # Check thresholds (75% line, 60% branch)
+        if (( $(echo "$LINE_PERCENTAGE < 75" | bc -l) )); then
+          echo "❌ Line coverage $LINE_PERCENTAGE% is below threshold 75%"
+          exit 1
+        fi
+        
+        if (( $(echo "$BRANCH_PERCENTAGE < 60" | bc -l) )); then
+          echo "❌ Branch coverage $BRANCH_PERCENTAGE% is below threshold 60%"
+          exit 1
+        fi
+        
+        echo "✅ Coverage thresholds met!"
+
+    - name: Create coverage badge
+      uses: schneegans/dynamic-badges-action@v1.7.0
+      if: github.ref == 'refs/heads/main'
+      with:
+        auth: ${{ secrets.GITHUB_TOKEN }}
+        gist-id: zebrahoof-emr-coverage
+        label: coverage
+        message: ${{ steps.coverage.outputs.percentage }}%
+        color: ${{ steps.coverage.outputs.color }}
+
+    - name: Comment PR with results
+      uses: actions/github-script@v7
+      if: github.event_name == 'pull_request'
+      with:
+        script: |
+          const fs = require('fs');
+          const path = './test-results';
+          
+          let comment = '## 🧪 Test Results\n\n';
+          
+          // Add test results summary
+          if (fs.existsSync(path)) {
+            const files = fs.readdirSync(path);
+            files.forEach(file => {
+              if (file.endsWith('.xml')) {
+                const content = fs.readFileSync(`${path}/${file}`, 'utf8');
+                const matches = content.match(/tests="(\d+)" failures="(\d+)" skipped="(\d+)"/);
+                if (matches) {
+                  const [_, tests, failures, skipped] = matches;
+                  const passed = tests - failures - skipped;
+                  comment += `- **${file.replace('.xml', '')}**: ${passed}/${tests} passed (${failures} failed, ${skipped} skipped)\n`;
+                }
+              }
+            });
+          }
+          
+          // Add coverage info
+          if (fs.existsSync('./coverage/merged.coverage.xml')) {
+            const coverage = fs.readFileSync('./coverage/merged.coverage.xml', 'utf8');
+            const lineRate = coverage.match(/line-rate="([0-9.]+)"/)?.[1];
+            const branchRate = coverage.match(/branch-rate="([0-9.]+)"/)?.[1];
+            
+            if (lineRate && branchRate) {
+              comment += `\n## 📊 Coverage\n`;
+              comment += `- **Line**: ${(parseFloat(lineRate) * 100).toFixed(1)}%\n`;
+              comment += `- **Branch**: ${(parseFloat(branchRate) * 100).toFixed(1)}%\n`;
+            }
+          }
+          
+          // Create or update comment
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run security scan
+      run: |
+        dotnet tool install --global dotnet-dev-certs
+        dotnet dev-certs https
+        dotnet list package --vulnerable --outdated
+
+    - name: Run code analysis
+      uses: github/super-linter@v5
+      env:
+        DEFAULT_BRANCH: main
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        VALIDATE_CSHARP: true
+        VALIDATE_JAVASCRIPT_ES: true
+        VALIDATE_JSON: true
+        VALIDATE_YAML: true
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan]
+    if: github.ref == 'refs/heads/develop'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to staging
+      run: |
+        echo "🚀 Deploying to staging environment..."
+        # Add actual deployment commands here
+        echo "✅ Staging deployment completed"
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [build-and-test, security-scan]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to production
+      run: |
+        echo "🚀 Deploying to production environment..."
+        # Add actual deployment commands here
+        echo "✅ Production deployment completed"

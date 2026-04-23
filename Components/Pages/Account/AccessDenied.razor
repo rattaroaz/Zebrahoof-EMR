@@ -1,0 +1,19 @@
+@page "/access-denied"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+
+<PageTitle>Access Denied - Zebrahoof EMR</PageTitle>
+
+<MudCard Elevation="4" Class="pa-4" Style="width: 100%; max-width: 400px;">
+    <MudCardContent Class="d-flex flex-column align-center">
+        <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Large" Color="Color.Error" Class="mb-4" />
+        <MudText Typo="Typo.h5" Class="mb-2">Access Denied</MudText>
+        <MudText Typo="Typo.body2" Class="mud-text-secondary text-center mb-4">
+            You don't have permission to access this resource. 
+            Please contact your administrator if you believe this is an error.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/">
+            Go to Dashboard
+        </MudButton>
+    </MudCardContent>
+</MudCard>

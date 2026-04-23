@@ -1,0 +1,102 @@
+@using Zebrahoof_EMR.Models
+
+<MudExpansionPanels MultiExpansion="true">
+    @foreach (var rosSection in Sections)
+    {
+        <MudExpansionPanel Text="@rosSection.Name" Disabled="IsReadOnly"
+                           Style="background-color: var(--mud-palette-background);">
+            <MudStack Spacing="1">
+                @foreach (var rosItem in rosSection.Items)
+                {
+                    <MudPaper Class="pa-2 d-flex align-center justify-space-between" Elevation="0">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="flex-grow-1">
+                            <MudCheckBox T="bool"
+                                         Value="@rosItem.IsPositive"
+                                         ValueChanged="@((bool value) => ToggleItemAsync(rosItem, value))"
+                                         ReadOnly="@IsReadOnly"
+                                         Color="Color.Primary"
+                                         Label="@rosItem.Label" />
+                            @if (rosItem.IsPositive)
+                            {
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small" Variant="Variant.Outlined">
+                                    Positive
+                                </MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Color="Color.Success" Size="Size.Small" Variant="Variant.Outlined">
+                                    Negative
+                                </MudChip>
+                            }
+                        </MudStack>
+                        <MudTextField T="string"
+                                      Value="@rosItem.Notes"
+                                      Disabled="IsReadOnly"
+                                      Placeholder="Notes (optional)"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Edit"
+                                      Class="ml-2"
+                                      Immediate="true"
+                                      ValueChanged="@(async value => await UpdateNotesAsync(rosItem, value))" />
+                    </MudPaper>
+                }
+            </MudStack>
+        </MudExpansionPanel>
+    }
+</MudExpansionPanels>
+
+@code {
+    [Parameter]
+    public List<RosChecklistSection> Sections { get; set; } = new();
+
+    [Parameter]
+    public bool IsReadOnly { get; set; }
+
+    [Parameter]
+    public EventCallback<List<RosChecklistSection>> SectionsChanged { get; set; }
+
+    [Parameter]
+    public EventCallback<string> SummaryChanged { get; set; }
+
+    private async Task ToggleItemAsync(RosChecklistItem item, bool value)
+    {
+        item.IsPositive = value;
+        await NotifyChangesAsync();
+    }
+
+    private async Task UpdateNotesAsync(RosChecklistItem item, string? value)
+    {
+        item.Notes = value;
+        await NotifyChangesAsync();
+    }
+
+    private async Task NotifyChangesAsync()
+    {
+        if (SectionsChanged.HasDelegate)
+        {
+            await SectionsChanged.InvokeAsync(Sections);
+        }
+
+        if (SummaryChanged.HasDelegate)
+        {
+            await SummaryChanged.InvokeAsync(BuildSummary());
+        }
+    }
+
+    private string BuildSummary()
+    {
+        var positives = Sections
+            .SelectMany(section => section.Items
+                .Where(item => item.IsPositive)
+                .Select(item => string.IsNullOrWhiteSpace(item.Notes)
+                    ? $"{section.Name}: {item.Label}"
+                    : $"{section.Name}: {item.Label} ({item.Notes})"))
+            .ToList();
+
+        return positives.Count == 0
+            ? "ROS negative except as noted."
+            : string.Join("; ", positives);
+    }
+}

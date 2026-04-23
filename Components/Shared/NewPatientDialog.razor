@@ -1,0 +1,194 @@
+@inject MockPatientService PatientService
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">New Patient</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid Spacing="2">
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Basic Information</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_patient.FirstName" 
+                                  Label="First Name" 
+                                  Required="true" 
+                                  RequiredError="First name is required"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_patient.LastName" 
+                                  Label="Last Name" 
+                                  Required="true" 
+                                  RequiredError="Last name is required"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_dateOfBirth" 
+                                   Label="Date of Birth" 
+                                   Required="true"
+                                   RequiredError="Date of birth is required"
+                                   Variant="Variant.Outlined"
+                                   MaxDate="DateTime.Today"
+                                   DateFormat="MM/dd/yyyy"
+                                   Editable="true" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_patient.Sex" 
+                               Label="Sex" 
+                               Required="true"
+                               RequiredError="Sex is required"
+                               Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("Male")">Male</MudSelectItem>
+                        <MudSelectItem Value="@("Female")">Female</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Contact Information</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_patient.Phone" 
+                                  Label="Phone"
+                                  Variant="Variant.Outlined"
+                                  InputType="InputType.Telephone"
+                                  Mask="@(new PatternMask("000-000-0000"))"
+                                  Placeholder="123-456-7890" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField T="string"
+                                  @bind-Value="_patient.Email" 
+                                  Label="Email" 
+                                  Variant="Variant.Outlined"
+                                  InputType="InputType.Email"
+                                  Validation="@((string? value) => ValidateEmail(value))" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_patient.Address" 
+                                  Label="Address" 
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="5">
+                    <MudTextField @bind-Value="_patient.City" 
+                                  Label="City" 
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudSelect @bind-Value="_patient.State"
+                               Label="State"
+                               Variant="Variant.Outlined"
+                               Clearable="true">
+                        @foreach (var state in _states)
+                        {
+                            <MudSelectItem Value="@state">@state</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudTextField @bind-Value="_patient.ZipCode" 
+                                  Label="ZIP Code" 
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Provider & Insurance</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_patient.PrimaryProvider" 
+                               Label="Primary Provider" 
+                               Variant="Variant.Outlined">
+                        <MudSelectItem Value="@("Dr. Sarah Smith")">Dr. Sarah Smith</MudSelectItem>
+                        <MudSelectItem Value="@("Dr. Michael Chen")">Dr. Michael Chen</MudSelectItem>
+                        <MudSelectItem Value="@("Dr. Emily Wilson")">Dr. Emily Wilson</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_patient.InsuranceName" 
+                                  Label="Insurance Name" 
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_patient.InsuranceId" 
+                                  Label="Insurance ID" 
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="Submit" 
+                   Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   Disabled="@(!_isValid || _isSaving)">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Create Patient
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private MudForm _form = null!;
+    private Patient _patient = new();
+    private DateTime? _dateOfBirth;
+    private bool _isValid;
+    private bool _isSaving;
+    private readonly string[] _states =
+    [
+        "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
+        "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
+        "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
+        "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
+        "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"
+    ];
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_isValid) return;
+
+        _isSaving = true;
+        
+        if (_dateOfBirth.HasValue)
+        {
+            _patient.DateOfBirth = _dateOfBirth.Value;
+        }
+        
+        var newPatient = await PatientService.AddPatientAsync(_patient);
+        
+        _isSaving = false;
+        MudDialog.Close(DialogResult.Ok(newPatient));
+    }
+
+    private string? ValidateEmail(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        try
+        {
+            var addr = new System.Net.Mail.MailAddress(value);
+            return addr.Address.Equals(value, StringComparison.OrdinalIgnoreCase) ? null : "Enter a valid email";
+        }
+        catch
+        {
+            return "Enter a valid email";
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

@@ -1,0 +1,217 @@
+@using Zebrahoof_EMR.Models
+@inject MockClinicalDataService ClinicalDataService
+
+<MudCard Elevation="2" Class="h-100">
+    <MudCardHeader Class="pb-0">
+        <CardHeaderContent>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.EditNote" Color="Color.Primary" />
+                <MudText Typo="Typo.h6">Clinical Note</MudText>
+            </MudStack>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudMenu Icon="@Icons.Material.Filled.TextSnippet" Label="Smart Phrases" Variant="Variant.Outlined" Size="Size.Small">
+                @foreach (var phrase in _smartPhrases)
+                {
+                    <MudMenuItem OnClick="@(() => InsertSmartPhrase(phrase))">
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" Style="min-width: 250px;">
+                            <span>@phrase.Name</span>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@phrase.Abbreviation</MudText>
+                        </MudStack>
+                    </MudMenuItem>
+                }
+            </MudMenu>
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudStack Spacing="3">
+            @* Chief Complaint *@
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Chief Complaint</MudText>
+                <MudTextField @bind-Value="Note.ChiefComplaint"
+                              Variant="Variant.Outlined"
+                              Lines="2"
+                              Placeholder="Reason for visit..."
+                              Disabled="@IsReadOnly" />
+            </div>
+
+            @* History of Present Illness *@
+            <div>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-1">
+                    <MudText Typo="Typo.subtitle2">History of Present Illness (HPI)</MudText>
+                    <MudButtonGroup Variant="Variant.Text" Size="Size.Small">
+                        <MudIconButton Icon="@Icons.Material.Filled.FormatBold" Size="Size.Small" />
+                        <MudIconButton Icon="@Icons.Material.Filled.FormatItalic" Size="Size.Small" />
+                        <MudIconButton Icon="@Icons.Material.Filled.FormatListBulleted" Size="Size.Small" />
+                    </MudButtonGroup>
+                </MudStack>
+                <MudTextField @bind-Value="Note.HistoryOfPresentIllness"
+                              Variant="Variant.Outlined"
+                              Lines="5"
+                              Placeholder="Describe the patient's current illness..."
+                              Disabled="@IsReadOnly" />
+            </div>
+
+            @* Review of Systems *@
+            <div>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-1">
+                    <MudText Typo="Typo.subtitle2">Review of Systems (ROS)</MudText>
+                    <MudStack Row="true" Spacing="1">
+                        <MudTooltip Text="@(_useStructuredRos ? "Switch to text" : "Switch to checklist")">
+                            <MudToggleIconButton @bind-Toggled="_useStructuredRos"
+                                                 Icon="@Icons.Material.Filled.Checklist"
+                                                 ToggledIcon="@Icons.Material.Filled.TextFields"
+                                                 Size="Size.Small"
+                                                 Disabled="@IsReadOnly" />
+                        </MudTooltip>
+                        @if (!_useStructuredRos)
+                        {
+                            <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.CheckBox"
+                                       OnClick="@(() => InsertSmartPhraseByAbbr(".negros"))" Disabled="@IsReadOnly">
+                                All Negative
+                            </MudButton>
+                        }
+                    </MudStack>
+                </MudStack>
+                @if (_useStructuredRos)
+                {
+                    <RosChecklist Sections="_rosSections"
+                                  IsReadOnly="@IsReadOnly"
+                                  SummaryChanged="@OnRosSummaryChanged" />
+                }
+                else
+                {
+                    <MudTextField @bind-Value="Note.ReviewOfSystems"
+                                  Variant="Variant.Outlined"
+                                  Lines="4"
+                                  Placeholder="Constitutional, Eyes, ENT, Cardiovascular..."
+                                  Disabled="@IsReadOnly" />
+                }
+            </div>
+
+            @* Physical Exam *@
+            <div>
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-1">
+                    <MudText Typo="Typo.subtitle2">Physical Examination</MudText>
+                    <MudStack Row="true" Spacing="1">
+                        <MudTooltip Text="@(_useStructuredExam ? "Switch to text" : "Switch to checklist")">
+                            <MudToggleIconButton @bind-Toggled="_useStructuredExam"
+                                                 Icon="@Icons.Material.Filled.Checklist"
+                                                 ToggledIcon="@Icons.Material.Filled.TextFields"
+                                                 Size="Size.Small"
+                                                 Disabled="@IsReadOnly" />
+                        </MudTooltip>
+                        @if (!_useStructuredExam)
+                        {
+                            <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.CheckBox"
+                                       OnClick="@(() => InsertSmartPhraseByAbbr(".npe"))" Disabled="@IsReadOnly">
+                                Normal Exam
+                            </MudButton>
+                        }
+                    </MudStack>
+                </MudStack>
+                @if (_useStructuredExam)
+                {
+                    <PhysicalExamChecklist Sections="_physicalExamSections"
+                                           IsReadOnly="@IsReadOnly"
+                                           SummaryChanged="@OnExamSummaryChanged" />
+                }
+                else
+                {
+                    <MudTextField @bind-Value="Note.PhysicalExam"
+                                  Variant="Variant.Outlined"
+                                  Lines="5"
+                                  Placeholder="General, HEENT, Cardiovascular, Lungs..."
+                                  Disabled="@IsReadOnly" />
+                }
+            </div>
+
+            @* Assessment *@
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Assessment</MudText>
+                <MudTextField @bind-Value="Note.Assessment"
+                              Variant="Variant.Outlined"
+                              Lines="3"
+                              Placeholder="Diagnoses and clinical impressions..."
+                              Disabled="@IsReadOnly" />
+            </div>
+
+            @* Plan *@
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Plan</MudText>
+                <MudTextField @bind-Value="Note.Plan"
+                              Variant="Variant.Outlined"
+                              Lines="4"
+                              Placeholder="Treatment plan, follow-up, orders..."
+                              Disabled="@IsReadOnly" />
+            </div>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public ClinicalNote Note { get; set; } = null!;
+
+    [Parameter]
+    public int PatientId { get; set; }
+
+    [Parameter]
+    public bool IsReadOnly { get; set; }
+
+    [Parameter]
+    public EventCallback<ClinicalNote> NoteChanged { get; set; }
+
+    private List<SmartPhrase> _smartPhrases = new();
+    private List<RosChecklistSection> _rosSections = new();
+    private List<PhysicalExamSection> _physicalExamSections = new();
+    private bool _useStructuredRos;
+    private bool _useStructuredExam;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _smartPhrases = await ClinicalDataService.GetSmartPhrasesAsync();
+        _rosSections = await ClinicalDataService.GetRosChecklistByPatientAsync(PatientId);
+        _physicalExamSections = await ClinicalDataService.GetPhysicalExamByPatientAsync(PatientId);
+    }
+
+    private void OnRosSummaryChanged(string summary)
+    {
+        Note.ReviewOfSystems = summary;
+    }
+
+    private void OnExamSummaryChanged(string summary)
+    {
+        Note.PhysicalExam = summary;
+    }
+
+    private void InsertSmartPhrase(SmartPhrase phrase)
+    {
+        // In a real app, this would insert at cursor position
+        // For now, we'll append to the appropriate section based on category
+        switch (phrase.Category)
+        {
+            case "HPI":
+                Note.HistoryOfPresentIllness = (Note.HistoryOfPresentIllness ?? "") + phrase.Content;
+                break;
+            case "Review of Systems":
+                Note.ReviewOfSystems = (Note.ReviewOfSystems ?? "") + phrase.Content;
+                break;
+            case "Physical Exam":
+                Note.PhysicalExam = (Note.PhysicalExam ?? "") + phrase.Content;
+                break;
+            case "Plan":
+                Note.Plan = (Note.Plan ?? "") + phrase.Content;
+                break;
+        }
+    }
+
+    private void InsertSmartPhraseByAbbr(string abbreviation)
+    {
+        var phrase = _smartPhrases.FirstOrDefault(p => p.Abbreviation == abbreviation);
+        if (phrase != null)
+        {
+            InsertSmartPhrase(phrase);
+        }
+    }
+}

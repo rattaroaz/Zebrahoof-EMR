@@ -1,0 +1,161 @@
+﻿@inherits LayoutComponentBase
+@inject AuthStateService AuthState
+@inject AppStateService AppState
+@inject NotificationService Notifications
+@inject NavigationManager Navigation
+
+<MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+        <MudAppBar Elevation="1" Dense="true" Color="Color.Surface">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+            <MudImage Src="images/logo.svg" Alt="Zebrahoof EMR" Height="32" Class="mr-2" />
+            <MudText Typo="Typo.h6" Class="mr-4">Zebrahoof EMR</MudText>
+            
+            <GlobalSearch />
+            
+            <MudSpacer />
+            
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <ActivatorContent>
+                    <MudChip T="string" Color="Color.Primary" Size="Size.Small" Icon="@Icons.Material.Filled.LocationOn" Class="cursor-pointer">
+                        @AuthState.CurrentLocation
+                    </MudChip>
+                </ActivatorContent>
+                <ChildContent>
+                    @foreach (var location in AuthStateService.AvailableLocations)
+                    {
+                        var isCurrentLocation = location == AuthState.CurrentLocation;
+                        <MudMenuItem 
+                            Icon="@Icons.Material.Filled.LocationOn" 
+                            OnClick="() => SetLocation(location)"
+                            Disabled="@isCurrentLocation">
+                            <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
+                                <MudText Typo="Typo.body2">@location</MudText>
+                                @if (isCurrentLocation)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Primary" />
+                                }
+                            </MudStack>
+                        </MudMenuItem>
+                    }
+                </ChildContent>
+            </MudMenu>
+            
+            <MudBadge Content="@_unreadMessages" Color="Color.Error" Overlap="true" Visible="@(_unreadMessages > 0)" Class="mx-2">
+                <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" Href="/inbox" />
+            </MudBadge>
+            
+            <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" 
+                           Color="Color.Inherit" 
+                           OnClick="@ToggleDarkMode" 
+                           title="@(_isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode")" />
+            
+            <ProfileMenu />
+        </MudAppBar>
+        
+        <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always" Variant="DrawerVariant.Mini" OpenMiniOnHover="true">
+            <NavMenu />
+        </MudDrawer>
+        
+        <MudMainContent Class="pt-16">
+            <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+                <Breadcrumbs />
+                @Body
+            </MudContainer>
+        </MudMainContent>
+    </MudLayout>
+    
+<SessionMonitor />
+<ToastContainer />
+<StickyNoteContainer />
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode = false;
+    private int _unreadMessages = 0;
+
+    private MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight()
+        {
+            Primary = "#1976D2",
+            Secondary = "#00796B",
+            AppbarBackground = "#FFFFFF",
+            AppbarText = "#424242",
+            Background = "#F5F5F5",
+            Surface = "#FFFFFF",
+            DrawerBackground = "#FFFFFF",
+            DrawerText = "#424242",
+            Success = "#4CAF50",
+            Warning = "#FF9800",
+            Error = "#F44336",
+            Info = "#2196F3"
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = "#90CAF9",
+            Secondary = "#80CBC4",
+            AppbarBackground = "#1E1E1E",
+            AppbarText = "#FFFFFF",
+            Background = "#121212",
+            Surface = "#1E1E1E",
+            DrawerBackground = "#1E1E1E",
+            DrawerText = "#FFFFFF",
+            Success = "#81C784",
+            Warning = "#FFB74D",
+            Error = "#E57373",
+            Info = "#64B5F6"
+        },
+        Typography = new Typography()
+        {
+            Default = new DefaultTypography() { FontFamily = ["Inter", "Roboto", "Helvetica", "Arial", "sans-serif"] }
+        },
+        LayoutProperties = new LayoutProperties()
+        {
+            DefaultBorderRadius = "8px"
+        }
+    };
+
+    protected override void OnInitialized()
+    {
+        AuthState.OnAuthStateChanged += OnStateChangedHandler;
+        AppState.OnStateChanged += OnStateChangedHandler;
+        UpdateUnreadCount();
+    }
+
+    private async void OnStateChangedHandler()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+    
+    private void ToggleDarkMode() => _isDarkMode = !_isDarkMode;
+
+    private void SetLocation(string location)
+    {
+        AuthState.SetLocation(location);
+    }
+
+    private void UpdateUnreadCount()
+    {
+        // Mock unread count
+        _unreadMessages = 4;
+    }
+
+    public void Dispose()
+    {
+        AuthState.OnAuthStateChanged -= OnStateChangedHandler;
+        AppState.OnStateChanged -= OnStateChangedHandler;
+    }
+}

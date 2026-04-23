@@ -1,0 +1,215 @@
+@page "/admin/locations"
+@using Zebrahoof_EMR.Models
+@inject MockClinicalDataService ClinicalDataService
+@inject ISnackbar Snackbar
+
+<PageTitle>Locations & Departments - Zebrahoof EMR</PageTitle>
+
+<MudBreadcrumbs Items="_breadcrumbs" Class="mb-4" />
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pa-4">
+    <MudTabPanel Text="Locations" Icon="@Icons.Material.Filled.LocationOn">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.h6">Clinic Locations</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenLocationDialog">
+                Add Location
+            </MudButton>
+        </MudStack>
+
+        <MudDataGrid T="Location" Items="@_locations" Dense="true" Hover="true" Striped="true">
+            <Columns>
+                <PropertyColumn Property="x => x.Name" Title="Name" />
+                <TemplateColumn Title="Type">
+                    <CellTemplate>
+                        <MudChip T="string" Size="Size.Small" Color="@GetLocationTypeColor(context.Item.Type)">
+                            @context.Item.Type
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Address">
+                    <CellTemplate>
+                        @if (!string.IsNullOrEmpty(context.Item.Address))
+                        {
+                            <MudText Typo="Typo.body2">@context.Item.Address, @context.Item.City, @context.Item.State @context.Item.ZipCode</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn Property="x => x.Phone" Title="Phone" />
+                <TemplateColumn Title="Status">
+                    <CellTemplate>
+                        <MudChip T="string" Size="Size.Small" Color="@(context.Item.IsActive ? Color.Success : Color.Default)">
+                            @(context.Item.IsActive ? "Active" : "Inactive")
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Actions" CellStyle="width: 80px;">
+                    <CellTemplate>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" 
+                                       OnClick="@(() => EditLocation(context.Item))" />
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+        </MudDataGrid>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Departments" Icon="@Icons.Material.Filled.Business">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.h6">Departments</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenDepartmentDialog">
+                Add Department
+            </MudButton>
+        </MudStack>
+
+        <MudDataGrid T="Department" Items="@_departments" Dense="true" Hover="true" Striped="true">
+            <Columns>
+                <PropertyColumn Property="x => x.Name" Title="Name" />
+                <PropertyColumn Property="x => x.Description" Title="Description" />
+                <PropertyColumn Property="x => x.LocationName" Title="Location" />
+                <PropertyColumn Property="x => x.ManagerName" Title="Manager" />
+                <TemplateColumn Title="Status">
+                    <CellTemplate>
+                        <MudChip T="string" Size="Size.Small" Color="@(context.Item.IsActive ? Color.Success : Color.Default)">
+                            @(context.Item.IsActive ? "Active" : "Inactive")
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Actions" CellStyle="width: 80px;">
+                    <CellTemplate>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" 
+                                       OnClick="@(() => EditDepartment(context.Item))" />
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+        </MudDataGrid>
+    </MudTabPanel>
+</MudTabs>
+
+<MudDialog @bind-Visible="_showLocationDialog" Options="new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editingLocation?.Id > 0 ? "Edit Location" : "Add Location")</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_editingLocation != null)
+        {
+            <MudStack Spacing="2">
+                <MudTextField T="string" @bind-Value="_editingLocation.Name" Label="Name" 
+                              Variant="Variant.Outlined" Required="true" />
+                <MudSelect T="LocationType" @bind-Value="_editingLocation.Type" Label="Type" Variant="Variant.Outlined">
+                    @foreach (LocationType type in Enum.GetValues(typeof(LocationType)))
+                    {
+                        <MudSelectItem Value="@type">@type</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField T="string" @bind-Value="_editingLocation.Address" Label="Address" Variant="Variant.Outlined" />
+                <MudStack Row="true" Spacing="2">
+                    <MudTextField T="string" @bind-Value="_editingLocation.City" Label="City" Variant="Variant.Outlined" />
+                    <MudTextField T="string" @bind-Value="_editingLocation.State" Label="State" Variant="Variant.Outlined" />
+                    <MudTextField T="string" @bind-Value="_editingLocation.ZipCode" Label="ZIP" Variant="Variant.Outlined" />
+                </MudStack>
+                <MudStack Row="true" Spacing="2">
+                    <MudTextField T="string" @bind-Value="_editingLocation.Phone" Label="Phone" Variant="Variant.Outlined" />
+                    <MudTextField T="string" @bind-Value="_editingLocation.Fax" Label="Fax" Variant="Variant.Outlined" />
+                </MudStack>
+                <MudSwitch T="bool" @bind-Value="_editingLocation.IsActive" Label="Active" Color="Color.Primary" />
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showLocationDialog = false)">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveLocation">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+<MudDialog @bind-Visible="_showDepartmentDialog" Options="new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editingDepartment?.Id > 0 ? "Edit Department" : "Add Department")</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_editingDepartment != null)
+        {
+            <MudStack Spacing="2">
+                <MudTextField T="string" @bind-Value="_editingDepartment.Name" Label="Name" 
+                              Variant="Variant.Outlined" Required="true" />
+                <MudTextField T="string" @bind-Value="_editingDepartment.Description" Label="Description" 
+                              Variant="Variant.Outlined" Lines="2" />
+                <MudSelect T="int?" @bind-Value="_editingDepartment.LocationId" Label="Location" Variant="Variant.Outlined">
+                    @foreach (var loc in _locations)
+                    {
+                        <MudSelectItem T="int?" Value="@loc.Id">@loc.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudTextField T="string" @bind-Value="_editingDepartment.ManagerName" Label="Manager" 
+                              Variant="Variant.Outlined" />
+                <MudSwitch T="bool" @bind-Value="_editingDepartment.IsActive" Label="Active" Color="Color.Primary" />
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showDepartmentDialog = false)">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveDepartment">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<Location> _locations = new();
+    private List<Department> _departments = new();
+    private Location? _editingLocation;
+    private Department? _editingDepartment;
+    private bool _showLocationDialog;
+    private bool _showDepartmentDialog;
+
+    private List<BreadcrumbItem> _breadcrumbs = new()
+    {
+        new("Admin", "/admin", icon: Icons.Material.Filled.AdminPanelSettings),
+        new("Locations & Departments", "/admin/locations", disabled: true)
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _locations = await ClinicalDataService.GetLocationsAsync();
+        _departments = await ClinicalDataService.GetDepartmentsAsync();
+    }
+
+    private void OpenLocationDialog() { _editingLocation = new Location { IsActive = true }; _showLocationDialog = true; }
+    private void EditLocation(Location loc) { _editingLocation = new Location { Id = loc.Id, Name = loc.Name, Type = loc.Type, Address = loc.Address, City = loc.City, State = loc.State, ZipCode = loc.ZipCode, Phone = loc.Phone, Fax = loc.Fax, IsActive = loc.IsActive }; _showLocationDialog = true; }
+    
+    private void OpenDepartmentDialog() { _editingDepartment = new Department { IsActive = true }; _showDepartmentDialog = true; }
+    private void EditDepartment(Department dept) { _editingDepartment = new Department { Id = dept.Id, Name = dept.Name, Description = dept.Description, LocationId = dept.LocationId, LocationName = dept.LocationName, ManagerName = dept.ManagerName, IsActive = dept.IsActive }; _showDepartmentDialog = true; }
+
+    private async Task SaveLocation()
+    {
+        if (_editingLocation == null) return;
+        if (_editingLocation.Id == 0)
+            await ClinicalDataService.CreateLocationAsync(_editingLocation);
+        _locations = await ClinicalDataService.GetLocationsAsync();
+        _showLocationDialog = false;
+        Snackbar.Add("Location saved", Severity.Success);
+    }
+
+    private async Task SaveDepartment()
+    {
+        if (_editingDepartment == null) return;
+        var loc = _locations.FirstOrDefault(l => l.Id == _editingDepartment.LocationId);
+        _editingDepartment.LocationName = loc?.Name;
+        if (_editingDepartment.Id == 0)
+            await ClinicalDataService.CreateDepartmentAsync(_editingDepartment);
+        _departments = await ClinicalDataService.GetDepartmentsAsync();
+        _showDepartmentDialog = false;
+        Snackbar.Add("Department saved", Severity.Success);
+    }
+
+    private Color GetLocationTypeColor(LocationType type) => type switch
+    {
+        LocationType.Clinic => Color.Primary,
+        LocationType.Hospital => Color.Error,
+        LocationType.UrgentCare => Color.Warning,
+        LocationType.Telehealth => Color.Info,
+        _ => Color.Default
+    };
+}

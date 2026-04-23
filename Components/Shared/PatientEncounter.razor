@@ -1,0 +1,250 @@
+@using Microsoft.AspNetCore.Identity
+@using Zebrahoof_EMR.Models
+@using Zebrahoof_EMR.Services
+@inject GrokApiService GrokApiService
+@inject EncounterMessageService EncounterMessages
+@inject UserManager<ApplicationUser> UserManager
+@inject IHttpContextAccessor HttpContextAccessor
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<MudPaper Elevation="0" Class="pa-4 d-flex flex-column" Style="height: calc(100vh - 250px); max-height: 800px; overflow-y: auto;">
+    <MudStack Spacing="4">
+        @* Current Input Area *@
+        <MudPaper Elevation="2" Class="pa-4" id="encounter-top">
+            <MudTextField T="string"
+                          @bind-Value="_currentInput"
+                          Label="New message"
+                          Placeholder="Type your message to Grok..."
+                          Variant="Variant.Outlined"
+                          Lines="3"
+                          OnKeyDown="HandleKeyDown"
+                          Immediate="true"
+                          Disabled="@_isProcessing" />
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mt-3">
+                <MudTooltip Text="Previous conversation is automatically sent to Grok with your message.">
+                    <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined">History included automatically</MudChip>
+                </MudTooltip>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Default"
+                               StartIcon="@Icons.Material.Filled.DeleteSweep"
+                               Disabled="@(_isProcessing || _interactions.Count == 0)"
+                               OnClick="ClearHistory">
+                        Clear history
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               EndIcon="@Icons.Material.Filled.Send"
+                               OnClick="SendMessage"
+                               Disabled="@(string.IsNullOrWhiteSpace(_currentInput) || _isProcessing)">
+                        Send
+                    </MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+
+        @if (_isLoadingHistory)
+        {
+            <MudPaper Elevation="0" Class="pa-4 d-flex align-center">
+                <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Loading saved discussion...</MudText>
+            </MudPaper>
+        }
+        else if (_interactions.Count == 0)
+        {
+            <MudPaper Elevation="0" Class="pa-4">
+                <MudText Typo="Typo.body2" Color="Color.Secondary">No previous discussion for this patient yet. Send a message to start one.</MudText>
+            </MudPaper>
+        }
+
+        @foreach (var interaction in Enumerable.Reverse(_interactions))
+        {
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @interaction.CreatedAt.ToLocalTime().ToString("g")
+                    </MudText>
+                    @if (interaction.IncludedHistory)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.History">
+                            with history
+                        </MudChip>
+                    }
+                </MudStack>
+
+                <MudTextField T="string" Value="@interaction.UserInput" Label="Your message" Variant="Variant.Outlined" Lines="3" ReadOnly="true" />
+                @if (!string.IsNullOrEmpty(interaction.GrokResponse))
+                {
+                    <MudPaper Elevation="0" Class="mt-3 pa-3" Style="background-color: var(--mud-palette-background-grey);">
+                        <MudText Typo="Typo.subtitle2" Color="Color.Primary">Grok:</MudText>
+                        <MudText Typo="Typo.body1" Style="white-space: pre-wrap;">@interaction.GrokResponse</MudText>
+                    </MudPaper>
+                }
+                @if (interaction.IsProcessing)
+                {
+                    <div class="d-flex align-center mt-3 pa-3">
+                        <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Grok is thinking...</MudText>
+                    </div>
+                }
+            </MudPaper>
+        }
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    private string _currentInput = string.Empty;
+    private bool _isProcessing = false;
+    private bool _isLoadingHistory = true;
+    private int _loadedForPatientId;
+    private List<Interaction> _interactions = new();
+
+    private class Interaction
+    {
+        public Guid? Id { get; set; }
+        public string UserInput { get; set; } = string.Empty;
+        public string GrokResponse { get; set; } = string.Empty;
+        public bool IsProcessing { get; set; } = false;
+        public bool IncludedHistory { get; set; } = false;
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_loadedForPatientId == PatientId) return;
+
+        _loadedForPatientId = PatientId;
+        _isLoadingHistory = true;
+        _interactions.Clear();
+        StateHasChanged();
+
+        try
+        {
+            var saved = await EncounterMessages.GetMessagesAsync(PatientId);
+            _interactions = saved.Select(m => new Interaction
+            {
+                Id = m.Id,
+                UserInput = m.UserInput,
+                GrokResponse = m.GrokResponse,
+                IncludedHistory = m.IncludedHistory,
+                CreatedAt = m.CreatedAt
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load previous discussion: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoadingHistory = false;
+        }
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey && !string.IsNullOrWhiteSpace(_currentInput) && !_isProcessing)
+        {
+            await SendMessage();
+        }
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_currentInput) || _isProcessing) return;
+
+        var userMessage = _currentInput.Trim();
+        _currentInput = string.Empty;
+
+        // Always include previous messages if available (history is now always on by default).
+        var includeHistoryForThisTurn = _interactions.Count > 0;
+
+        // Snapshot history BEFORE adding the in-flight turn so we don't replay
+        // an empty assistant response back to Grok.
+        var historyForGrok = includeHistoryForThisTurn
+            ? _interactions
+                .Where(i => !string.IsNullOrEmpty(i.GrokResponse))
+                .Select(i => new ChatTurn(i.UserInput, i.GrokResponse))
+                .ToList()
+            : new List<ChatTurn>();
+
+        var interaction = new Interaction
+        {
+            UserInput = userMessage,
+            IsProcessing = true,
+            IncludedHistory = includeHistoryForThisTurn,
+            CreatedAt = DateTime.UtcNow
+        };
+        _interactions.Add(interaction);
+        _isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            var systemPrompt = includeHistoryForThisTurn
+                ? $"You are a helpful clinical assistant for the Zebrahoof EMR. You are continuing an ongoing discussion about patient ID {PatientId}. Use the prior turns to answer the new question."
+                : $"You are a helpful clinical assistant for the Zebrahoof EMR. You are answering a question about patient ID {PatientId}.";
+
+            var response = await GrokApiService.ChatAsync(systemPrompt, historyForGrok, userMessage);
+
+            interaction.GrokResponse = response;
+
+            try
+            {
+                var userId = await ResolveCurrentUserIdAsync();
+                var saved = await EncounterMessages.AddMessageAsync(
+                    PatientId,
+                    userId,
+                    userMessage,
+                    response,
+                    includeHistoryForThisTurn);
+                interaction.Id = saved.Id;
+                interaction.CreatedAt = saved.CreatedAt;
+            }
+            catch (Exception persistEx)
+            {
+                Snackbar.Add($"Saved response but failed to write to history: {persistEx.Message}", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            interaction.GrokResponse = $"Error communicating with Grok: {ex.Message}";
+            Snackbar.Add($"Error communicating with Grok: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            interaction.IsProcessing = false;
+            _isProcessing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ClearHistory()
+    {
+        if (_isProcessing || _interactions.Count == 0) return;
+
+        try
+        {
+            var removed = await EncounterMessages.ClearMessagesAsync(PatientId);
+            _interactions.Clear();
+            Snackbar.Add($"Cleared {removed} message(s) from this patient's discussion.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to clear history: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task<string> ResolveCurrentUserIdAsync()
+    {
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext?.User == null) return "anonymous";
+
+        var user = await UserManager.GetUserAsync(httpContext.User);
+        return user?.Id ?? "anonymous";
+    }
+}

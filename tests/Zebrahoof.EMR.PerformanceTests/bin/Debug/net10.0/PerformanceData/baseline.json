@@ -1,0 +1,75 @@
+{
+  "Timestamp": "2026-01-03T05:39:54.4331515Z",
+  "Metrics": [
+    {
+      "Endpoint": "/",
+      "AverageResponseTime": 1,
+      "MinResponseTime": 1,
+      "MaxResponseTime": 3,
+      "P95ResponseTime": 3,
+      "SuccessRate": 100,
+      "SampleSize": 10,
+      "Timestamp": "2026-01-03T05:39:54.3422255Z"
+    },
+    {
+      "Endpoint": "/login",
+      "AverageResponseTime": 1,
+      "MinResponseTime": 1,
+      "MaxResponseTime": 1,
+      "P95ResponseTime": 1,
+      "SuccessRate": 100,
+      "SampleSize": 10,
+      "Timestamp": "2026-01-03T05:39:54.3543202Z"
+    },
+    {
+      "Endpoint": "/patients",
+      "AverageResponseTime": 1,
+      "MinResponseTime": 1,
+      "MaxResponseTime": 2,
+      "P95ResponseTime": 2,
+      "SuccessRate": 100,
+      "SampleSize": 10,
+      "Timestamp": "2026-01-03T05:39:54.3692865Z"
+    },
+    {
+      "Endpoint": "/api/patients",
+      "AverageResponseTime": 1,
+      "MinResponseTime": 1,
+      "MaxResponseTime": 3,
+      "P95ResponseTime": 3,
+      "SuccessRate": 100,
+      "SampleSize": 10,
+      "Timestamp": "2026-01-03T05:39:54.3852269Z"
+    },
+    {
+      "Endpoint": "/api/patients/search?q=test",
+      "AverageResponseTime": 1,
+      "MinResponseTime": 1,
+      "MaxResponseTime": 1,
+      "P95ResponseTime": 1,
+      "SuccessRate": 100,
+      "SampleSize": 10,
+      "Timestamp": "2026-01-03T05:39:54.4000722Z"
+    },
+    {
+      "Endpoint": "/api/patients/1",
+      "AverageResponseTime": 1,
+      "MinResponseTime": 1,
+      "MaxResponseTime": 2,
+      "P95ResponseTime": 2,
+      "SuccessRate": 100,
+      "SampleSize": 10,
+      "Timestamp": "2026-01-03T05:39:54.4156803Z"
+    },
+    {
+      "Endpoint": "/appointments",
+      "AverageResponseTime": 1,
+      "MinResponseTime": 1,
+      "MaxResponseTime": 2,
+      "P95ResponseTime": 2,
+      "SuccessRate": 100,
+      "SampleSize": 10,
+      "Timestamp": "2026-01-03T05:39:54.4318282Z"
+    }
+  ]
+}

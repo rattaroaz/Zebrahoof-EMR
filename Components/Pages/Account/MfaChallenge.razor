@@ -1,0 +1,132 @@
+@page "/mfa-challenge"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Two-Factor Authentication - Zebrahoof EMR</PageTitle>
+
+<MudCard Elevation="4" Class="pa-4" Style="width: 100%; max-width: 400px;">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <div class="d-flex flex-column align-center">
+                <MudIcon Icon="@Icons.Material.Filled.Security" Size="Size.Large" Color="Color.Primary" Class="mb-2" />
+                <MudText Typo="Typo.h5">Two-Factor Authentication</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary text-center">
+                    Enter the 6-digit code from your authenticator app.
+                </MudText>
+            </div>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        <EditForm Model="_model" OnValidSubmit="HandleVerify" FormName="mfa-challenge">
+            <MudTextField @bind-Value="_model.Code" 
+                          Label="Authentication Code" 
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Pin"
+                          Class="mb-4"
+                          MaxLength="6"
+                          Required="true"
+                          Disabled="_isLoading"
+                          Style="font-size: 1.5rem; letter-spacing: 0.5rem; text-align: center;" />
+
+            <MudCheckBox @bind-Value="_model.RememberDevice" 
+                         Label="Remember this device for 30 days" 
+                         Color="Color.Primary"
+                         Class="mb-4"
+                         Disabled="_isLoading" />
+
+            @if (!string.IsNullOrEmpty(_errorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4" Dense="true">@_errorMessage</MudAlert>
+            }
+
+            <MudButton ButtonType="ButtonType.Submit" 
+                       Variant="Variant.Filled" 
+                       Color="Color.Primary" 
+                       FullWidth="true"
+                       Disabled="_isLoading"
+                       Class="mb-2">
+                @if (_isLoading)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Verify
+            </MudButton>
+        </EditForm>
+        
+        <MudDivider Class="my-4" />
+        
+        <MudText Typo="Typo.body2" Class="mud-text-secondary text-center mb-2">
+            Don't have access to your authenticator?
+        </MudText>
+        <MudButton Variant="Variant.Text" FullWidth="true" OnClick="UseRecoveryCode">
+            Use a recovery code
+        </MudButton>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private MfaModel _model = new();
+    private bool _isLoading;
+    private string? _errorMessage;
+    private bool _useRecoveryCode;
+
+    private async Task HandleVerify()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = _useRecoveryCode
+                ? await SignInManager.TwoFactorRecoveryCodeSignInAsync(_model.Code)
+                : await SignInManager.TwoFactorAuthenticatorSignInAsync(_model.Code, _model.RememberDevice, _model.RememberDevice);
+
+            if (result.Succeeded)
+            {
+                Snackbar.Add("Authentication successful!", Severity.Success);
+                Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
+                return;
+            }
+
+            if (result.IsLockedOut)
+            {
+                _errorMessage = "Account locked due to too many failed attempts.";
+                return;
+            }
+
+            _errorMessage = _useRecoveryCode 
+                ? "Invalid recovery code." 
+                : "Invalid authentication code. Please try again.";
+        }
+        catch
+        {
+            _errorMessage = "An error occurred. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void UseRecoveryCode()
+    {
+        _useRecoveryCode = !_useRecoveryCode;
+        _model.Code = string.Empty;
+        _errorMessage = null;
+    }
+
+    private class MfaModel
+    {
+        public string Code { get; set; } = string.Empty;
+        public bool RememberDevice { get; set; }
+    }
+}

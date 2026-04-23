@@ -1,0 +1,617 @@
+@page "/schedule"
+@inject MockAppointmentService AppointmentService
+@inject IDialogService DialogService
+
+<PageTitle>Schedule - Zebrahoof EMR</PageTitle>
+
+@* Header with title, filters, and new appointment button *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <MudText Typo="Typo.h4">Schedule</MudText>
+    <MudButton Variant="Variant.Filled" 
+               Color="Color.Primary" 
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="OpenNewAppointmentDialog">
+        New Appointment
+    </MudButton>
+</MudStack>
+
+@* Controls Bar *@
+<MudPaper Elevation="1" Class="pa-3 mb-4" Style="overflow: visible;">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Spacing="2">
+        @* Date Navigation *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
+                           OnClick="PreviousPeriod" 
+                           Size="Size.Small" />
+            <MudButton Variant="Variant.Text" OnClick="GoToToday" Size="Size.Small">Today</MudButton>
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" 
+                           OnClick="NextPeriod" 
+                           Size="Size.Small" />
+            <MudDatePicker Date="_selectedDate"
+                           DateChanged="OnDateChanged"
+                           Variant="Variant.Outlined" 
+                           Margin="Margin.Dense"
+                           DateFormat="MM/dd/yyyy"
+                           PickerVariant="PickerVariant.Dialog"
+                           Class="schedule-date-picker" />
+        </MudStack>
+
+        @* View Toggle & Provider Filter *@
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudSelect Value="_selectedProvider" 
+                       Label="Provider" 
+                       Variant="Variant.Outlined" 
+                       Margin="Margin.Dense"
+                       Style="min-width: 180px;"
+                       ValueChanged="@((string v) => OnProviderChanged(v))">
+                <MudSelectItem Value="@("All Providers")">All Providers</MudSelectItem>
+                @foreach (var provider in MockAppointmentService.Providers)
+                {
+                    <MudSelectItem Value="@provider">@provider</MudSelectItem>
+                }
+            </MudSelect>
+            <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small" Color="Color.Primary">
+                <MudButton OnClick="@(() => SetViewMode(ViewMode.Day))" 
+                           Variant="@(_viewMode == ViewMode.Day ? Variant.Filled : Variant.Outlined)">
+                    Day
+                </MudButton>
+                <MudButton OnClick="@(() => SetViewMode(ViewMode.Week))" 
+                           Variant="@(_viewMode == ViewMode.Week ? Variant.Filled : Variant.Outlined)">
+                    Week
+                </MudButton>
+            </MudButtonGroup>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+@* Calendar View *@
+@if (_isLoading)
+{
+    <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="mb-4" />
+}
+
+@if (_viewMode == ViewMode.Day)
+{
+    @* Day View *@
+    <MudCard Elevation="2">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6">@_selectedDate?.ToString("dddd, MMMM d, yyyy")</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @GetFilteredAppointments().Count() appointments
+                </MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent Class="pa-0">
+            @* Time slots grid *@
+            <div class="schedule-day-grid">
+                @foreach (var hour in GetDayHours())
+                {
+                    <div class="schedule-hour-row" @onclick="() => OpenNewAppointmentAtTime(hour)">
+                        <div class="schedule-hour-label">
+                            @hour.ToString("h:mm tt")
+                        </div>
+                        <div class="schedule-hour-content">
+                            @{
+                                var appointmentsInSlot = GetAppointmentsInHour(hour);
+                            }
+                            @foreach (var apt in appointmentsInSlot)
+                            {
+                                <div class="@($"schedule-appointment-card {GetStatusClass(apt.Status)}")" 
+                                     @onclick="() => OpenAppointmentDetail(apt)"
+                                     @onclick:stopPropagation="true">
+                                    <div class="d-flex justify-space-between align-center">
+                                        <div>
+                                            <MudText Typo="Typo.body2" Class="font-weight-medium">
+                                                @apt.PatientName
+                                            </MudText>
+                                            <MudText Typo="Typo.caption">
+                                                @apt.DateTime.ToString("h:mm tt") • @apt.VisitType
+                                            </MudText>
+                                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                                @apt.Provider • @apt.Location
+                                            </MudText>
+                                        </div>
+                                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(apt.Status)" Class="ml-2">
+                                            @GetStatusShortText(apt.Status)
+                                        </MudChip>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </MudCardContent>
+    </MudCard>
+}
+else
+{
+    @* Week View *@
+    <MudCard Elevation="2">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h6">Week of @_weekStart?.ToString("MMMM d, yyyy")</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    @GetFilteredAppointments().Count() appointments this week
+                </MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent Class="pa-0">
+            <div class="schedule-week-grid">
+                @* Day headers *@
+                <div class="schedule-week-header">
+                    <div class="schedule-week-time-col"></div>
+                    @foreach (var day in GetWeekDays())
+                    {
+                        <div class="schedule-week-day-header @(day.Date == DateTime.Today ? "today" : "")">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@day.ToString("ddd")</MudText>
+                            <MudText Typo="Typo.body1" Class="font-weight-medium">@day.Day</MudText>
+                        </div>
+                    }
+                </div>
+                
+                @* Time rows *@
+                @foreach (var hour in GetDayHours())
+                {
+                    <div class="schedule-week-row">
+                        <div class="schedule-week-time-col">
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@hour.ToString("h tt")</MudText>
+                        </div>
+                        @foreach (var day in GetWeekDays())
+                        {
+                            var slotTime = day.Add(hour.TimeOfDay);
+                            var appointments = GetAppointmentsInHourForDay(day, hour);
+                            <div class="schedule-week-cell @(day.Date == DateTime.Today ? "today" : "")"
+                                 @onclick="() => OpenNewAppointmentAtDateTime(slotTime)">
+                                @foreach (var apt in appointments)
+                                {
+                                    <div class="@($"schedule-week-appointment {GetStatusClass(apt.Status)}")"
+                                         @onclick="() => OpenAppointmentDetail(apt)"
+                                         @onclick:stopPropagation="true">
+                                        <MudText Typo="Typo.caption" Class="font-weight-medium text-truncate">
+                                            @apt.PatientName
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Class="text-truncate">
+                                            @apt.DateTime.ToString("h:mm") @apt.VisitType
+                                        </MudText>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </MudCardContent>
+    </MudCard>
+}
+
+@* Appointment Detail Drawer *@
+<AppointmentDetailDrawer @ref="_detailDrawer" OnAppointmentChanged="LoadAppointments" />
+
+@* Legend *@
+<MudPaper Elevation="1" Class="pa-3 mt-4">
+    <MudStack Row="true" Spacing="4" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.subtitle2">Status Legend:</MudText>
+        <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+            <MudChip T="string" Size="Size.Small" Color="Color.Default">Scheduled</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Warning">Checked In</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Info">In Room</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary">In Progress</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Success">Completed</MudChip>
+            <MudChip T="string" Size="Size.Small" Color="Color.Error">No Show</MudChip>
+        </MudStack>
+    </MudStack>
+</MudPaper>
+
+<style>
+    .schedule-day-grid {
+        border-top: 1px solid var(--mud-palette-lines-default);
+    }
+    
+    .schedule-hour-row {
+        display: flex;
+        min-height: 60px;
+        border-bottom: 1px solid var(--mud-palette-lines-default);
+        cursor: pointer;
+        transition: background-color 0.15s;
+    }
+    
+    .schedule-hour-row:hover {
+        background-color: var(--mud-palette-action-default-hover);
+    }
+    
+    .schedule-hour-label {
+        width: 80px;
+        padding: 8px 12px;
+        border-right: 1px solid var(--mud-palette-lines-default);
+        font-size: 0.75rem;
+        color: var(--mud-palette-text-secondary);
+        flex-shrink: 0;
+    }
+    
+    .schedule-hour-content {
+        flex: 1;
+        padding: 4px 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .schedule-appointment-card {
+        padding: 8px 12px;
+        border-radius: 4px;
+        border-left: 4px solid var(--mud-palette-primary);
+        cursor: pointer;
+        transition: box-shadow 0.15s, transform 0.1s;
+        background-color: var(--mud-palette-surface);
+        box-shadow: var(--mud-elevation-1);
+    }
+    
+    .schedule-appointment-card:hover {
+        box-shadow: var(--mud-elevation-4);
+        transform: translateY(-1px);
+    }
+    
+    .schedule-appointment-card.status-completed {
+        border-left-color: var(--mud-palette-success);
+        opacity: 0.8;
+    }
+    
+    .schedule-appointment-card.status-inprogress {
+        border-left-color: var(--mud-palette-primary);
+        background-color: var(--mud-palette-primary-lighten);
+    }
+    
+    .schedule-appointment-card.status-inroom {
+        border-left-color: var(--mud-palette-info);
+    }
+    
+    .schedule-appointment-card.status-checkedin {
+        border-left-color: var(--mud-palette-warning);
+    }
+    
+    .schedule-appointment-card.status-noshow {
+        border-left-color: var(--mud-palette-error);
+        opacity: 0.6;
+    }
+    
+    .schedule-appointment-card.status-cancelled {
+        border-left-color: var(--mud-palette-text-disabled);
+        opacity: 0.5;
+    }
+    
+    /* Week View Styles */
+    .schedule-week-grid {
+        overflow-x: auto;
+    }
+    
+    .schedule-week-header {
+        display: flex;
+        border-bottom: 2px solid var(--mud-palette-lines-default);
+        position: sticky;
+        top: 0;
+        background: var(--mud-palette-surface);
+        z-index: 1;
+    }
+    
+    .schedule-week-time-col {
+        width: 60px;
+        flex-shrink: 0;
+        padding: 4px 8px;
+        border-right: 1px solid var(--mud-palette-lines-default);
+        display: flex;
+        align-items: flex-start;
+        justify-content: center;
+    }
+    
+    .schedule-week-day-header {
+        flex: 1;
+        min-width: 120px;
+        padding: 8px;
+        text-align: center;
+        border-right: 1px solid var(--mud-palette-lines-default);
+    }
+    
+    .schedule-week-day-header.today {
+        background-color: var(--mud-palette-primary-lighten);
+    }
+    
+    .schedule-week-row {
+        display: flex;
+        min-height: 50px;
+        border-bottom: 1px solid var(--mud-palette-lines-default);
+    }
+    
+    .schedule-week-cell {
+        flex: 1;
+        min-width: 120px;
+        padding: 2px;
+        border-right: 1px solid var(--mud-palette-lines-default);
+        cursor: pointer;
+        transition: background-color 0.15s;
+    }
+    
+    .schedule-week-cell:hover {
+        background-color: var(--mud-palette-action-default-hover);
+    }
+    
+    .schedule-week-cell.today {
+        background-color: var(--mud-palette-primary-hover);
+    }
+    
+    .schedule-week-appointment {
+        padding: 2px 4px;
+        margin: 1px;
+        border-radius: 2px;
+        font-size: 0.7rem;
+        cursor: pointer;
+        border-left: 3px solid var(--mud-palette-primary);
+        background-color: var(--mud-palette-background-grey);
+    }
+    
+    .schedule-week-appointment:hover {
+        background-color: var(--mud-palette-action-default-hover);
+    }
+    
+    .schedule-week-appointment.status-completed {
+        border-left-color: var(--mud-palette-success);
+        opacity: 0.7;
+    }
+    
+    .schedule-week-appointment.status-inprogress {
+        border-left-color: var(--mud-palette-primary);
+        background-color: var(--mud-palette-primary-lighten);
+    }
+    
+    .schedule-week-appointment.status-checkedin {
+        border-left-color: var(--mud-palette-warning);
+    }
+    
+    .schedule-week-appointment.status-inroom {
+        border-left-color: var(--mud-palette-info);
+    }
+    
+    .schedule-week-appointment.status-noshow,
+    .schedule-week-appointment.status-cancelled {
+        opacity: 0.5;
+    }
+    
+    .text-truncate {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+</style>
+
+@code {
+    private enum ViewMode { Day, Week }
+    
+    private List<Appointment> _appointments = new();
+    private DateTime? _selectedDate = DateTime.Today;
+    private DateTime? _weekStart;
+    private string _selectedProvider = "All Providers";
+    private ViewMode _viewMode = ViewMode.Day;
+    private bool _isLoading;
+    private AppointmentDetailDrawer _detailDrawer = null!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _weekStart = GetWeekStart(_selectedDate ?? DateTime.Today);
+        await LoadAppointments();
+    }
+
+    private async Task LoadAppointments()
+    {
+        _isLoading = true;
+        StateHasChanged();
+
+        if (_viewMode == ViewMode.Day && _selectedDate.HasValue)
+        {
+            _appointments = await AppointmentService.GetAppointmentsByDateAsync(_selectedDate.Value);
+        }
+        else if (_weekStart.HasValue)
+        {
+            _appointments = await AppointmentService.GetWeekAppointmentsAsync(_weekStart.Value);
+        }
+
+        _isLoading = false;
+        StateHasChanged();
+    }
+
+    private IEnumerable<Appointment> GetFilteredAppointments()
+    {
+        if (_selectedProvider == "All Providers")
+            return _appointments;
+        return _appointments.Where(a => a.Provider == _selectedProvider);
+    }
+
+    private void SetViewMode(ViewMode mode)
+    {
+        _viewMode = mode;
+        _ = LoadAppointments();
+    }
+
+    private async Task OnDateChanged(DateTime? date)
+    {
+        _selectedDate = date;
+        _weekStart = GetWeekStart(date ?? DateTime.Today);
+        await LoadAppointments();
+    }
+
+    private async Task OnProviderChanged(string provider)
+    {
+        _selectedProvider = provider;
+        StateHasChanged();
+    }
+
+    private void GoToToday()
+    {
+        _selectedDate = DateTime.Today;
+        _weekStart = GetWeekStart(DateTime.Today);
+        _ = LoadAppointments();
+    }
+
+    private void PreviousPeriod()
+    {
+        if (_viewMode == ViewMode.Day)
+        {
+            _selectedDate = _selectedDate?.AddDays(-1);
+        }
+        else
+        {
+            _weekStart = _weekStart?.AddDays(-7);
+            _selectedDate = _weekStart;
+        }
+        _ = LoadAppointments();
+    }
+
+    private void NextPeriod()
+    {
+        if (_viewMode == ViewMode.Day)
+        {
+            _selectedDate = _selectedDate?.AddDays(1);
+        }
+        else
+        {
+            _weekStart = _weekStart?.AddDays(7);
+            _selectedDate = _weekStart;
+        }
+        _ = LoadAppointments();
+    }
+
+    private DateTime GetWeekStart(DateTime date)
+    {
+        var diff = (7 + (date.DayOfWeek - DayOfWeek.Sunday)) % 7;
+        return date.AddDays(-1 * diff).Date;
+    }
+
+    private IEnumerable<DateTime> GetDayHours()
+    {
+        var baseDate = _selectedDate ?? DateTime.Today;
+        for (var hour = 8; hour <= 17; hour++)
+        {
+            yield return baseDate.Date.AddHours(hour);
+        }
+    }
+
+    private IEnumerable<DateTime> GetWeekDays()
+    {
+        var start = _weekStart ?? GetWeekStart(DateTime.Today);
+        for (var i = 0; i < 7; i++)
+        {
+            yield return start.AddDays(i);
+        }
+    }
+
+    private List<Appointment> GetAppointmentsInHour(DateTime hour)
+    {
+        return GetFilteredAppointments()
+            .Where(a => a.DateTime.Hour == hour.Hour && a.DateTime.Date == hour.Date)
+            .OrderBy(a => a.DateTime)
+            .ToList();
+    }
+
+    private List<Appointment> GetAppointmentsInHourForDay(DateTime day, DateTime hour)
+    {
+        return GetFilteredAppointments()
+            .Where(a => a.DateTime.Date == day.Date && a.DateTime.Hour == hour.Hour)
+            .OrderBy(a => a.DateTime)
+            .ToList();
+    }
+
+    private async Task OpenNewAppointmentDialog()
+    {
+        var parameters = new DialogParameters<NewAppointmentDialog>
+        {
+            { x => x.PreselectedDate, _selectedDate },
+            { x => x.PreselectedProvider, _selectedProvider != "All Providers" ? _selectedProvider : null }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<NewAppointmentDialog>("New Appointment", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            await LoadAppointments();
+        }
+    }
+
+    private async Task OpenNewAppointmentAtTime(DateTime time)
+    {
+        var parameters = new DialogParameters<NewAppointmentDialog>
+        {
+            { x => x.PreselectedDate, time.Date },
+            { x => x.PreselectedTime, time.TimeOfDay },
+            { x => x.PreselectedProvider, _selectedProvider != "All Providers" ? _selectedProvider : null }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<NewAppointmentDialog>("New Appointment", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            await LoadAppointments();
+        }
+    }
+
+    private async Task OpenNewAppointmentAtDateTime(DateTime dateTime)
+    {
+        var parameters = new DialogParameters<NewAppointmentDialog>
+        {
+            { x => x.PreselectedDate, dateTime.Date },
+            { x => x.PreselectedTime, dateTime.TimeOfDay },
+            { x => x.PreselectedProvider, _selectedProvider != "All Providers" ? _selectedProvider : null }
+        };
+
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<NewAppointmentDialog>("New Appointment", parameters, options);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            await LoadAppointments();
+        }
+    }
+
+    private void OpenAppointmentDetail(Appointment appointment)
+    {
+        _detailDrawer.Open(appointment);
+    }
+
+    private Color GetStatusColor(AppointmentStatus status) => status switch
+    {
+        AppointmentStatus.Completed => Color.Success,
+        AppointmentStatus.InProgress => Color.Primary,
+        AppointmentStatus.InRoom => Color.Info,
+        AppointmentStatus.CheckedIn => Color.Warning,
+        AppointmentStatus.NoShow => Color.Error,
+        AppointmentStatus.Cancelled => Color.Default,
+        _ => Color.Default
+    };
+
+    private string GetStatusClass(AppointmentStatus status) => status switch
+    {
+        AppointmentStatus.Completed => "status-completed",
+        AppointmentStatus.InProgress => "status-inprogress",
+        AppointmentStatus.InRoom => "status-inroom",
+        AppointmentStatus.CheckedIn => "status-checkedin",
+        AppointmentStatus.NoShow => "status-noshow",
+        AppointmentStatus.Cancelled => "status-cancelled",
+        _ => ""
+    };
+
+    private string GetStatusShortText(AppointmentStatus status) => status switch
+    {
+        AppointmentStatus.Scheduled => "Sched",
+        AppointmentStatus.CheckedIn => "In",
+        AppointmentStatus.InRoom => "Room",
+        AppointmentStatus.InProgress => "Active",
+        AppointmentStatus.Completed => "Done",
+        AppointmentStatus.NoShow => "NS",
+        AppointmentStatus.Cancelled => "X",
+        _ => status.ToString()
+    };
+}

@@ -1,0 +1,57 @@
+@using Zebrahoof_EMR.Models
+@inject StickyNoteService StickyNotes
+@implements IDisposable
+
+<div class="sticky-notes-container">
+    @foreach (var note in StickyNotes.Notes)
+    {
+        <StickyNoteCard Note="note"
+                    OnHide="HandleHide"
+                    OnContentChanged="HandleContentChanged"
+                    OnPositionChanged="HandlePositionChanged"
+                    OnReminderChanged="HandleReminderChanged"
+                    OnColorChanged="HandleColorChanged" />
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        StickyNotes.OnNotesChanged += OnNotesChanged;
+    }
+
+    private async void OnNotesChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleHide(Guid id)
+    {
+        await StickyNotes.HideNoteAsync(id);
+    }
+
+    private async Task HandleContentChanged((Guid Id, string Content) args)
+    {
+        await StickyNotes.UpdateNoteContentAsync(args.Id, args.Content);
+    }
+
+    private async Task HandlePositionChanged((Guid Id, double X, double Y) args)
+    {
+        await StickyNotes.UpdateNotePositionAsync(args.Id, args.X, args.Y);
+    }
+
+    private async Task HandleReminderChanged((Guid Id, DateTime? Date) args)
+    {
+        await StickyNotes.SetReminderAsync(args.Id, args.Date);
+    }
+
+    private async Task HandleColorChanged((Guid Id, NoteColor Color) args)
+    {
+        await StickyNotes.UpdateNoteColorAsync(args.Id, args.Color);
+    }
+
+    public void Dispose()
+    {
+        StickyNotes.OnNotesChanged -= OnNotesChanged;
+    }
+}

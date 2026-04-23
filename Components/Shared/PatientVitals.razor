@@ -1,0 +1,75 @@
+@inject MockClinicalDataService ClinicalDataService
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Vital Signs History</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">
+                Record Vitals
+            </MudButton>
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent Class="pa-0">
+        @if (_vitals.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Class="ma-4">No vitals recorded</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@_vitals" Hover="true" Dense="true">
+                <HeaderContent>
+                    <MudTh>Date/Time</MudTh>
+                    <MudTh>BP (mmHg)</MudTh>
+                    <MudTh>HR (bpm)</MudTh>
+                    <MudTh>Temp (°F)</MudTh>
+                    <MudTh>RR</MudTh>
+                    <MudTh>SpO2 (%)</MudTh>
+                    <MudTh>Weight (lbs)</MudTh>
+                    <MudTh>BMI</MudTh>
+                    <MudTh>Recorded By</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Date">@context.RecordedAt.ToString("MM/dd/yyyy h:mm tt")</MudTd>
+                    <MudTd DataLabel="BP">
+                        <MudText Color="@(IsBPAbnormal(context) ? Color.Warning : Color.Default)">
+                            @context.SystolicBP/@context.DiastolicBP
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="HR">@context.HeartRate</MudTd>
+                    <MudTd DataLabel="Temp">
+                        <MudText Color="@(IsTempAbnormal(context) ? Color.Warning : Color.Default)">
+                            @context.Temperature
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="RR">@context.RespiratoryRate</MudTd>
+                    <MudTd DataLabel="SpO2">
+                        <MudText Color="@(IsO2Abnormal(context) ? Color.Error : Color.Default)">
+                            @context.OxygenSaturation
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Weight">@context.Weight</MudTd>
+                    <MudTd DataLabel="BMI">@context.BMI</MudTd>
+                    <MudTd DataLabel="By">@context.RecordedBy</MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    private List<VitalSigns> _vitals = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _vitals = await ClinicalDataService.GetVitalsByPatientAsync(PatientId);
+    }
+
+    private bool IsBPAbnormal(VitalSigns v) => v.SystolicBP > 140 || v.DiastolicBP > 90;
+    private bool IsTempAbnormal(VitalSigns v) => v.Temperature > 100.4m;
+    private bool IsO2Abnormal(VitalSigns v) => v.OxygenSaturation < 95;
+}

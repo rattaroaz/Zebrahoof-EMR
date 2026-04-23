@@ -1,0 +1,436 @@
+@using Microsoft.EntityFrameworkCore
+@using Zebrahoof_EMR.Data
+@using Zebrahoof_EMR.Models
+@inject NavigationManager Navigation
+@inject MockClinicalDataService ClinicalDataService
+@inject GrokApiService GrokApiService
+@inject NotificationService NotificationService
+@inject GrokSessionStateService GrokSession
+@inject ApplicationDbContext Db
+@inject IJSRuntime JS
+
+<MudStack Spacing="0">
+    @* Patient Header Banner *@
+    <PatientHeader Patient="Patient" />
+
+    @* Send uploaded documents to Grok *@
+    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="my-2">
+        <MudButton Variant="Variant.Filled"
+                   Color="@(GrokSession.HaveDocumentsBeenSent(Patient.Id) ? Color.Default : Color.Success)"
+                   StartIcon="@(GrokSession.HaveDocumentsBeenSent(Patient.Id) ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Send)"
+                   Disabled="@(GrokSession.HaveDocumentsBeenSent(Patient.Id) || _isSendingToGrok)"
+                   OnClick="SendToGrokAsync">
+            @if (_isSendingToGrok)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Sending...</span>
+            }
+            else
+            {
+                <span>@(GrokSession.HaveDocumentsBeenSent(Patient.Id) ? "Documents Received" : "Send to Grok")</span>
+            }
+        </MudButton>
+    </MudStack>
+    
+    @* Patient Sticky Note Toggle *@
+    <div style="position: fixed; top: 80px; right: 20px; z-index: 9999;">
+        <MudTooltip Text="Patient Sticky">
+            <MudFab StartIcon="@Icons.Material.Filled.StickyNote2" 
+                    Style="background-color: #f8bbd9; color: #000;"
+                    Size="Size.Small"
+                    OnClick="TogglePatientNote" />
+        </MudTooltip>
+    </div>
+
+    @* Chart Navigation Tabs *@
+    <MudPaper Elevation="1" Class="mb-4 pa-2">
+        <div class="chart-nav-tabs">
+            @foreach (var tab in _orderedTabs)
+            {
+                <div class="draggable-tab @(_dragOverTab == tab.Key ? "drag-over" : "") @(_draggingTab == tab.Key ? "dragging" : "")"
+                     draggable="true"
+                     @ondragstart="@(() => HandleDragStart(tab.Key))"
+                     @ondragover="@(() => HandleDragOver(tab.Key))"
+                     @ondragover:preventDefault
+                     @ondrop="@(() => HandleDrop(tab.Key))"
+                     @ondragend="HandleDragEnd">
+                    <MudButton Variant="@GetButtonVariant(tab.Key)" 
+                               Color="@GetButtonColor(tab.Key)" 
+                               StartIcon="@tab.Icon" 
+                               OnClick="@(() => NavigateToTab(tab.Key))" 
+                               Class="ma-1">@tab.Label</MudButton>
+                </div>
+            }
+        </div>
+    </MudPaper>
+
+    @* Tab Content *@
+    <div class="chart-content">
+        @switch (Tab?.ToLowerInvariant() ?? "encounter")
+        {
+            case "encounter":
+                <PatientEncounter PatientId="Patient.Id" />
+                break;
+            case "chart":
+            case "summary":
+                <PatientSummary PatientId="Patient.Id" />
+                break;
+            case "problems":
+                <PatientProblems PatientId="Patient.Id" />
+                break;
+            case "medications":
+                <PatientMedications PatientId="Patient.Id" />
+                break;
+            case "allergies":
+                <PatientAllergies PatientId="Patient.Id" />
+                break;
+            case "history":
+                <PatientHistory PatientId="Patient.Id" />
+                break;
+            case "labs":
+                <PatientLabs PatientId="Patient.Id" />
+                break;
+            case "imaging":
+                <PatientImaging PatientId="Patient.Id" />
+                break;
+            case "vitals":
+                <PatientVitals PatientId="Patient.Id" />
+                break;
+            case "immunizations":
+                <PatientImmunizations PatientId="Patient.Id" />
+                break;
+            case "documents":
+                <PatientDocuments PatientId="Patient.Id" />
+                break;
+            case "notes":
+                <PatientNotes PatientId="Patient.Id" />
+                break;
+            case "careteam":
+                <PatientCareTeam PatientId="Patient.Id" />
+                break;
+            case "demographics":
+                <PatientDemographics Patient="Patient" />
+                break;
+            default:
+                <PatientEncounter PatientId="Patient.Id" />
+                break;
+        }
+    </div>
+</MudStack>
+
+@* Patient Sticky Note - positioned fixed *@
+<PatientStickyNoteCard @ref="_patientNoteCard" PatientId="Patient.Id" />
+
+@code {
+    private PatientStickyNoteCard? _patientNoteCard;
+    [Parameter, EditorRequired]
+    public Patient Patient { get; set; } = null!;
+
+    [Parameter]
+    public string? Tab { get; set; }
+
+    private int _activeTabIndex;
+    private bool _isSendingToGrok;
+    private string? _draggingTab;
+    private string? _dragOverTab;
+    private const string TabOrderStorageKey = "zebrahoof-chart-tab-order";
+
+    private record TabDefinition(string Key, string Label, string Icon);
+
+    private static readonly List<TabDefinition> _defaultTabs = new()
+    {
+        new("encounter", "Encounter", Icons.Material.Filled.MeetingRoom),
+        new("chart", "Summary", Icons.Material.Filled.Summarize),
+        new("problems", "Problems", Icons.Material.Filled.LocalHospital),
+        new("medications", "Medications", Icons.Material.Filled.Medication),
+        new("allergies", "Allergies", Icons.Material.Filled.Warning),
+        new("history", "History", Icons.Material.Filled.History),
+        new("labs", "Labs", Icons.Material.Filled.Science),
+        new("imaging", "Imaging", Icons.Material.Filled.Image),
+        new("vitals", "Vitals", Icons.Material.Filled.MonitorHeart),
+        new("immunizations", "Immunizations", Icons.Material.Filled.Vaccines),
+        new("documents", "Documents", Icons.Material.Filled.Description),
+        new("notes", "Notes", Icons.Material.Filled.Note),
+        new("careteam", "Care Team", Icons.Material.Filled.Groups),
+        new("demographics", "Demographics", Icons.Material.Filled.Person)
+    };
+
+    private List<TabDefinition> _orderedTabs = new(_defaultTabs);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await base.OnParametersSetAsync();
+        if (Patient != null)
+        {
+            await RefreshDocumentCountAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadTabOrderAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshDocumentCountAsync()
+    {
+        try
+        {
+            var count = await Db.Documents.CountAsync(d => d.PatientId == Patient.Id);
+            var grew = GrokSession.UpdateDocumentCount(Patient.Id, count);
+            if (grew)
+            {
+                // New documents uploaded - allow Send to Grok and Update Records again
+                GrokSession.ResetDocumentsSent(Patient.Id);
+                GrokSession.ResetRecordsUpdated(Patient.Id);
+            }
+        }
+        catch
+        {
+            // Ignore DB errors in UI
+        }
+    }
+
+    private async Task LoadTabOrderAsync()
+    {
+        try
+        {
+            var savedOrder = await JS.InvokeAsync<string?>("localStorage.getItem", TabOrderStorageKey);
+            if (!string.IsNullOrEmpty(savedOrder))
+            {
+                var tabKeys = System.Text.Json.JsonSerializer.Deserialize<List<string>>(savedOrder);
+                if (tabKeys != null && tabKeys.Count == _defaultTabs.Count)
+                {
+                    var reordered = new List<TabDefinition>();
+                    foreach (var key in tabKeys)
+                    {
+                        var tab = _defaultTabs.FirstOrDefault(t => t.Key == key);
+                        if (tab != null) reordered.Add(tab);
+                    }
+                    if (reordered.Count == _defaultTabs.Count)
+                        _orderedTabs = reordered;
+                }
+            }
+        }
+        catch { }
+    }
+
+    private async Task SaveTabOrderAsync()
+    {
+        try
+        {
+            var tabKeys = _orderedTabs.Select(t => t.Key).ToList();
+            var json = System.Text.Json.JsonSerializer.Serialize(tabKeys);
+            await JS.InvokeVoidAsync("localStorage.setItem", TabOrderStorageKey, json);
+        }
+        catch { }
+    }
+
+    private void HandleDragStart(string tabKey)
+    {
+        _draggingTab = tabKey;
+    }
+
+    private void HandleDragOver(string tabKey)
+    {
+        if (_draggingTab != null && _draggingTab != tabKey)
+        {
+            _dragOverTab = tabKey;
+        }
+    }
+
+    private async Task HandleDrop(string targetTabKey)
+    {
+        if (_draggingTab != null && _draggingTab != targetTabKey)
+        {
+            var draggedTab = _orderedTabs.FirstOrDefault(t => t.Key == _draggingTab);
+            var targetIndex = _orderedTabs.FindIndex(t => t.Key == targetTabKey);
+            
+            if (draggedTab != null && targetIndex >= 0)
+            {
+                _orderedTabs.Remove(draggedTab);
+                _orderedTabs.Insert(targetIndex, draggedTab);
+                await SaveTabOrderAsync();
+            }
+        }
+        _draggingTab = null;
+        _dragOverTab = null;
+    }
+
+    private void HandleDragEnd()
+    {
+        _draggingTab = null;
+        _dragOverTab = null;
+    }
+
+    protected override void OnParametersSet()
+    {
+        _activeTabIndex = (Tab?.ToLowerInvariant() ?? "encounter") switch
+        {
+            "encounter" => 0,
+            "chart" or "summary" => 1,
+            "problems" => 2,
+            "medications" => 3,
+            "allergies" => 4,
+            "history" => 5,
+            "labs" => 6,
+            "imaging" => 7,
+            "vitals" => 8,
+            "immunizations" => 9,
+            "documents" => 10,
+            "notes" => 11,
+            "careteam" => 12,
+            "demographics" => 13,
+            _ => 0
+        };
+    }
+
+    private void NavigateToTab(string tab)
+    {
+        Navigation.NavigateTo($"/patients/{Patient.Id}/{tab}");
+    }
+
+    private string GetCurrentTab() => Tab?.ToLowerInvariant() ?? "encounter";
+
+    private Variant GetButtonVariant(string tab)
+    {
+        var currentTab = GetCurrentTab();
+        if (tab == "chart" && (currentTab == "chart" || currentTab == "summary"))
+            return Variant.Filled;
+        return currentTab == tab ? Variant.Filled : Variant.Text;
+    }
+
+    private Color GetButtonColor(string tab)
+    {
+        var currentTab = GetCurrentTab();
+        if (tab == "chart" && (currentTab == "chart" || currentTab == "summary"))
+            return Color.Primary;
+        return currentTab == tab ? Color.Primary : Color.Default;
+    }
+
+    private async Task SendToGrokAsync()
+    {
+        if (_isSendingToGrok || GrokSession.HaveDocumentsBeenSent(Patient.Id)) return;
+
+        _isSendingToGrok = true;
+        try
+        {
+            var documents = await Db.Documents
+                .Where(d => d.PatientId == Patient.Id && !string.IsNullOrEmpty(d.ExtractedText))
+                .OrderByDescending(d => d.Date)
+                .ToListAsync();
+
+            var problems = await ClinicalDataService.GetProblemsByPatientAsync(Patient.Id);
+            var medications = await ClinicalDataService.GetMedicationsByPatientAsync(Patient.Id);
+            var allergies = await ClinicalDataService.GetAllergiesByPatientAsync(Patient.Id);
+            var latestVitals = await ClinicalDataService.GetLatestVitalsByPatientAsync(Patient.Id);
+            var recentLabs = await ClinicalDataService.GetRecentLabResultsByPatientAsync(Patient.Id, 10);
+            var immunizations = await ClinicalDataService.GetImmunizationsByPatientAsync(Patient.Id);
+
+            if (documents.Count == 0 && problems.Count == 0 && medications.Count == 0 && allergies.Count == 0)
+            {
+                NotificationService.ShowWarning("No documents or records available to send. Upload documents or add records first.");
+                return;
+            }
+
+            var payload = new System.Text.StringBuilder();
+
+            payload.AppendLine("=== PATIENT ===");
+            payload.AppendLine($"Name: {Patient.FullName}");
+            payload.AppendLine($"MRN: {Patient.MRN}");
+            payload.AppendLine($"DOB: {Patient.DateOfBirth:yyyy-MM-dd}");
+            payload.AppendLine($"Sex: {Patient.Sex}");
+            payload.AppendLine();
+
+            payload.AppendLine("=== CURRENT LOCAL RECORDS ===");
+
+            payload.AppendLine($"-- Problems ({problems.Count}) --");
+            foreach (var p in problems)
+            {
+                payload.AppendLine($"- {p.Name} | Status: {p.Status} | Onset: {p.OnsetDate:yyyy-MM-dd} | ICD: {p.IcdCode}");
+            }
+            payload.AppendLine();
+
+            payload.AppendLine($"-- Medications ({medications.Count}) --");
+            foreach (var m in medications)
+            {
+                payload.AppendLine($"- {m.Name} {m.Dose} {m.Route} {m.Frequency} | Status: {m.Status} | Start: {m.StartDate:yyyy-MM-dd}");
+            }
+            payload.AppendLine();
+
+            payload.AppendLine($"-- Allergies ({allergies.Count}) --");
+            foreach (var a in allergies)
+            {
+                payload.AppendLine($"- {a.Allergen} | Reaction: {a.Reaction} | Severity: {a.Severity} | Status: {a.Status}");
+            }
+            payload.AppendLine();
+
+            if (latestVitals != null)
+            {
+                payload.AppendLine("-- Latest Vitals --");
+                payload.AppendLine($"Date: {latestVitals.RecordedAt:yyyy-MM-dd HH:mm} | BP: {latestVitals.SystolicBP}/{latestVitals.DiastolicBP} | HR: {latestVitals.HeartRate} | Temp: {latestVitals.Temperature} | SpO2: {latestVitals.OxygenSaturation} | Wt: {latestVitals.Weight} | Ht: {latestVitals.Height}");
+                payload.AppendLine();
+            }
+
+            payload.AppendLine($"-- Recent Lab Results ({recentLabs.Count}) --");
+            foreach (var l in recentLabs)
+            {
+                payload.AppendLine($"- {l.TestName}: {l.Value} {l.Units} (ref {l.ReferenceRange}) | {l.Status} | Collected {l.CollectedAt:yyyy-MM-dd}");
+            }
+            payload.AppendLine();
+
+            payload.AppendLine($"-- Immunizations ({immunizations.Count}) --");
+            foreach (var i in immunizations)
+            {
+                payload.AppendLine($"- {i.VaccineName} | Administered: {i.AdministeredDate:yyyy-MM-dd}");
+            }
+            payload.AppendLine();
+
+            payload.AppendLine("=== UPLOADED DOCUMENTS ===");
+            if (documents.Count == 0)
+            {
+                payload.AppendLine("(none)");
+            }
+            else
+            {
+                foreach (var doc in documents)
+                {
+                    payload.AppendLine($"--- DOCUMENT: {doc.Name} | Category: {doc.Category} | Date: {doc.Date:yyyy-MM-dd} ---");
+                    payload.AppendLine(doc.ExtractedText);
+                    payload.AppendLine();
+                }
+            }
+
+            var prompt = $"You are reviewing a patient chart. The following payload contains {Patient.FullName}'s current local EMR records followed by the full text of {documents.Count} uploaded document(s). Acknowledge receipt, then provide a brief (3-5 sentence) summary noting any discrepancies between the uploaded documents and the current local records (e.g., medications in a document but not in the active list, new diagnoses, new allergies).";
+            var response = await GrokApiService.ProcessDocumentAsync(payload.ToString(), prompt);
+
+            GrokSession.MarkDocumentsSent(Patient.Id);
+            NotificationService.ShowSuccess($"Grok received {documents.Count} document(s) and current records ({problems.Count} problems, {medications.Count} meds, {allergies.Count} allergies).");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.ShowError($"Failed to send to Grok: {ex.Message}");
+        }
+        finally
+        {
+            _isSendingToGrok = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task TogglePatientNote()
+    {
+        Console.WriteLine($"TogglePatientNote called. _patientNoteCard is {(_patientNoteCard != null ? "not null" : "null")}");
+        if (_patientNoteCard != null)
+        {
+            await _patientNoteCard.CreateOrShowNote();
+        }
+        else
+        {
+            Console.WriteLine("ERROR: _patientNoteCard reference is null!");
+        }
+    }
+}

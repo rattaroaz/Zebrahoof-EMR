@@ -1,0 +1,288 @@
+@page "/profile"
+@inject AuthStateService AuthState
+
+<PageTitle>Profile - Zebrahoof EMR</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">My Profile</MudText>
+
+@if (AuthState.CurrentUser != null)
+{
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="2">
+                <MudCardContent Class="d-flex flex-column align-center pa-6">
+                    <MudAvatar Size="Size.Large" Color="Color.Primary" Style="width: 100px; height: 100px; font-size: 2.5rem;">
+                        @AuthState.CurrentUser.FullName.Split(' ').FirstOrDefault()?[..1]@AuthState.CurrentUser.FullName.Split(' ').LastOrDefault()?[..1]
+                    </MudAvatar>
+                    <MudText Typo="Typo.h5" Class="mt-4">@AuthState.CurrentUser.FullName</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@AuthState.CurrentUser.Email</MudText>
+                    <MudChip T="string" Color="Color.Primary" Class="mt-2">@AuthState.CurrentUser.Role</MudChip>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        
+        <MudItem xs="12" md="8">
+            <!-- Basic Profile Information -->
+            <MudCard Elevation="2" Class="mb-4">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Profile Information</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField Value="@AuthState.CurrentUser.FullName" Label="Full Name" Variant="Variant.Outlined" ReadOnly="true" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField Value="@AuthState.CurrentUser.Username" Label="Username" Variant="Variant.Outlined" ReadOnly="true" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField Value="@AuthState.CurrentUser.Email" Label="Email" Variant="Variant.Outlined" ReadOnly="true" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField Value="@AuthState.CurrentUser.Role.ToString()" Label="Role" Variant="Variant.Outlined" ReadOnly="true" />
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit">
+                        Edit Profile
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Lock">
+                        Change Password
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+
+            <!-- 1. Professional Information -->
+            <MudCard Elevation="2" Class="mb-4">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Professional Information</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Work-related details and credentials</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.EmployeeId" Label="Employee ID" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudSelect @bind-Value="profileData.Department" Label="Department" Variant="Variant.Outlined" T="string">
+                                <MudSelectItem Value="@("Clinical")">Clinical</MudSelectItem>
+                                <MudSelectItem Value="@("Administration")">Administration</MudSelectItem>
+                                <MudSelectItem Value="@("Operations")">Operations</MudSelectItem>
+                                <MudSelectItem Value="@("Billing")">Billing</MudSelectItem>
+                                <MudSelectItem Value="@("Laboratory")">Laboratory</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.LicenseNumber" Label="License Number" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.Specialization" Label="Specialization" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.NpiNumber" Label="NPI Number" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.OfficeLocation" Label="Office/Room Number" Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+
+            <!-- 2. Contact Details -->
+            <MudCard Elevation="2" Class="mb-4">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Contact Details</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Phone and contact information</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.WorkPhone" Label="Work Phone" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.MobilePhone" Label="Mobile Phone" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.PagerNumber" Label="Pager Number" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.WorkHours" Label="Work Hours" Variant="Variant.Outlined" />
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+
+            <!-- 4. Security Settings -->
+            <MudCard Elevation="2" Class="mb-4">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Security Settings</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Account security and access control</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="12">
+                            <MudSwitch @bind-Value="profileData.TwoFactorEnabled" T="bool" Label="Two-Factor Authentication" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Add an extra layer of security to your account</MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudSelect @bind-Value="profileData.SessionTimeout" Label="Session Timeout" Variant="Variant.Outlined" T="string">
+                                <MudSelectItem Value="@("15 minutes")">15 minutes</MudSelectItem>
+                                <MudSelectItem Value="@("30 minutes")">30 minutes</MudSelectItem>
+                                <MudSelectItem Value="@("1 hour")">1 hour</MudSelectItem>
+                                <MudSelectItem Value="@("2 hours")">2 hours</MudSelectItem>
+                                <MudSelectItem Value="@("4 hours")">4 hours</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.History" Class="mt-2">
+                                View Login History
+                            </MudButton>
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Devices" Class="mt-2">
+                                Manage Active Sessions
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+
+            <!-- 5. Clinical Settings (for medical staff) -->
+            @if (IsClinicalRole(AuthState.CurrentUser.Role))
+            {
+                <MudCard Elevation="2" Class="mb-4">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">Clinical Settings</MudText>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary">Medical workflow preferences</MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudGrid>
+                            <MudItem xs="12" sm="6">
+                                <MudTextField @bind-Value="profileData.DefaultPharmacy" Label="Default Pharmacy" Variant="Variant.Outlined" />
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect @bind-Value="profileData.DosageUnits" Label="Default Dosage Units" Variant="Variant.Outlined" T="string">
+                                    <MudSelectItem Value="@("mg")">mg</MudSelectItem>
+                                    <MudSelectItem Value="@("mcg")">mcg</MudSelectItem>
+                                    <MudSelectItem Value="@("g")">g</MudSelectItem>
+                                    <MudSelectItem Value="@("mL")">mL</MudSelectItem>
+                                    <MudSelectItem Value="@("units")">units</MudSelectItem>
+                                </MudSelect>
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="profileData.NoteTemplates" Label="Preferred Note Templates" Variant="Variant.Outlined" Lines="3" />
+                            </MudItem>
+                            <MudItem xs="12">
+                                <MudSwitch @bind-Value="profileData.ElectronicSignature" T="bool" Label="Enable Electronic Signature" />
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">Sign orders and prescriptions electronically</MudText>
+                            </MudItem>
+                        </MudGrid>
+                    </MudCardContent>
+                </MudCard>
+            }
+
+            <!-- 6. Compliance & Documentation -->
+            <MudCard Elevation="2" Class="mb-4">
+                <MudCardHeader>
+                    <CardHeaderContent>
+                        <MudText Typo="Typo.h6">Compliance & Documentation</MudText>
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Training, certifications, and acknowledgments</MudText>
+                    </CardHeaderContent>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.LastHipaaTraining" Label="Last HIPAA Training" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.SecurityTraining" Label="Last Security Training" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.BlsExpiry" Label="BLS Expiry" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.AclsExpiry" Label="ACLS Expiry" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="profileData.BackgroundCheckDate" Label="Background Check Date" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Description" Class="mt-2">
+                                View Acknowledgment Forms
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private ProfileData profileData = new();
+
+    protected override void OnInitialized()
+    {
+        // Initialize with default values
+        profileData = new ProfileData
+        {
+            EmployeeId = "EMP" + AuthState.CurrentUser?.Id.ToString().PadLeft(5, '0'),
+            Department = "Clinical",
+            SessionTimeout = "30 minutes",
+            TwoFactorEnabled = false,
+            ElectronicSignature = true,
+            DosageUnits = "mg"
+        };
+    }
+
+    private bool IsClinicalRole(UserRole role)
+    {
+        return role == UserRole.Physician || role == UserRole.Nurse || 
+               role == UserRole.MedicalAssistant || role == UserRole.LabTechnician;
+    }
+
+    public class ProfileData
+    {
+        // Professional Information
+        public string EmployeeId { get; set; } = string.Empty;
+        public string Department { get; set; } = string.Empty;
+        public string LicenseNumber { get; set; } = string.Empty;
+        public string Specialization { get; set; } = string.Empty;
+        public string NpiNumber { get; set; } = string.Empty;
+        public string OfficeLocation { get; set; } = string.Empty;
+
+        // Contact Details
+        public string WorkPhone { get; set; } = string.Empty;
+        public string MobilePhone { get; set; } = string.Empty;
+        public string PagerNumber { get; set; } = string.Empty;
+        public string WorkHours { get; set; } = string.Empty;
+
+        // Security Settings
+        public bool TwoFactorEnabled { get; set; }
+        public string SessionTimeout { get; set; } = string.Empty;
+
+        // Clinical Settings
+        public string DefaultPharmacy { get; set; } = string.Empty;
+        public string DosageUnits { get; set; } = string.Empty;
+        public string NoteTemplates { get; set; } = string.Empty;
+        public bool ElectronicSignature { get; set; }
+
+        // Compliance & Documentation
+        public string LastHipaaTraining { get; set; } = string.Empty;
+        public string SecurityTraining { get; set; } = string.Empty;
+        public string BlsExpiry { get; set; } = string.Empty;
+        public string AclsExpiry { get; set; } = string.Empty;
+        public string BackgroundCheckDate { get; set; } = string.Empty;
+    }
+}

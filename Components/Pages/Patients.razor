@@ -1,0 +1,296 @@
+@page "/patients"
+@page "/patients/{PatientId:int}"
+@page "/patients/{PatientId:int}/{Tab}"
+@inject MockPatientService PatientService
+@inject MockClinicalDataService ClinicalDataService
+@inject AppStateService AppState
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+
+<PageTitle>Patients - Zebrahoof EMR</PageTitle>
+
+@if (PatientId.HasValue && _selectedPatient != null)
+{
+    @* Patient Chart - Phases 8-10 *@
+    <PatientChartLayout Patient="_selectedPatient" Tab="@Tab" />
+}
+else if (PatientId.HasValue && _selectedPatient == null && !_isLoading)
+{
+    <MudAlert Severity="Severity.Error">Patient not found.</MudAlert>
+    <MudButton StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/patients"))" Class="mt-4">
+        Back to Patient List
+    </MudButton>
+}
+else
+{
+    @* Patient Search/List View *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+        <MudText Typo="Typo.h4">Patients</MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd" OnClick="@OpenNewPatientDialog">
+            New Patient
+        </MudButton>
+    </MudStack>
+
+    <MudCard Elevation="2" Class="mb-4">
+        <MudCardContent>
+            @* Search Bar *@
+            <MudStack Row="true" Spacing="2" Class="mb-4">
+                <MudTextField @bind-Value="_searchTerm" 
+                              Label="Search by name, MRN, DOB, phone..." 
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              Immediate="true"
+                              DebounceInterval="300"
+                              OnDebounceIntervalElapsed="@SearchPatients"
+                              Style="flex: 1;" />
+                <MudButton Variant="@(_showFilters ? Variant.Filled : Variant.Outlined)" 
+                           Color="@(_showFilters ? Color.Primary : Color.Default)"
+                           StartIcon="@Icons.Material.Filled.FilterList"
+                           OnClick="@(() => _showFilters = !_showFilters)">
+                    Filters @(_activeFilterCount > 0 ? $"({_activeFilterCount})" : "")
+                </MudButton>
+            </MudStack>
+
+            @* Advanced Filters *@
+            @if (_showFilters)
+            {
+                <MudPaper Elevation="0" Class="pa-4 mb-4 mud-background">
+                    <MudGrid>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudSelect T="string" Label="Provider" @bind-Value="_filterProvider" Variant="Variant.Outlined" Clearable="true">
+                                <MudSelectItem Value="@("Dr. Sarah Smith")">Dr. Sarah Smith</MudSelectItem>
+                                <MudSelectItem Value="@("Dr. Michael Chen")">Dr. Michael Chen</MudSelectItem>
+                                <MudSelectItem Value="@("Dr. Emily Wilson")">Dr. Emily Wilson</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudSelect T="string" Label="Status" @bind-Value="_filterStatus" Variant="Variant.Outlined" Clearable="true">
+                                <MudSelectItem Value="@("Active")">Active</MudSelectItem>
+                                <MudSelectItem Value="@("Inactive")">Inactive</MudSelectItem>
+                                <MudSelectItem Value="@("Deceased")">Deceased</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudSelect T="string" Label="Last Seen" @bind-Value="_filterLastSeen" Variant="Variant.Outlined" Clearable="true">
+                                <MudSelectItem Value="@("7")">Last 7 days</MudSelectItem>
+                                <MudSelectItem Value="@("30")">Last 30 days</MudSelectItem>
+                                <MudSelectItem Value="@("90")">Last 90 days</MudSelectItem>
+                                <MudSelectItem Value="@("365")">Last year</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="6" md="3">
+                            <MudSelect T="string" Label="Sex" @bind-Value="_filterSex" Variant="Variant.Outlined" Clearable="true">
+                                <MudSelectItem Value="@("Male")">Male</MudSelectItem>
+                                <MudSelectItem Value="@("Female")">Female</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                    </MudGrid>
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-3">
+                        <MudButton Variant="Variant.Text" OnClick="@ClearFilters">Clear All</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@ApplyFilters">Apply Filters</MudButton>
+                    </MudStack>
+                </MudPaper>
+            }
+
+            @* Results Table with Paging *@
+            <MudTable ServerData="@(new Func<TableState, CancellationToken, Task<TableData<Patient>>>(LoadPatientData))"
+                      @ref="_table"
+                      Hover="true" 
+                      Striped="true" 
+                      Dense="true" 
+                      Loading="@_isLoading"
+                      RowsPerPage="10">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel T="Patient" SortLabel="name">Name</MudTableSortLabel></MudTh>
+                    <MudTh>MRN</MudTh>
+                    <MudTh><MudTableSortLabel T="Patient" SortLabel="dob">DOB</MudTableSortLabel></MudTh>
+                    <MudTh>Age</MudTh>
+                    <MudTh>Sex</MudTh>
+                    <MudTh>Phone</MudTh>
+                    <MudTh>Primary Provider</MudTh>
+                    <MudTh><MudTableSortLabel T="Patient" SortLabel="lastvisit">Last Visit</MudTableSortLabel></MudTh>
+                    <MudTh>Alerts</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">
+                        <MudLink Href="@($"/patients/{context.Id}/chart")">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudAvatar Size="Size.Small" Color="Color.Primary">@context.FirstName[0]@context.LastName[0]</MudAvatar>
+                                <span>@context.FullName</span>
+                            </MudStack>
+                        </MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="MRN"><MudText Typo="Typo.body2" Class="mud-text-secondary">@context.MRN</MudText></MudTd>
+                    <MudTd DataLabel="DOB">@context.DateOfBirth.ToString("MM/dd/yyyy")</MudTd>
+                    <MudTd DataLabel="Age">@context.Age</MudTd>
+                    <MudTd DataLabel="Sex">@context.Sex</MudTd>
+                    <MudTd DataLabel="Phone">@(context.Phone ?? "—")</MudTd>
+                    <MudTd DataLabel="Provider">@context.PrimaryProvider</MudTd>
+                    <MudTd DataLabel="Last Visit">@(context.LastVisit?.ToString("MM/dd/yyyy") ?? "Never")</MudTd>
+                    <MudTd DataLabel="Alerts">
+                        @if (context.Allergies.Any())
+                        {
+                            <MudTooltip Text="@string.Join(", ", context.Allergies)">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Warning">
+                                    @context.Allergies.Count
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                        @if (context.Alerts.Any())
+                        {
+                            <MudTooltip Text="@string.Join(", ", context.Alerts)">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Info">
+                                    @context.Alerts.Count
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                    </MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Href="@($"/patients/{context.Id}/chart")" title="View Chart" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Href="@($"/patients/{context.Id}/demographics")" title="Edit Demographics" />
+                        <MudIconButton Icon="@Icons.Material.Filled.EventAvailable" Size="Size.Small" Href="/schedule" title="Schedule Appointment" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Class="pa-4">No patients found matching your search criteria.</MudText>
+                </NoRecordsContent>
+                <LoadingContent>
+                    <MudText Class="pa-4">Loading patients...</MudText>
+                </LoadingContent>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 5, 10, 25, 50 }" />
+                </PagerContent>
+            </MudTable>
+        </MudCardContent>
+    </MudCard>
+}
+
+@code {
+    [Parameter]
+    public int? PatientId { get; set; }
+
+    [Parameter]
+    public string? Tab { get; set; }
+
+    private MudTable<Patient>? _table;
+    private List<Patient> _patients = new();
+    private Patient? _selectedPatient;
+    private string _searchTerm = string.Empty;
+    private bool _isLoading = true;
+    
+    // Filter state
+    private bool _showFilters = false;
+    private string? _filterProvider;
+    private string? _filterStatus;
+    private string? _filterLastSeen;
+    private string? _filterSex;
+    
+    private int _activeFilterCount => new[] { _filterProvider, _filterStatus, _filterLastSeen, _filterSex }.Count(f => !string.IsNullOrEmpty(f));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (PatientId.HasValue)
+        {
+            _isLoading = true;
+            _selectedPatient = await PatientService.GetPatientByIdAsync(PatientId.Value);
+            if (_selectedPatient != null)
+            {
+                AppState.SelectPatient(_selectedPatient);
+            }
+            _isLoading = false;
+        }
+        else
+        {
+            AppState.SelectPatient(null);
+            _selectedPatient = null;
+        }
+    }
+
+    private async Task<TableData<Patient>> LoadPatientData(TableState state, CancellationToken cancellationToken)
+    {
+        _isLoading = true;
+        
+        // Get all patients (in real app, this would be a server query with pagination)
+        var patients = string.IsNullOrWhiteSpace(_searchTerm)
+            ? await PatientService.GetAllPatientsAsync()
+            : await PatientService.SearchPatientsAsync(_searchTerm);
+
+        // Apply filters
+        if (!string.IsNullOrEmpty(_filterProvider))
+            patients = patients.Where(p => p.PrimaryProvider == _filterProvider).ToList();
+        
+        if (!string.IsNullOrEmpty(_filterSex))
+            patients = patients.Where(p => p.Sex == _filterSex).ToList();
+        
+        if (!string.IsNullOrEmpty(_filterLastSeen) && int.TryParse(_filterLastSeen, out var days))
+            patients = patients.Where(p => p.LastVisit.HasValue && p.LastVisit.Value >= DateTime.Today.AddDays(-days)).ToList();
+
+        // Apply sorting
+        patients = state.SortLabel switch
+        {
+            "name" => state.SortDirection == SortDirection.Ascending 
+                ? patients.OrderBy(p => p.FullName).ToList() 
+                : patients.OrderByDescending(p => p.FullName).ToList(),
+            "dob" => state.SortDirection == SortDirection.Ascending 
+                ? patients.OrderBy(p => p.DateOfBirth).ToList() 
+                : patients.OrderByDescending(p => p.DateOfBirth).ToList(),
+            "lastvisit" => state.SortDirection == SortDirection.Ascending 
+                ? patients.OrderBy(p => p.LastVisit).ToList() 
+                : patients.OrderByDescending(p => p.LastVisit).ToList(),
+            _ => patients.OrderBy(p => p.FullName).ToList()
+        };
+
+        var totalItems = patients.Count;
+        var pagedData = patients.Skip(state.Page * state.PageSize).Take(state.PageSize).ToList();
+
+        _isLoading = false;
+        return new TableData<Patient> { TotalItems = totalItems, Items = pagedData };
+    }
+
+    private async Task SearchPatients()
+    {
+        if (_table != null)
+            await _table.ReloadServerData();
+    }
+
+    private async Task ApplyFilters()
+    {
+        if (_table != null)
+            await _table.ReloadServerData();
+    }
+
+    private async Task ClearFilters()
+    {
+        _filterProvider = null;
+        _filterStatus = null;
+        _filterLastSeen = null;
+        _filterSex = null;
+        if (_table != null)
+            await _table.ReloadServerData();
+    }
+
+    private async Task OpenNewPatientDialog()
+    {
+        var options = new DialogOptions 
+        { 
+            MaxWidth = MaxWidth.Medium, 
+            FullWidth = true,
+            CloseOnEscapeKey = true 
+        };
+        
+        var dialog = await DialogService.ShowAsync<NewPatientDialog>("New Patient", options);
+        var result = await dialog.Result;
+        
+        if (result != null && !result.Canceled && result.Data is Patient newPatient)
+        {
+            // Refresh the table to show the new patient
+            if (_table != null)
+                await _table.ReloadServerData();
+            
+            // Navigate to the new patient's chart
+            Navigation.NavigateTo($"/patients/{newPatient.Id}/chart");
+        }
+    }
+}

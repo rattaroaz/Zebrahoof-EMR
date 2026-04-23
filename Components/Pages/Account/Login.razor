@@ -1,0 +1,114 @@
+@page "/login"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@inject NavigationManager Navigation
+
+<PageTitle>Login - Zebrahoof EMR</PageTitle>
+
+<MudCard Elevation="4" Class="pa-4" Style="width: 100%; max-width: 400px;">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <div class="d-flex flex-column align-center">
+                <MudImage Src="images/logo.svg" Alt="Zebrahoof EMR" Height="48" Class="mb-2" />
+                <MudText Typo="Typo.h5">Sign In</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Welcome back to Zebrahoof EMR</MudText>
+            </div>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (!string.IsNullOrEmpty(_infoMessage))
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4">@_infoMessage</MudAlert>
+        }
+
+        @if (!string.IsNullOrEmpty(_errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Class="mb-4">@_errorMessage</MudAlert>
+        }
+
+        <form method="post" action="/account/login">
+            <input type="hidden" name="ReturnUrl" value="@ReturnUrlSafe" />
+            
+            <div class="mb-4">
+                <label for="Username" style="display: block; margin-bottom: 4px; font-size: 0.875rem; color: #616161;">Username or Email</label>
+                <input type="text" 
+                       id="Username"
+                       name="Username" 
+                       style="width: 100%; padding: 12px; border: 1px solid #bdbdbd; border-radius: 4px; font-size: 1rem; box-sizing: border-box;"
+                       autocomplete="username"
+                       required />
+            </div>
+            
+            <div class="mb-4 position-relative">
+                <label for="Password" style="display: block; margin-bottom: 4px; font-size: 0.875rem; color: #616161;">Password</label>
+                <div style="position: relative;">
+                    <input type="@(_showPassword ? "text" : "password")" 
+                           id="Password"
+                           name="Password" 
+                           style="width: 100%; padding: 12px 44px 12px 12px; border: 1px solid #bdbdbd; border-radius: 4px; font-size: 1rem; box-sizing: border-box;"
+                           autocomplete="current-password"
+                           required />
+                    <MudIconButton ButtonType="ButtonType.Button"
+                                   Icon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                   OnClick="@TogglePasswordVisibility"
+                                   Color="Color.Default"
+                                   Class="password-toggle-icon"
+                                   Style="position:absolute; top:50%; right:8px; transform:translateY(-50%); padding:4px;" />
+                </div>
+            </div>
+            
+            <div class="d-flex align-center mb-4">
+                <input type="checkbox" name="RememberMe" value="true" id="rememberMe" style="width: 18px; height: 18px;" />
+                <label for="rememberMe" class="mud-typography mud-typography-body1 ml-2">Remember me</label>
+            </div>
+
+            <MudButton ButtonType="ButtonType.Submit" 
+                       Variant="Variant.Filled" 
+                       Color="Color.Primary" 
+                       FullWidth="true"
+                       Class="mb-2">
+                Sign In
+            </MudButton>
+        </form>
+        
+        <MudDivider Class="my-4" />
+        
+        <div class="d-flex justify-space-between">
+            <MudLink Href="/forgot-password" Typo="Typo.body2">Forgot password?</MudLink>
+            <MudLink Href="/register-patient" Typo="Typo.body2">Patient registration</MudLink>
+        </div>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+    [SupplyParameterFromQuery]
+    private string? Error { get; set; }
+    [SupplyParameterFromQuery]
+    private string? Logout { get; set; }
+
+    private bool _showPassword;
+    private string? _errorMessage;
+    private string? _infoMessage;
+
+    private string ReturnUrlSafe => string.IsNullOrWhiteSpace(ReturnUrl) ? "/" : ReturnUrl!;
+
+    protected override void OnParametersSet()
+    {
+        _errorMessage = Error switch
+        {
+            "invalid" => "Invalid username or password.",
+            "inactive" => "This account has been deactivated. Please contact your administrator.",
+            "locked" => "Account locked. Too many failed attempts. Please try again in 15 minutes.",
+            _ => null
+        };
+
+        _infoMessage = Logout == "success" ? "You have been signed out." : null;
+    }
+
+    private void TogglePasswordVisibility()
+    {
+        _showPassword = !_showPassword;
+    }
+}

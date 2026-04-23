@@ -1,0 +1,56 @@
+@using Zebrahoof_EMR.Models
+
+@if (Scores.Count == 0)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary">No risk scores calculated.</MudText>
+}
+else
+{
+    <MudStack Spacing="2">
+        @foreach (var score in Scores)
+        {
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudStack Spacing="1">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.subtitle1"><strong>@score.Name</strong></MudText>
+                        <MudChip T="string" Color="@GetRiskColor(score.RiskLevel)" Size="Size.Small" Variant="Variant.Filled">
+                            @score.RiskLevel
+                        </MudChip>
+                    </MudStack>
+                    <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.h5" Color="@GetRiskColor(score.RiskLevel)">
+                            @score.Score
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @score.Scale
+                        </MudText>
+                    </MudStack>
+                    @if (!string.IsNullOrWhiteSpace(score.Description))
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">@score.Description</MudText>
+                    }
+                    <MudText Typo="Typo.caption" Color="Color.Tertiary">
+                        Calculated: @score.CalculatedAt.ToString("MMM dd, yyyy")
+                    </MudText>
+                </MudStack>
+            </MudPaper>
+        }
+    </MudStack>
+}
+
+@code {
+    [Parameter]
+    public List<RiskScoreEntry> Scores { get; set; } = new();
+
+    private Color GetRiskColor(string riskLevel)
+    {
+        var level = riskLevel.ToLowerInvariant();
+        if (level.Contains("high") || level.Contains("severe"))
+            return Color.Error;
+        if (level.Contains("moderate") || level.Contains("stage 3"))
+            return Color.Warning;
+        if (level.Contains("low") || level.Contains("mild"))
+            return Color.Success;
+        return Color.Default;
+    }
+}

@@ -1,0 +1,136 @@
+@page "/auth-debug"
+@attribute [Authorize]
+@inject AuthStateService AuthState
+@inject UserManager<ApplicationUser> UserManager
+@inject UserMappingService UserMappingService
+@inject IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Auth Debug - Zebrahoof EMR</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-4">
+    <MudCard Elevation="2">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h5">Authentication Debug Information</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Current authentication and role information</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudStack Spacing="4">
+                <MudPaper Elevation="1" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">AuthStateService Current User</MudText>
+                    @if (AuthState.CurrentUser != null)
+                    {
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body2"><strong>ID:</strong> @AuthState.CurrentUser.Id</MudText>
+                            <MudText Typo="Typo.body2"><strong>Username:</strong> @AuthState.CurrentUser.Username</MudText>
+                            <MudText Typo="Typo.body2"><strong>Full Name:</strong> @AuthState.CurrentUser.FullName</MudText>
+                            <MudText Typo="Typo.body2"><strong>Email:</strong> @AuthState.CurrentUser.Email</MudText>
+                            <MudText Typo="Typo.body2"><strong>Role:</strong> @AuthState.CurrentUser.Role</MudText>
+                            <MudText Typo="Typo.body2"><strong>Active:</strong> @(AuthState.CurrentUser.IsActive ? "Yes" : "No")</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Error">No current user in AuthStateService</MudText>
+                    }
+                </MudPaper>
+
+                <MudPaper Elevation="1" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">ASP.NET Identity User</MudText>
+                    @if (identityUser != null)
+                    {
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body2"><strong>ID:</strong> @identityUser.Id</MudText>
+                            <MudText Typo="Typo.body2"><strong>Username:</strong> @identityUser.UserName</MudText>
+                            <MudText Typo="Typo.body2"><strong>Email:</strong> @identityUser.Email</MudText>
+                            <MudText Typo="Typo.body2"><strong>Display Name:</strong> @identityUser.DisplayName</MudText>
+                            <MudText Typo="Typo.body2"><strong>First Name:</strong> @identityUser.FirstName</MudText>
+                            <MudText Typo="Typo.body2"><strong>Last Name:</strong> @identityUser.LastName</MudText>
+                            <MudText Typo="Typo.body2"><strong>Active:</strong> @(identityUser.IsActive ? "Yes" : "No")</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Error">No ASP.NET Identity user found</MudText>
+                    }
+                </MudPaper>
+
+                <MudPaper Elevation="1" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">ASP.NET Identity Roles</MudText>
+                    @if (identityRoles != null && identityRoles.Any())
+                    {
+                        <MudStack Spacing="1">
+                            @foreach (var role in identityRoles)
+                            {
+                                <MudChip T="string" Color="Color.Secondary">@role</MudChip>
+                            }
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Error">No roles found</MudText>
+                    }
+                </MudPaper>
+
+                <MudPaper Elevation="1" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">User Mapping Test</MudText>
+                    @if (mappedUser != null)
+                    {
+                        <MudStack Spacing="1">
+                            <MudText Typo="Typo.body2"><strong>Mapped Role:</strong> @mappedUser.Role</MudText>
+                            <MudText Typo="Typo.body2"><strong>Mapped Name:</strong> @mappedUser.FullName</MudText>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Error">User mapping failed</MudText>
+                    }
+                </MudPaper>
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RefreshData">
+                    Refresh Data
+                </MudButton>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>
+
+@code {
+    private ApplicationUser? identityUser;
+    private IList<string>? identityRoles;
+    private User? mappedUser;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshData();
+    }
+
+    private async Task RefreshData()
+    {
+        var httpContext = HttpContextAccessor.HttpContext;
+        if (httpContext != null)
+        {
+            var user = await UserManager.GetUserAsync(httpContext.User);
+            if (user != null)
+            {
+                identityUser = user;
+                identityRoles = await UserManager.GetRolesAsync(user);
+                mappedUser = await UserMappingService.MapApplicationUserToUser(user);
+            }
+            else
+            {
+                identityUser = null;
+                identityRoles = null;
+                mappedUser = null;
+            }
+        }
+        else
+        {
+            identityUser = null;
+            identityRoles = null;
+            mappedUser = null;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+}

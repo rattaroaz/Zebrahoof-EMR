@@ -1,0 +1,94 @@
+@inject MockClinicalDataService ClinicalDataService
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Laboratory Results</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" Class="mr-2">
+                Order Labs
+            </MudButton>
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent Class="pa-0">
+        @if (_labResults.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Class="ma-4">No lab results on file</MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@_labResults" Hover="true" Dense="true" GroupBy="@_groupDefinition" GroupHeaderStyle="background-color: var(--mud-palette-background-grey);">
+                <HeaderContent>
+                    <MudTh>Test Name</MudTh>
+                    <MudTh>Result</MudTh>
+                    <MudTh>Units</MudTh>
+                    <MudTh>Reference Range</MudTh>
+                    <MudTh>Collected</MudTh>
+                    <MudTh>Status</MudTh>
+                </HeaderContent>
+                <GroupHeaderTemplate>
+                    <MudTh colspan="6">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Small" />
+                            <MudText Typo="Typo.subtitle2">@context.GroupName</MudText>
+                        </MudStack>
+                    </MudTh>
+                </GroupHeaderTemplate>
+                <RowTemplate>
+                    <MudTd DataLabel="Test">@context.TestName</MudTd>
+                    <MudTd DataLabel="Result">
+                        <MudText Color="@(context.IsCritical ? Color.Error : context.IsAbnormal ? Color.Warning : Color.Default)"
+                                 Style="@(context.IsCritical ? "font-weight: bold;" : "")">
+                            @context.Value
+                            @if (context.IsCritical)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.PriorityHigh" Size="Size.Small" Color="Color.Error" />
+                            }
+                            else if (context.IsAbnormal)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" />
+                            }
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Units">@(context.Units ?? "—")</MudTd>
+                    <MudTd DataLabel="Range">@(context.ReferenceRange ?? "—")</MudTd>
+                    <MudTd DataLabel="Collected">@context.CollectedAt.ToString("MM/dd/yyyy")</MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Class="pa-4">No lab results found</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    private List<LabResult> _labResults = new();
+    
+    private TableGroupDefinition<LabResult> _groupDefinition = new()
+    {
+        GroupName = "Panel",
+        Selector = (l) => l.PanelName ?? "Other"
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _labResults = await ClinicalDataService.GetLabResultsByPatientAsync(PatientId);
+    }
+
+    private Color GetStatusColor(LabResultStatus status) => status switch
+    {
+        LabResultStatus.Final => Color.Success,
+        LabResultStatus.Preliminary => Color.Warning,
+        LabResultStatus.Pending => Color.Info,
+        LabResultStatus.Corrected => Color.Secondary,
+        _ => Color.Default
+    };
+}

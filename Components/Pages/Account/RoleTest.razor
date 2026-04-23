@@ -1,0 +1,57 @@
+@page "/role-test"
+
+<PageTitle>Role Test - Zebrahoof EMR</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="pa-4">
+    <MudCard Elevation="2">
+        <MudCardHeader>
+            <CardHeaderContent>
+                <MudText Typo="Typo.h5">Role Mapping Test</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Test MA and Lab role mappings</MudText>
+            </CardHeaderContent>
+        </MudCardHeader>
+        <MudCardContent>
+            <MudStack Spacing="4">
+                <MudText Typo="Typo.h6">Supported Role Mappings:</MudText>
+                
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudText Typo="Typo.body1"><strong>MA</strong> → Medical Assistant</MudText>
+                </MudPaper>
+                
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudText Typo="Typo.body1"><strong>Medical Assistant</strong> → Medical Assistant</MudText>
+                </MudPaper>
+                
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudText Typo="Typo.body1"><strong>Lab</strong> → Lab Technician</MudText>
+                </MudPaper>
+                
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudText Typo="Typo.body1"><strong>Lab Technician</strong> → Lab Technician</MudText>
+                </MudPaper>
+                
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudText Typo="Typo.body1"><strong>Lab Tech</strong> → Lab Technician</MudText>
+                </MudPaper>
+                
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudText Typo="Typo.body1"><strong>Technician</strong> → Lab Technician</MudText>
+                </MudPaper>
+
+                <MudDivider Class="my-4" />
+                
+                <MudText Typo="Typo.h6">To test these roles:</MudText>
+                <MudText Typo="Typo.body2">
+                    1. Create users with "MA", "Medical Assistant", "Lab", or "Lab Technician" roles in the database<br/>
+                    2. Log in with these users<br/>
+                    3. Check the "Current Role" in the profile menu<br/>
+                    4. It should display "Medical Assistant" for MA roles and "Lab Technician" for Lab roles
+                </MudText>
+                
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/auth-debug">
+                    Go to Auth Debug Page
+                </MudButton>
+            </MudStack>
+        </MudCardContent>
+    </MudCard>
+</MudContainer>

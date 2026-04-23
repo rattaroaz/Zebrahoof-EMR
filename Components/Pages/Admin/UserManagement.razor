@@ -1,0 +1,237 @@
+@page "/admin/users"
+@using Zebrahoof_EMR.Models
+@inject MockClinicalDataService ClinicalDataService
+@inject ISnackbar Snackbar
+
+<PageTitle>User Management - Zebrahoof EMR</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <MudBreadcrumbs Items="_breadcrumbs" />
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
+               OnClick="OpenCreateDialog">
+        Add User
+    </MudButton>
+</MudStack>
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudIcon Icon="@Icons.Material.Filled.People" />
+                <MudText Typo="Typo.h6">System Users</MudText>
+            </MudStack>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudTextField T="string" @bind-Value="_searchText" Placeholder="Search users..." 
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Immediate="true" />
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent Class="pa-0">
+        <MudDataGrid T="SystemUser" Items="@FilteredUsers" Dense="true" Hover="true" Striped="true">
+            <Columns>
+                <PropertyColumn Property="x => x.FullName" Title="Name" />
+                <PropertyColumn Property="x => x.Username" Title="Username" />
+                <PropertyColumn Property="x => x.Email" Title="Email" />
+                <TemplateColumn Title="Role">
+                    <CellTemplate>
+                        <MudChip T="string" Size="Size.Small" Color="@GetRoleColor(context.Item.Role)">
+                            @context.Item.Role
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <PropertyColumn Property="x => x.Specialty" Title="Specialty" />
+                <PropertyColumn Property="x => x.DefaultLocationName" Title="Location" />
+                <TemplateColumn Title="Status">
+                    <CellTemplate>
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Item.Status)">
+                            @context.Item.Status
+                        </MudChip>
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Last Login">
+                    <CellTemplate>
+                        @if (context.Item.LastLoginAt.HasValue)
+                        {
+                            <MudText Typo="Typo.body2">@context.Item.LastLoginAt.Value.ToString("MM/dd/yy h:mm tt")</MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Never</MudText>
+                        }
+                    </CellTemplate>
+                </TemplateColumn>
+                <TemplateColumn Title="Actions" CellStyle="width: 120px;">
+                    <CellTemplate>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" 
+                                       OnClick="@(() => OpenEditDialog(context.Item))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.VpnKey" Size="Size.Small" 
+                                       OnClick="@(() => ResetPassword(context.Item))" />
+                    </CellTemplate>
+                </TemplateColumn>
+            </Columns>
+        </MudDataGrid>
+    </MudCardContent>
+</MudCard>
+
+<MudDialog @bind-Visible="_showDialog" Options="new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editingUser?.Id > 0 ? "Edit User" : "Create New User")</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_editingUser != null)
+        {
+            <MudStack Spacing="2">
+                <MudStack Row="true" Spacing="2">
+                    <MudTextField T="string" @bind-Value="_editingUser.FirstName" Label="First Name" 
+                                  Variant="Variant.Outlined" Required="true" />
+                    <MudTextField T="string" @bind-Value="_editingUser.LastName" Label="Last Name" 
+                                  Variant="Variant.Outlined" Required="true" />
+                </MudStack>
+                <MudTextField T="string" @bind-Value="_editingUser.Username" Label="Username" 
+                              Variant="Variant.Outlined" Required="true" />
+                <MudTextField T="string" @bind-Value="_editingUser.Email" Label="Email" 
+                              Variant="Variant.Outlined" Required="true" InputType="InputType.Email" />
+                <MudTextField T="string" @bind-Value="_editingUser.Phone" Label="Phone" 
+                              Variant="Variant.Outlined" />
+                <MudSelect T="UserRole" @bind-Value="_editingUser.Role" Label="Role" 
+                           Variant="Variant.Outlined" Required="true">
+                    @foreach (UserRole role in Enum.GetValues(typeof(UserRole)))
+                    {
+                        <MudSelectItem Value="@role">@role</MudSelectItem>
+                    }
+                </MudSelect>
+                @if (_editingUser.Role == UserRole.Physician)
+                {
+                    <MudTextField T="string" @bind-Value="_editingUser.Specialty" Label="Specialty" 
+                                  Variant="Variant.Outlined" />
+                    <MudTextField T="string" @bind-Value="_editingUser.NPI" Label="NPI" 
+                                  Variant="Variant.Outlined" />
+                }
+                <MudSelect T="int?" @bind-Value="_editingUser.DefaultLocationId" Label="Default Location" 
+                           Variant="Variant.Outlined">
+                    <MudSelectItem T="int?" Value="@((int?)null)">-- None --</MudSelectItem>
+                    @foreach (var loc in _locations)
+                    {
+                        <MudSelectItem T="int?" Value="@loc.Id">@loc.Name</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="UserStatus" @bind-Value="_editingUser.Status" Label="Status" 
+                           Variant="Variant.Outlined">
+                    @foreach (UserStatus status in Enum.GetValues(typeof(UserStatus)))
+                    {
+                        <MudSelectItem Value="@status">@status</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveUser">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<SystemUser> _users = new();
+    private List<Location> _locations = new();
+    private string _searchText = "";
+    private bool _showDialog;
+    private SystemUser? _editingUser;
+
+    private List<BreadcrumbItem> _breadcrumbs = new()
+    {
+        new("Admin", "/admin", icon: Icons.Material.Filled.AdminPanelSettings),
+        new("Users", "/admin/users", disabled: true)
+    };
+
+    private IEnumerable<SystemUser> FilteredUsers => string.IsNullOrWhiteSpace(_searchText)
+        ? _users
+        : _users.Where(u => u.FullName.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                            u.Username.Contains(_searchText, StringComparison.OrdinalIgnoreCase) ||
+                            u.Email.Contains(_searchText, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        _users = await ClinicalDataService.GetSystemUsersAsync();
+        _locations = await ClinicalDataService.GetLocationsAsync();
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingUser = new SystemUser();
+        _showDialog = true;
+    }
+
+    private void OpenEditDialog(SystemUser user)
+    {
+        _editingUser = new SystemUser
+        {
+            Id = user.Id,
+            Username = user.Username,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            Email = user.Email,
+            Phone = user.Phone,
+            Role = user.Role,
+            Specialty = user.Specialty,
+            NPI = user.NPI,
+            DefaultLocationId = user.DefaultLocationId,
+            DefaultLocationName = user.DefaultLocationName,
+            Status = user.Status
+        };
+        _showDialog = true;
+    }
+
+    private void CloseDialog()
+    {
+        _showDialog = false;
+        _editingUser = null;
+    }
+
+    private async Task SaveUser()
+    {
+        if (_editingUser == null) return;
+
+        var location = _locations.FirstOrDefault(l => l.Id == _editingUser.DefaultLocationId);
+        _editingUser.DefaultLocationName = location?.Name;
+
+        if (_editingUser.Id == 0)
+        {
+            await ClinicalDataService.CreateSystemUserAsync(_editingUser);
+            Snackbar.Add("User created successfully", Severity.Success);
+        }
+        else
+        {
+            await ClinicalDataService.UpdateSystemUserAsync(_editingUser);
+            Snackbar.Add("User updated successfully", Severity.Success);
+        }
+
+        _users = await ClinicalDataService.GetSystemUsersAsync();
+        CloseDialog();
+    }
+
+    private void ResetPassword(SystemUser user)
+    {
+        Snackbar.Add($"Password reset email sent to {user.Email}", Severity.Info);
+    }
+
+    private Color GetRoleColor(UserRole role) => role switch
+    {
+        UserRole.Admin => Color.Error,
+        UserRole.Physician => Color.Primary,
+        UserRole.Nurse => Color.Success,
+        UserRole.FrontDesk => Color.Info,
+        UserRole.Billing => Color.Warning,
+        _ => Color.Default
+    };
+
+    private Color GetStatusColor(UserStatus status) => status switch
+    {
+        UserStatus.Active => Color.Success,
+        UserStatus.Inactive => Color.Default,
+        UserStatus.Locked => Color.Error,
+        UserStatus.Pending => Color.Warning,
+        _ => Color.Default
+    };
+}

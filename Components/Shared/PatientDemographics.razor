@@ -1,0 +1,689 @@
+@using UglyToad.PdfPig
+@using System.IO
+@using System.Text.Json
+@using Zebrahoof_EMR.Services
+@using Zebrahoof_EMR.Data
+@using Microsoft.EntityFrameworkCore
+@inject MockClinicalDataService ClinicalDataService
+@inject NotificationService NotificationService
+@inject GrokApiService GrokApiService
+@inject PatientRecordUpdateService RecordUpdateService
+@inject GrokSessionStateService GrokSession
+@inject IDialogService DialogService
+@inject ApplicationDbContext Db
+
+<MudGrid>
+    <MudItem xs="12" md="8">
+        @* Contact Information *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Contact Information</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@(_isEditingContact ? Icons.Material.Filled.Close : Icons.Material.Filled.Edit)" 
+                                   OnClick="@(() => _isEditingContact = !_isEditingContact)" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudForm @ref="_contactForm" Model="_editPatient">
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="_editPatient.Phone" Label="Phone" Variant="Variant.Outlined" 
+                                          ReadOnly="@(!_isEditingContact)" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="_editPatient.Email" Label="Email" Variant="Variant.Outlined" 
+                                          ReadOnly="@(!_isEditingContact)" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudTextField @bind-Value="_editPatient.Address" Label="Address" Variant="Variant.Outlined" 
+                                          ReadOnly="@(!_isEditingContact)" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" sm="5">
+                            <MudTextField @bind-Value="_editPatient.City" Label="City" Variant="Variant.Outlined" 
+                                          ReadOnly="@(!_isEditingContact)" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" sm="3">
+                            <MudTextField @bind-Value="_editPatient.State" Label="State" Variant="Variant.Outlined" 
+                                          ReadOnly="@(!_isEditingContact)" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="12" sm="4">
+                            <MudTextField @bind-Value="_editPatient.ZipCode" Label="ZIP Code" Variant="Variant.Outlined" 
+                                          ReadOnly="@(!_isEditingContact)" Margin="Margin.Dense" />
+                        </MudItem>
+                    </MudGrid>
+                </MudForm>
+                @if (_isEditingContact)
+                {
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4">
+                        <MudButton Variant="Variant.Text" OnClick="@CancelContactEdit">Cancel</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@SaveContactInfo">Save Changes</MudButton>
+                    </MudStack>
+                }
+            </MudCardContent>
+        </MudCard>
+
+        @* Insurance Information *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Insurance Information</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small">Add Insurance</MudButton>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_insurances.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Class="ma-3">No insurance information on file</MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="_insurances" Dense="true" Hover="true">
+                        <HeaderContent>
+                            <MudTh>Type</MudTh>
+                            <MudTh>Payer</MudTh>
+                            <MudTh>Plan</MudTh>
+                            <MudTh>Member ID</MudTh>
+                            <MudTh>Group #</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd>
+                                @if (context.IsPrimary)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">Primary</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Default">Secondary</MudChip>
+                                }
+                            </MudTd>
+                            <MudTd>@context.PayerName</MudTd>
+                            <MudTd>@context.PlanName</MudTd>
+                            <MudTd>@context.MemberId</MudTd>
+                            <MudTd>@(context.GroupNumber ?? "—")</MudTd>
+                            <MudTd>
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" />
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudCardContent>
+        </MudCard>
+
+        @* Communication Preferences *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Communication Preferences</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="string" Label="Preferred Contact Method" Variant="Variant.Outlined" Value="@_preferredContact" ValueChanged="@(v => _preferredContact = v)">
+                            <MudSelectItem Value="@("Phone")">Phone</MudSelectItem>
+                            <MudSelectItem Value="@("Email")">Email</MudSelectItem>
+                            <MudSelectItem Value="@("Text/SMS")">Text/SMS</MudSelectItem>
+                            <MudSelectItem Value="@("Patient Portal")">Patient Portal</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="string" Label="Preferred Language" Variant="Variant.Outlined" Value="@_preferredLanguage" ValueChanged="@(v => _preferredLanguage = v)">
+                            <MudSelectItem Value="@("English")">English</MudSelectItem>
+                            <MudSelectItem Value="@("Spanish")">Spanish</MudSelectItem>
+                            <MudSelectItem Value="@("Chinese")">Chinese</MudSelectItem>
+                            <MudSelectItem Value="@("Other")">Other</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudCheckBox T="bool" @bind-Value="_allowReminders" Label="Allow appointment reminders" />
+                        <MudCheckBox T="bool" @bind-Value="_allowMarketing" Label="Allow health tips and newsletters" />
+                        <MudCheckBox T="bool" @bind-Value="_allowPortalMessages" Label="Allow patient portal messages" />
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+
+        @* Grok AI Document Analysis *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Tertiary" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Grok AI Document Analysis</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudText Typo="Typo.body2">Upload PDF or TXT files to analyze clinical data using Grok AI.</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                        <MudFileUpload T="IBrowserFile" FilesChanged="UploadDocument" Accept=".pdf, .txt">
+                            <ActivatorContent>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.CloudUpload">
+                                    Upload Document
+                                </MudButton>
+                            </ActivatorContent>
+                        </MudFileUpload>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="@(GrokSession.HaveRecordsBeenUpdated(Patient.Id) ? Color.Default : Color.Tertiary)"
+                                   StartIcon="@(GrokSession.HaveRecordsBeenUpdated(Patient.Id) ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.AutoFixHigh)"
+                                   Disabled="@(GrokSession.HaveRecordsBeenUpdated(Patient.Id) || _isUpdatingRecords)"
+                                   OnClick="UpdateRecordsAsync">
+                            @if (_isUpdatingRecords)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <span>Updating Records...</span>
+                            }
+                            else
+                            {
+                                <span>@(GrokSession.HaveRecordsBeenUpdated(Patient.Id) ? "Records Updated" : "Update Records")</span>
+                            }
+                        </MudButton>
+                        <MudMenu AnchorOrigin="Origin.BottomLeft"
+                                 TransformOrigin="Origin.TopLeft"
+                                 Dense="true">
+                            <ActivatorContent>
+                                <MudButton Variant="Variant.Outlined"
+                                           Color="Color.Primary"
+                                           StartIcon="@Icons.Material.Filled.History"
+                                           EndIcon="@Icons.Material.Filled.ArrowDropDown">
+                                    Previous Uploads (@_uploadedDocs.Count)
+                                </MudButton>
+                            </ActivatorContent>
+                            <ChildContent>
+                                @if (_uploadedDocs.Count == 0)
+                                {
+                                    <MudMenuItem Disabled="true">No previous uploads</MudMenuItem>
+                                }
+                                else
+                                {
+                                    @foreach (var doc in _uploadedDocs)
+                                    {
+                                        <MudMenuItem Href="@($"/api/documents/{doc.Id}")" Target="_blank">
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="width:100%;">
+                                                <MudIcon Icon="@Icons.Material.Filled.Description" Size="Size.Small" Color="Color.Primary" />
+                                                <MudText Typo="Typo.body2" Style="flex-grow:1;">
+                                                    @(doc.Name ?? doc.FileName) (@doc.Date.ToString("MM/dd/yyyy h:mm tt"))
+                                                </MudText>
+                                                <span @onclick:stopPropagation="true" @onclick:preventDefault="true">
+                                                    <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                                   Size="Size.Small"
+                                                                   title="Rename"
+                                                                   OnClick="@(() => OpenRenameUploadedDocDialog(doc))" />
+                                                </span>
+                                            </MudStack>
+                                        </MudMenuItem>
+                                    }
+                                }
+                            </ChildContent>
+                        </MudMenu>
+                    </MudStack>
+                    @if (_isProcessingDoc)
+                    {
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                        <MudText Typo="Typo.caption">Processing document with Grok AI...</MudText>
+                    }
+                    @if (!string.IsNullOrEmpty(_docAnalysisResult))
+                    {
+                        <MudPaper Class="pa-4 mt-2" Elevation="1">
+                            <MudText Typo="Typo.subtitle2">Analysis Result:</MudText>
+                            <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@_docAnalysisResult</MudText>
+                        </MudPaper>
+                    }
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        @* Emergency Contacts *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Emergency Contacts</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_emergencyContacts.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="ma-3">No emergency contacts on file</MudAlert>
+                }
+                else
+                {
+                    <MudList T="EmergencyContact" Dense="true">
+                        @foreach (var contact in _emergencyContacts)
+                        {
+                            <MudListItem>
+                                <div class="d-flex justify-space-between align-center" style="width: 100%;">
+                                    <div>
+                                        <MudText Typo="Typo.body2">
+                                            @contact.Name
+                                            @if (contact.IsPrimary)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Class="ml-2">Primary</MudChip>
+                                            }
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @contact.Relationship • @contact.Phone
+                                        </MudText>
+                                    </div>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudCardContent>
+        </MudCard>
+
+        @* Patient Photo/ID *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Patient Photo</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent Class="d-flex flex-column align-center">
+                <MudAvatar Size="Size.Large" Style="width: 120px; height: 120px; font-size: 3rem;" Color="Color.Primary">
+                    @Patient.FirstName[0]@Patient.LastName[0]
+                </MudAvatar>
+                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.PhotoCamera" Class="mt-3">
+                    Update Photo
+                </MudButton>
+            </MudCardContent>
+        </MudCard>
+
+        @* Quick Demographics *@
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Demographics</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="2">
+                    <div>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Date of Birth</MudText>
+                        <MudText Typo="Typo.body1">@Patient.DateOfBirth.ToString("MMMM d, yyyy") (@Patient.Age years old)</MudText>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Sex</MudText>
+                        <MudText Typo="Typo.body1">@Patient.Sex</MudText>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">MRN</MudText>
+                        <MudText Typo="Typo.body1">@Patient.MRN</MudText>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Primary Provider</MudText>
+                        <MudText Typo="Typo.body1">@Patient.PrimaryProvider</MudText>
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Phone</MudText>
+                        @if (!string.IsNullOrWhiteSpace(Patient.Phone))
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Phone" Size="Size.Small" Color="Color.Primary" />
+                                <MudLink Href="@($"tel:{Patient.Phone}")" Underline="Underline.Hover">
+                                    <MudText Typo="Typo.body1">@Patient.Phone</MudText>
+                                </MudLink>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">—</MudText>
+                        }
+                    </div>
+                    <div>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Email</MudText>
+                        @if (!string.IsNullOrWhiteSpace(Patient.Email))
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Small" Color="Color.Primary" />
+                                <MudLink Href="@($"mailto:{Patient.Email}")" Underline="Underline.Hover">
+                                    <MudText Typo="Typo.body1">@Patient.Email</MudText>
+                                </MudLink>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body1" Class="mud-text-secondary">—</MudText>
+                        }
+                    </div>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@* Rename Uploaded Document Dialog *@
+<MudDialog @bind-Visible="_showRenameDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Rename Document</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_renameValue"
+                      Label="Document Name"
+                      Variant="Variant.Outlined"
+                      Immediate="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="CloseRenameUploadedDocDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(string.IsNullOrWhiteSpace(_renameValue))"
+                   OnClick="SaveUploadedDocRename">
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired]
+    public Patient Patient { get; set; } = null!;
+
+    private MudForm? _contactForm;
+    private Patient _editPatient = new();
+    private bool _isEditingContact = false;
+    
+    private List<EmergencyContact> _emergencyContacts = new();
+    private List<Insurance> _insurances = new();
+    
+    private string _preferredContact = "Phone";
+    private string _preferredLanguage = "English";
+    private bool _allowReminders = true;
+    private bool _allowMarketing = false;
+    private bool _allowPortalMessages = true;
+
+    private bool _isProcessingDoc = false;
+    private bool _isUpdatingRecords = false;
+    private string _docAnalysisResult = string.Empty;
+    private List<Document> _uploadedDocs = new();
+
+    private bool _showRenameDialog;
+    private Document? _renameTarget;
+    private string _renameValue = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _editPatient = new Patient
+        {
+            Phone = Patient.Phone,
+            Email = Patient.Email,
+            Address = Patient.Address,
+            City = Patient.City,
+            State = Patient.State,
+            ZipCode = Patient.ZipCode
+        };
+        
+        _emergencyContacts = await ClinicalDataService.GetEmergencyContactsByPatientAsync(Patient.Id);
+        _insurances = await ClinicalDataService.GetInsurancesByPatientAsync(Patient.Id);
+        await LoadUploadedDocsAsync();
+    }
+
+    private async Task LoadUploadedDocsAsync()
+    {
+        _uploadedDocs = await Db.Documents
+            .Where(d => d.PatientId == Patient.Id && d.Category == "AI Analysis")
+            .OrderByDescending(d => d.Date)
+            .ToListAsync();
+    }
+
+    private async Task EnsurePatientPersistedAsync()
+    {
+        var exists = await Db.Patients.AnyAsync(p => p.Id == Patient.Id);
+        if (exists) return;
+
+        // Patients live in MockPatientService, but Document.PatientId has a FK to the
+        // Patients table. Insert a stub row with the same Id as the in-memory mock so
+        // FK constraints are satisfied. Raw SQL is used so we can supply an explicit Id
+        // (EF treats PK as DB-generated by default).
+        var allergiesJson = JsonSerializer.Serialize(Patient.Allergies ?? new List<string>());
+        var alertsJson = JsonSerializer.Serialize(Patient.Alerts ?? new List<string>());
+
+        await Db.Database.ExecuteSqlInterpolatedAsync($@"
+            INSERT INTO Patients
+                (Id, MRN, FirstName, LastName, DateOfBirth, Sex, Phone, Email,
+                 Address, City, State, ZipCode, PrimaryProvider, InsuranceName,
+                 InsuranceId, Allergies, Alerts, LastVisit)
+            VALUES
+                ({Patient.Id}, {Patient.MRN ?? string.Empty},
+                 {Patient.FirstName ?? string.Empty}, {Patient.LastName ?? string.Empty},
+                 {Patient.DateOfBirth}, {Patient.Sex ?? string.Empty},
+                 {Patient.Phone}, {Patient.Email}, {Patient.Address}, {Patient.City},
+                 {Patient.State}, {Patient.ZipCode}, {Patient.PrimaryProvider},
+                 {Patient.InsuranceName}, {Patient.InsuranceId},
+                 {allergiesJson}, {alertsJson}, {Patient.LastVisit});");
+    }
+
+    private void CancelContactEdit()
+    {
+        _isEditingContact = false;
+        _editPatient = new Patient
+        {
+            Phone = Patient.Phone,
+            Email = Patient.Email,
+            Address = Patient.Address,
+            City = Patient.City,
+            State = Patient.State,
+            ZipCode = Patient.ZipCode
+        };
+    }
+
+    private void SaveContactInfo()
+    {
+        // Mock save - in real app would call service
+        Patient.Phone = _editPatient.Phone;
+        Patient.Email = _editPatient.Email;
+        Patient.Address = _editPatient.Address;
+        Patient.City = _editPatient.City;
+        Patient.State = _editPatient.State;
+        Patient.ZipCode = _editPatient.ZipCode;
+        
+        _isEditingContact = false;
+        NotificationService.ShowSuccess("Contact information saved successfully");
+    }
+
+    private async Task UploadDocument(IBrowserFile file)
+    {
+        if (file == null) return;
+        
+        _isProcessingDoc = true;
+        _docAnalysisResult = string.Empty;
+        StateHasChanged();
+        
+        try
+        {
+            string documentText = string.Empty;
+            byte[] fileBytes;
+
+            using (var stream = file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024))
+            using (var memoryStream = new MemoryStream())
+            {
+                await stream.CopyToAsync(memoryStream);
+                fileBytes = memoryStream.ToArray();
+            }
+
+            var fileType = file.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase) ? "pdf"
+                         : file.Name.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) ? "text"
+                         : "other";
+
+            if (fileType == "text")
+            {
+                documentText = System.Text.Encoding.UTF8.GetString(fileBytes);
+            }
+            else if (fileType == "pdf")
+            {
+                using var pdfStream = new MemoryStream(fileBytes);
+                using var pdfDocument = PdfDocument.Open(pdfStream);
+                var textList = new List<string>();
+                foreach (var page in pdfDocument.GetPages())
+                {
+                    textList.Add(page.Text);
+                }
+                documentText = string.Join("\n", textList);
+            }
+            else
+            {
+                NotificationService.ShowError("Unsupported file type. Please upload a PDF or TXT.");
+                return;
+            }
+            
+            if (string.IsNullOrWhiteSpace(documentText))
+            {
+                NotificationService.ShowWarning("Could not extract any text from the document.");
+                return;
+            }
+
+            // Patients are sourced from MockPatientService and may not exist in the DB yet,
+            // but Document.PatientId has a real FK to Patients — upsert the patient first.
+            await EnsurePatientPersistedAsync();
+
+            // Persist the document so the AI "Update Records" workflow can re-read it later
+            // and so a record of every upload survives a server restart.
+            var savedDoc = new Document
+            {
+                PatientId = Patient.Id,
+                Name = file.Name,
+                FileName = file.Name,
+                Category = "AI Analysis",
+                Type = fileType,
+                Date = DateTime.Now,
+                UploadedBy = "Demographics Upload",
+                Content = fileBytes,
+                ExtractedText = documentText
+            };
+            Db.Documents.Add(savedDoc);
+            await Db.SaveChangesAsync();
+            _uploadedDocs.Insert(0, savedDoc);
+
+            // New document uploaded - allow Send to Grok and Update Records again this session.
+            GrokSession.ResetDocumentsSent(Patient.Id);
+            GrokSession.ResetRecordsUpdated(Patient.Id);
+
+            var prompt = $"Analyze the following clinical document for patient {Patient.FirstName} {Patient.LastName}. Summarize the key patient information, including any diagnoses, medications, allergies, or critical lab results mentioned. Provide a structured and concise summary suitable for a healthcare provider.";
+            _docAnalysisResult = await GrokApiService.ProcessDocumentAsync(documentText, prompt);
+            NotificationService.ShowSuccess("Document uploaded and processed");
+        }
+        catch (Exception ex)
+        {
+            _docAnalysisResult = $"Error: {ex.Message}";
+            NotificationService.ShowError("Failed to process document");
+        }
+        finally
+        {
+            _isProcessingDoc = false;
+            StateHasChanged();
+        }
+    }
+
+    private void OpenRenameUploadedDocDialog(Document document)
+    {
+        _renameTarget = document;
+        _renameValue = document.Name ?? document.FileName ?? string.Empty;
+        _showRenameDialog = true;
+    }
+
+    private void CloseRenameUploadedDocDialog()
+    {
+        _showRenameDialog = false;
+        _renameTarget = null;
+        _renameValue = string.Empty;
+    }
+
+    private async Task SaveUploadedDocRename()
+    {
+        if (_renameTarget is null || string.IsNullOrWhiteSpace(_renameValue))
+        {
+            return;
+        }
+
+        var trimmed = _renameValue.Trim();
+
+        try
+        {
+            var persisted = await Db.Documents.FirstOrDefaultAsync(d => d.Id == _renameTarget.Id);
+            if (persisted is null)
+            {
+                NotificationService.ShowError("Document no longer exists");
+                _uploadedDocs.Remove(_renameTarget);
+            }
+            else
+            {
+                persisted.Name = trimmed;
+                await Db.SaveChangesAsync();
+                _renameTarget.Name = trimmed;
+                NotificationService.ShowSuccess("Document renamed");
+            }
+        }
+        catch (Exception ex)
+        {
+            NotificationService.ShowError($"Failed to rename: {ex.Message}");
+        }
+        finally
+        {
+            _showRenameDialog = false;
+            _renameTarget = null;
+            _renameValue = string.Empty;
+            StateHasChanged();
+        }
+    }
+
+    private async Task UpdateRecordsAsync()
+    {
+        if (_isUpdatingRecords || GrokSession.HaveRecordsBeenUpdated(Patient.Id)) return;
+
+        var confirm = await DialogService.ShowMessageBox(
+            "Update Records",
+            $"Use Grok AI to reconcile {Patient.FullName}'s problems, medications, and allergies against any uploaded documents? Existing entries may be modified or replaced.",
+            yesText: "Update", cancelText: "Cancel");
+
+        if (confirm != true) return;
+
+        _isUpdatingRecords = true;
+        try
+        {
+            var result = await RecordUpdateService.UpdateAsync(Patient);
+
+            if (!result.Succeeded)
+            {
+                NotificationService.ShowError(result.ErrorMessage ?? "Update failed.");
+                return;
+            }
+
+            GrokSession.MarkRecordsUpdated(Patient.Id);
+
+            var changeMsg =
+                $"Problems {result.ProblemsBefore}→{result.ProblemsAfter}, " +
+                $"Meds {result.MedicationsBefore}→{result.MedicationsAfter}, " +
+                $"Allergies {result.AllergiesBefore}→{result.AllergiesAfter} " +
+                $"(reviewed {result.DocumentsConsidered} document(s))";
+
+            NotificationService.ShowSuccess(
+                string.IsNullOrWhiteSpace(result.Summary) ? changeMsg : $"{result.Summary}\n{changeMsg}");
+        }
+        catch (Exception ex)
+        {
+            NotificationService.ShowError($"Update failed: {ex.Message}");
+        }
+        finally
+        {
+            _isUpdatingRecords = false;
+            StateHasChanged();
+        }
+    }
+}

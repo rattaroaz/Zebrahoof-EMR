@@ -1,0 +1,108 @@
+@inject NavigationManager Navigation
+@inject AppStateService AppState
+
+@if (_items.Count > 1)
+{
+    <MudBreadcrumbs Items="_items" Class="pa-0 mb-4">
+        <ItemTemplate Context="item">
+            @if (string.IsNullOrEmpty(item.Href))
+            {
+                <MudText Typo="Typo.body2">@item.Text</MudText>
+            }
+            else
+            {
+                <MudLink Href="@item.Href" Typo="Typo.body2">@item.Text</MudLink>
+            }
+        </ItemTemplate>
+        <SeparatorTemplate>
+            <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" Class="mx-1" />
+        </SeparatorTemplate>
+    </MudBreadcrumbs>
+}
+
+@code {
+    private List<BreadcrumbItem> _items = new();
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        AppState.OnStateChanged += OnAppStateChanged;
+        UpdateBreadcrumbs();
+    }
+
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        UpdateBreadcrumbs();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnAppStateChanged()
+    {
+        UpdateBreadcrumbs();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateBreadcrumbs()
+    {
+        _items.Clear();
+        _items.Add(new BreadcrumbItem("Home", "/dashboard", icon: Icons.Material.Filled.Home));
+
+        var uri = new Uri(Navigation.Uri);
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        var path = "";
+        foreach (var segment in segments)
+        {
+            path += $"/{segment}";
+            var text = FormatSegment(segment);
+            
+            // Check if this is the last segment
+            if (segment == segments.Last())
+            {
+                _items.Add(new BreadcrumbItem(text, null, disabled: true));
+            }
+            else
+            {
+                _items.Add(new BreadcrumbItem(text, path));
+            }
+        }
+
+        // Add patient context if available
+        if (AppState.SelectedPatient != null && !uri.AbsolutePath.Contains("patients"))
+        {
+            _items.Insert(1, new BreadcrumbItem($"Patient: {AppState.SelectedPatient.FullName}", $"/patients/{AppState.SelectedPatient.Id}"));
+        }
+    }
+
+    private string FormatSegment(string segment)
+    {
+        // Handle numeric IDs
+        if (int.TryParse(segment, out _))
+        {
+            return AppState.SelectedPatient?.FullName ?? $"#{segment}";
+        }
+
+        return segment switch
+        {
+            "dashboard" => "Dashboard",
+            "patients" => "Patients",
+            "schedule" => "Schedule",
+            "tasks" => "Tasks",
+            "orders" => "Orders",
+            "inbox" => "Inbox",
+            "admin" => "Administration",
+            "settings" => "Settings",
+            "templates" => "Templates",
+            "users" => "Users",
+            "profile" => "Profile",
+            "preferences" => "Preferences",
+            _ => System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(segment.Replace("-", " "))
+        };
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        AppState.OnStateChanged -= OnAppStateChanged;
+    }
+}

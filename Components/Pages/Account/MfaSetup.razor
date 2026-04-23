@@ -1,0 +1,301 @@
+@page "/mfa-setup"
+@attribute [Authorize]
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>MFA Setup - Zebrahoof EMR</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Two-Factor Authentication Setup</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Authenticator App Setup</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                @if (_isEnabled)
+                {
+                    <MudAlert Severity="Severity.Success" Class="mb-4">
+                        Two-factor authentication is currently <strong>enabled</strong>.
+                    </MudAlert>
+                    
+                    <MudText Typo="Typo.body2" Class="mb-4">
+                        Your account is protected with two-factor authentication. 
+                        You will need your authenticator app to sign in.
+                    </MudText>
+                    
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Error" 
+                               OnClick="DisableMfa"
+                               Disabled="_isLoading">
+                        Disable Two-Factor Authentication
+                    </MudButton>
+                }
+                else if (!string.IsNullOrEmpty(_sharedKey))
+                {
+                    <MudText Typo="Typo.body2" Class="mb-4">
+                        Scan this QR code with your authenticator app (Google Authenticator, Microsoft Authenticator, etc.):
+                    </MudText>
+                    
+                    <MudPaper Class="pa-4 mb-4 d-flex justify-center" Elevation="0" Style="background-color: white;">
+                        <MudText Typo="Typo.body2" Style="font-family: monospace; word-break: break-all;">
+                            @_qrCodeUri
+                        </MudText>
+                    </MudPaper>
+                    
+                    <MudText Typo="Typo.body2" Class="mb-2">Or enter this key manually:</MudText>
+                    <MudPaper Class="pa-2 mb-4" Elevation="0" Style="background-color: #f5f5f5;">
+                        <MudText Typo="Typo.body1" Style="font-family: monospace; letter-spacing: 2px;">
+                            @FormatKey(_sharedKey)
+                        </MudText>
+                    </MudPaper>
+                    
+                    <EditForm Model="_model" OnValidSubmit="VerifyAndEnable" FormName="mfa-setup">
+                        <MudTextField @bind-Value="_model.Code" 
+                                      Label="Verification Code" 
+                                      Variant="Variant.Outlined"
+                                      MaxLength="6"
+                                      Class="mb-4"
+                                      Required="true"
+                                      Disabled="_isLoading"
+                                      HelperText="Enter the 6-digit code from your app" />
+
+                        @if (!string.IsNullOrEmpty(_errorMessage))
+                        {
+                            <MudAlert Severity="Severity.Error" Class="mb-4" Dense="true">@_errorMessage</MudAlert>
+                        }
+
+                        <MudButton ButtonType="ButtonType.Submit" 
+                                   Variant="Variant.Filled" 
+                                   Color="Color.Primary"
+                                   Disabled="_isLoading">
+                            @if (_isLoading)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            }
+                            Verify and Enable
+                        </MudButton>
+                    </EditForm>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mb-4">
+                        Two-factor authentication adds an extra layer of security to your account.
+                        You'll need an authenticator app on your phone.
+                    </MudText>
+                    
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Primary" 
+                               OnClick="GenerateKey"
+                               Disabled="_isLoading">
+                        @if (_isLoading)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        }
+                        Set Up Authenticator
+                    </MudButton>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Recovery Codes</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                @if (_recoveryCodes.Count > 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mb-4">
+                        Save these recovery codes in a safe place. Each code can only be used once.
+                    </MudAlert>
+                    
+                    <MudPaper Class="pa-4 mb-4" Elevation="0" Style="background-color: #f5f5f5;">
+                        @foreach (var code in _recoveryCodes)
+                        {
+                            <MudText Typo="Typo.body1" Style="font-family: monospace;">@(code)</MudText>
+                        }
+                    </MudPaper>
+                    
+                    <MudButton Variant="Variant.Outlined" OnClick="() => _recoveryCodes.Clear()">
+                        I've Saved My Codes
+                    </MudButton>
+                }
+                else if (_isEnabled)
+                {
+                    <MudText Typo="Typo.body2" Class="mb-4">
+                        Recovery codes can be used to access your account if you lose your authenticator device.
+                    </MudText>
+                    
+                    <MudButton Variant="Variant.Outlined" 
+                               OnClick="GenerateRecoveryCodes"
+                               Disabled="_isLoading">
+                        Generate New Recovery Codes
+                    </MudButton>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Enable two-factor authentication first to generate recovery codes.
+                    </MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthState { get; set; }
+
+    private ApplicationUser? _user;
+    private bool _isEnabled;
+    private bool _isLoading;
+    private string? _sharedKey;
+    private string? _qrCodeUri;
+    private string? _errorMessage;
+    private List<string> _recoveryCodes = new();
+    private SetupModel _model = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState != null)
+        {
+            var authState = await AuthState;
+            _user = await UserManager.GetUserAsync(authState.User);
+            if (_user != null)
+            {
+                _isEnabled = await UserManager.GetTwoFactorEnabledAsync(_user);
+            }
+        }
+    }
+
+    private async Task GenerateKey()
+    {
+        if (_user == null) return;
+        
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            await UserManager.ResetAuthenticatorKeyAsync(_user);
+            _sharedKey = await UserManager.GetAuthenticatorKeyAsync(_user);
+            
+            var email = await UserManager.GetEmailAsync(_user);
+            _qrCodeUri = $"otpauth://totp/ZebrahoofEMR:{email}?secret={_sharedKey}&issuer=ZebrahoofEMR";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task VerifyAndEnable()
+    {
+        if (_user == null) return;
+        
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var code = _model.Code.Replace(" ", "").Replace("-", "");
+            var isValid = await UserManager.VerifyTwoFactorTokenAsync(
+                _user,
+                UserManager.Options.Tokens.AuthenticatorTokenProvider,
+                code);
+
+            if (isValid)
+            {
+                await UserManager.SetTwoFactorEnabledAsync(_user, true);
+                _isEnabled = true;
+                _sharedKey = null;
+                
+                var codes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(_user, 10);
+                _recoveryCodes = codes?.ToList() ?? new List<string>();
+                
+                Snackbar.Add("Two-factor authentication enabled!", Severity.Success);
+            }
+            else
+            {
+                _errorMessage = "Invalid verification code. Please try again.";
+            }
+        }
+        catch
+        {
+            _errorMessage = "An error occurred. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DisableMfa()
+    {
+        if (_user == null) return;
+        
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            await UserManager.SetTwoFactorEnabledAsync(_user, false);
+            await UserManager.ResetAuthenticatorKeyAsync(_user);
+            _isEnabled = false;
+            Snackbar.Add("Two-factor authentication disabled.", Severity.Info);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task GenerateRecoveryCodes()
+    {
+        if (_user == null) return;
+        
+        _isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var codes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(_user, 10);
+            _recoveryCodes = codes?.ToList() ?? new List<string>();
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string FormatKey(string key)
+    {
+        var result = new System.Text.StringBuilder();
+        for (int i = 0; i < key.Length; i += 4)
+        {
+            if (i > 0) result.Append(' ');
+            result.Append(key.AsSpan(i, Math.Min(4, key.Length - i)));
+        }
+        return result.ToString();
+    }
+
+    private class SetupModel
+    {
+        public string Code { get; set; } = string.Empty;
+    }
+}

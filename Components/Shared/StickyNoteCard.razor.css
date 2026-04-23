@@ -1,0 +1,184 @@
+.sticky-note {
+    position: fixed;
+    width: 220px;
+    min-height: 180px;
+    border-radius: 4px;
+    box-shadow: 3px 3px 10px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    z-index: 1000;
+    cursor: move;
+    user-select: none;
+    font-family: 'Segoe UI', sans-serif;
+    pointer-events: auto !important;
+}
+
+.sticky-yellow {
+    background: linear-gradient(135deg, #fff9c4 0%, #fff59d 100%);
+    border-left: 4px solid #fbc02d;
+}
+
+.sticky-pink {
+    background: linear-gradient(135deg, #fce4ec 0%, #f8bbd9 100%);
+    border-left: 4px solid #e91e63;
+}
+
+.sticky-blue {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border-left: 4px solid #1976d2;
+}
+
+.sticky-green {
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    border-left: 4px solid #4caf50;
+}
+
+.sticky-orange {
+    background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+    border-left: 4px solid #ff9800;
+}
+
+.sticky-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    cursor: move;
+    gap: 6px;
+}
+
+.note-number {
+    font-size: 11px;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
+}
+
+.sticky-controls {
+    display: flex;
+    gap: 4px;
+}
+
+.color-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+}
+
+.color-dot:hover {
+    transform: scale(1.2);
+}
+
+.color-dot.selected {
+    border-color: rgba(0, 0, 0, 0.4);
+}
+
+.color-dot.yellow { background-color: #fbc02d; }
+.color-dot.pink { background-color: #e91e63; }
+.color-dot.blue { background-color: #1976d2; }
+.color-dot.green { background-color: #4caf50; }
+.color-dot.orange { background-color: #ff9800; }
+
+.sticky-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    opacity: 0.5;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.sticky-close:hover {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.1);
+}
+
+.sticky-content {
+    flex: 1;
+    border: none;
+    background: transparent;
+    resize: none;
+    padding: 8px 12px;
+    font-size: 14px;
+    line-height: 1.4;
+    min-height: 100px;
+    cursor: text;
+    font-family: inherit;
+}
+
+.sticky-content:focus {
+    outline: none;
+}
+
+.sticky-content::placeholder {
+    color: rgba(0, 0, 0, 0.4);
+    font-style: italic;
+}
+
+.sticky-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.5);
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.reminder-section {
+    display: flex;
+    align-items: center;
+}
+
+.reminder-btn {
+    opacity: 0.6;
+}
+
+.reminder-btn:hover {
+    opacity: 1;
+}
+
+.reminder-chip {
+    font-size: 10px !important;
+    height: 22px !important;
+}
+
+.sticky-date {
+    font-size: 10px;
+}
+
+.date-picker-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    z-index: 10;
+}
+
+.date-picker-popup {
+    background: white;
+    padding: 16px;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    min-width: 200px;
+}
+
+.date-picker-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+}

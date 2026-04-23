@@ -1,0 +1,130 @@
+@inject NavigationManager Navigation
+@inject AuthStateService AuthState
+@inject StickyNoteService StickyNotes
+@implements IDisposable
+
+<MudNavMenu>
+    <MudText Typo="Typo.caption" Class="px-4 py-2 mud-text-secondary">CLINICAL</MudText>
+    <MudNavLink Href="/dashboard" Icon="@Icons.Material.Filled.Dashboard" Match="NavLinkMatch.All">Dashboard</MudNavLink>
+    <MudNavLink Href="/patients" Icon="@Icons.Material.Filled.People" Match="NavLinkMatch.Prefix">Patients</MudNavLink>
+    <MudNavLink Href="/schedule" Icon="@Icons.Material.Filled.CalendarMonth" Match="NavLinkMatch.Prefix">Schedule</MudNavLink>
+    <MudNavLink Href="/tasks" Icon="@Icons.Material.Filled.Task" Match="NavLinkMatch.Prefix">Tasks</MudNavLink>
+    <MudNavLink Href="/orders" Icon="@Icons.Material.Filled.Assignment" Match="NavLinkMatch.Prefix">Orders</MudNavLink>
+    
+    <MudDivider Class="my-2" />
+    
+    <MudText Typo="Typo.caption" Class="px-4 py-2 mud-text-secondary">COMMUNICATION</MudText>
+    <MudNavLink Href="/inbox" Icon="@Icons.Material.Filled.Inbox" Match="NavLinkMatch.Prefix">
+        <div class="d-flex align-center justify-space-between" style="width: 100%;">
+            <span>Inbox</span>
+            @if (_unreadCount > 0)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error">@_unreadCount</MudChip>
+            }
+        </div>
+    </MudNavLink>
+    
+    <MudDivider Class="my-2" />
+    
+    <MudText Typo="Typo.caption" Class="px-4 py-2 mud-text-secondary">ADMINISTRATION</MudText>
+    <MudNavLink Href="/admin/settings" Icon="@Icons.Material.Filled.Settings" Match="NavLinkMatch.Prefix">Settings</MudNavLink>
+    <MudNavLink Href="/admin/templates" Icon="@Icons.Material.Filled.Description" Match="NavLinkMatch.Prefix">Templates</MudNavLink>
+    <MudNavLink Icon="@Icons.Material.Filled.StickyNote2" OnClick="AddStickyNote">
+        <div class="d-flex align-center justify-space-between" style="width: 100%;">
+            <span>Sticky Notes</span>
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true">
+                <ActivatorContent>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" @onclick:stopPropagation="true">@StickyNotes.Notes.Count/5</MudChip>
+                </ActivatorContent>
+                <ChildContent>
+                    @foreach (var note in StickyNotes.GetAllNotesIncludingHidden())
+                    {
+                        <MudMenuItem OnClick="@(() => ToggleNoteVisibility(note.Id))">
+                            Note @note.NoteNumber
+                        </MudMenuItem>
+                    }
+                </ChildContent>
+            </MudMenu>
+        </div>
+    </MudNavLink>
+    @if (AuthState.CurrentUser?.Role == UserRole.Admin)
+    {
+        <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.ManageAccounts" Match="NavLinkMatch.Prefix">Users</MudNavLink>
+    }
+</MudNavMenu>
+
+@code {
+    private int _unreadCount = 4;
+    private string _lastUserId = "";
+    private bool _isLoading = false;
+
+    protected override void OnInitialized()
+    {
+        StickyNotes.OnNotesChanged += OnNotesChanged;
+        AuthState.OnAuthStateChanged += OnAuthStateChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadUserNotes();
+        }
+    }
+
+    private async void OnAuthStateChanged()
+    {
+        _lastUserId = "";
+        await LoadUserNotes();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadUserNotes()
+    {
+        if (_isLoading) return;
+        
+        var userId = AuthState.CurrentUser?.Username ?? "default";
+        if (userId == _lastUserId) return;
+        
+        _isLoading = true;
+        _lastUserId = userId;
+        
+        await StickyNotes.SetCurrentUserAsync(userId);
+        _isLoading = false;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnNotesChanged()
+    {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleNoteVisibility(Guid noteId)
+    {
+        await StickyNotes.ToggleNoteVisibilityAsync(noteId);
+    }
+
+    private async Task AddStickyNote()
+    {
+        var allNotes = StickyNotes.GetAllNotesIncludingHidden();
+        var hiddenNotes = allNotes.Where(n => !n.IsVisible).ToList();
+        
+        if (hiddenNotes.Any())
+        {
+            foreach (var note in hiddenNotes)
+            {
+                await StickyNotes.ShowNoteAsync(note.Id);
+            }
+        }
+        else if (StickyNotes.CanAddNote)
+        {
+            await StickyNotes.AddNoteAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        StickyNotes.OnNotesChanged -= OnNotesChanged;
+        AuthState.OnAuthStateChanged -= OnAuthStateChanged;
+    }
+}

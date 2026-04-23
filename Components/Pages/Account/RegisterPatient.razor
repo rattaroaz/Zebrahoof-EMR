@@ -1,0 +1,204 @@
+@page "/register-patient"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@inject UserManager<ApplicationUser> UserManager
+@inject NavigationManager Navigation
+@inject NotificationService Notifications
+@inject ISnackbar Snackbar
+
+<PageTitle>Patient Registration - Zebrahoof EMR</PageTitle>
+
+<MudCard Elevation="4" Class="pa-4" Style="width: 100%; max-width: 450px;">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <div class="d-flex flex-column align-center">
+                <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Size="Size.Large" Color="Color.Primary" Class="mb-2" />
+                <MudText Typo="Typo.h5">Patient Registration</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary text-center">
+                    Create your patient portal account to access your health records.
+                </MudText>
+            </div>
+        </CardHeaderContent>
+    </MudCardHeader>
+    <MudCardContent>
+        @if (_registered)
+        {
+            <MudAlert Severity="Severity.Success" Class="mb-4">
+                Registration successful! Please check your email to verify your account.
+            </MudAlert>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Href="/login">
+                Go to Login
+            </MudButton>
+        }
+        else
+        {
+            <EditForm Model="_model" OnValidSubmit="HandleRegister" FormName="register-patient">
+                <DataAnnotationsValidator />
+                
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_model.FirstName" 
+                                      Label="First Name" 
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      Disabled="_isLoading" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_model.LastName" 
+                                      Label="Last Name" 
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      Disabled="_isLoading" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Email" 
+                                      Label="Email" 
+                                      Variant="Variant.Outlined"
+                                      InputType="InputType.Email"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Email"
+                                      Required="true"
+                                      Disabled="_isLoading" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Phone" 
+                                      Label="Phone Number" 
+                                      Variant="Variant.Outlined"
+                                      InputType="InputType.Telephone"
+                                      Adornment="Adornment.Start"
+                                      AdornmentIcon="@Icons.Material.Filled.Phone"
+                                      Disabled="_isLoading" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudDatePicker @bind-Date="_model.DateOfBirth" 
+                                       Label="Date of Birth" 
+                                       Variant="Variant.Outlined"
+                                       MaxDate="DateTime.Today"
+                                       Disabled="_isLoading" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.Password" 
+                                      Label="Password" 
+                                      Variant="Variant.Outlined"
+                                      InputType="@(_showPassword ? InputType.Text : InputType.Password)"
+                                      Adornment="Adornment.End"
+                                      AdornmentIcon="@(_showPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      OnAdornmentClick="() => _showPassword = !_showPassword"
+                                      Required="true"
+                                      Disabled="_isLoading" />
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_model.ConfirmPassword" 
+                                      Label="Confirm Password" 
+                                      Variant="Variant.Outlined"
+                                      InputType="InputType.Password"
+                                      Required="true"
+                                      Disabled="_isLoading" />
+                    </MudItem>
+                </MudGrid>
+
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mt-4" Dense="true">@_errorMessage</MudAlert>
+                }
+
+                <MudButton ButtonType="ButtonType.Submit" 
+                           Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           FullWidth="true"
+                           Disabled="_isLoading"
+                           Class="mt-4 mb-2">
+                    @if (_isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    }
+                    Register
+                </MudButton>
+                
+                <MudButton Variant="Variant.Text" FullWidth="true" Href="/login">
+                    Already have an account? Sign In
+                </MudButton>
+            </EditForm>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    private RegisterModel _model = new();
+    private bool _showPassword;
+    private bool _isLoading;
+    private bool _registered;
+    private string? _errorMessage;
+
+    private async Task HandleRegister()
+    {
+        if (_model.Password != _model.ConfirmPassword)
+        {
+            _errorMessage = "Passwords do not match.";
+            return;
+        }
+
+        _isLoading = true;
+        _errorMessage = null;
+        StateHasChanged();
+
+        try
+        {
+            var user = new ApplicationUser
+            {
+                UserName = _model.Email,
+                Email = _model.Email,
+                FirstName = _model.FirstName,
+                LastName = _model.LastName,
+                PhoneNumber = _model.Phone,
+                DateOfBirth = _model.DateOfBirth,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            var result = await UserManager.CreateAsync(user, _model.Password);
+            if (result.Succeeded)
+            {
+                await UserManager.AddToRoleAsync(user, "Patient");
+                
+                var token = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+                var confirmUrl = Navigation.ToAbsoluteUri($"/confirm-email?token={Uri.EscapeDataString(token)}&userId={Uri.EscapeDataString(user.Id)}").ToString();
+
+                Notifications.ShowTemplatePreview("Email Verification", new Dictionary<string, string>
+                {
+                    ["To"] = user.Email!,
+                    ["Subject"] = "Verify Your Zebrahoof EMR Account",
+                    ["Name"] = $"{user.FirstName} {user.LastName}",
+                    ["Verification Link"] = confirmUrl
+                });
+
+                _registered = true;
+                Snackbar.Add("Registration successful!", Severity.Success);
+            }
+            else
+            {
+                _errorMessage = string.Join(" ", result.Errors.Select(e => e.Description));
+            }
+        }
+        catch
+        {
+            _errorMessage = "An error occurred during registration. Please try again.";
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private class RegisterModel
+    {
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Phone { get; set; } = string.Empty;
+        public DateTime? DateOfBirth { get; set; }
+        public string Password { get; set; } = string.Empty;
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

@@ -1,0 +1,141 @@
+@page "/admin/audit-log"
+@attribute [Authorize(Roles = "Admin")]
+@inject AuditLogService AuditLogService
+@inject ISnackbar Snackbar
+@using AuditLogEntry = Zebrahoof_EMR.Models.AuditLog
+
+<PageTitle>Audit Log - Zebrahoof EMR</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <div>
+            <MudText Typo="Typo.h4">Audit Log</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Review recent user activity and sensitive actions.
+            </MudText>
+        </div>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" Disabled="_isLoading" OnClick="LoadLogs">
+                Refresh
+            </MudButton>
+            <MudButton Variant="Variant.Text" Disabled="_isLoading" OnClick="ClearFilters">
+                Clear Filters
+            </MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudPaper Elevation="1" Class="pa-4">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_startDate" Label="Start Date" Disabled="_isLoading" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudDatePicker @bind-Date="_endDate" Label="End Date" Disabled="_isLoading" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudTextField @bind-Value="_userFilter" Label="User ID" Disabled="_isLoading" />
+            </MudItem>
+            <MudItem xs="12" md="3">
+                <MudSelect @bind-Value="_actionFilter" Label="Action" Disabled="_isLoading" Clearable="true">
+                    @foreach (var action in _availableActions)
+                    {
+                        <MudSelectItem Value="@action">@action</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @if (_isLoading)
+    {
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_logs.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">No audit entries match the current filters.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="_logs" Dense="true" Hover="true" Breakpoint="Breakpoint.Md">
+            <HeaderContent>
+                <MudTh>Timestamp</MudTh>
+                <MudTh>User</MudTh>
+                <MudTh>Action</MudTh>
+                <MudTh>Scope</MudTh>
+                <MudTh>Metadata</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Timestamp.ToLocalTime().ToString("g")</MudTd>
+                <MudTd>
+                    <MudStack Spacing="0">
+                        <MudText Typo="Typo.body2">@GetUserDisplay(context.UserId)</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.UserId</MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@context.Action</MudChip>
+                </MudTd>
+                <MudTd>@context.Scope</MudTd>
+                <MudTd>@(string.IsNullOrWhiteSpace(context.Metadata) ? "—" : context.Metadata)</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudStack>
+
+@code {
+    private readonly List<AuditLogEntry> _logs = new();
+    private readonly List<string> _availableActions = new();
+    private bool _isLoading;
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+    private string? _userFilter;
+    private string? _actionFilter;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadActions();
+        await LoadLogs();
+    }
+
+    private async Task LoadActions()
+    {
+        var actions = await AuditLogService.GetRecentActionsAsync();
+        _availableActions.Clear();
+        _availableActions.AddRange(actions);
+    }
+
+    private async Task LoadLogs()
+    {
+        _isLoading = true;
+        try
+        {
+            _logs.Clear();
+            var entries = await AuditLogService.GetLogsAsync(
+                _startDate.HasValue ? _startDate.Value : null,
+                _endDate.HasValue ? _endDate.Value.AddDays(1).AddTicks(-1) : null,
+                _userFilter,
+                _actionFilter);
+            _logs.AddRange(entries);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to load audit log: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        _startDate = null;
+        _endDate = null;
+        _userFilter = null;
+        _actionFilter = null;
+        await LoadLogs();
+    }
+
+    private static string GetUserDisplay(string? userId) =>
+        string.IsNullOrWhiteSpace(userId) ? "System" : userId;
+}

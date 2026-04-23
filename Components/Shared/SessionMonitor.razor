@@ -1,0 +1,135 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+@if (_idleSeconds > 0 && _idleSeconds < 600)
+{
+    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="position-fixed bottom-0 right-0 ma-4">
+        Session idle: @TimeSpan.FromSeconds(_idleSeconds).ToString("mm\\:ss")
+    </MudChip>
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    private DotNetObjectReference<SessionMonitor>? _dotNetRef;
+    private IJSObjectReference? _module;
+    private bool _isMonitoring;
+    private double _idleSeconds;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthenticationStateTask == null)
+        {
+            return;
+        }
+
+        var state = await AuthenticationStateTask;
+        var isAuthenticated = state.User.Identity?.IsAuthenticated == true;
+
+        if (isAuthenticated && !_isMonitoring)
+        {
+            await StartMonitoringAsync();
+        }
+        else if (!isAuthenticated && _isMonitoring)
+        {
+            await StopMonitoringAsync();
+        }
+    }
+
+    private async Task EnsureModuleAsync()
+    {
+        _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sessionMonitor.js");
+    }
+
+    private async Task StartMonitoringAsync()
+    {
+        try
+        {
+            await EnsureModuleAsync();
+            _dotNetRef = DotNetObjectReference.Create(this);
+            await _module!.InvokeVoidAsync("start", _dotNetRef, SessionCookieHelper.SessionIdCookieName, "/account/refresh");
+            _isMonitoring = true;
+        }
+        catch (JSException ex)
+        {
+            Console.Error.WriteLine($"Failed to start session monitor: {ex.Message}");
+        }
+    }
+
+    private async Task StopMonitoringAsync()
+    {
+        try
+        {
+            if (_module != null)
+            {
+                await _module.InvokeVoidAsync("stop");
+            }
+        }
+        catch (JSException)
+        {
+            // Ignore
+        }
+        finally
+        {
+            _dotNetRef?.Dispose();
+            _dotNetRef = null;
+            _isMonitoring = false;
+            _idleSeconds = 0;
+            StateHasChanged();
+        }
+    }
+
+    [JSInvokable]
+    public Task OnIdleWarning(string message)
+    {
+        Snackbar.Add(message, Severity.Warning, options =>
+        {
+            options.RequireInteraction = true;
+            options.CloseAfterNavigation = false;
+        });
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnIdleTimeUpdate(double idleSeconds, double absoluteSeconds)
+    {
+        _idleSeconds = idleSeconds;
+        if (_idleSeconds <= 0)
+        {
+            Snackbar.Add("Session expired due to inactivity.", Severity.Error);
+        }
+        InvokeAsync(StateHasChanged);
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnForceLogout(string message)
+    {
+        Snackbar.Add(message, Severity.Error, options => options.RequireInteraction = true);
+        Navigation.NavigateTo("/login", forceLoad: true);
+        return Task.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_isMonitoring)
+        {
+            await StopMonitoringAsync();
+        }
+
+        if (_module != null)
+        {
+            try
+            {
+                await _module.DisposeAsync();
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+    }
+}

@@ -1,0 +1,156 @@
+@page "/admin/sessions"
+@attribute [Authorize(Roles = "Admin")]
+@inject SessionService SessionService
+@inject ISnackbar Snackbar
+
+<PageTitle>Active Sessions - Zebrahoof EMR</PageTitle>
+
+<MudStack Spacing="3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <div>
+            <MudText Typo="Typo.h4">Active Sessions</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Monitor connected users, idle timers, and revoke compromised sessions.</MudText>
+        </div>
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudTextField @bind-Value="_search" Placeholder="Search by user, device, IP..." Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true" Variant="Variant.Outlined" />
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" Disabled="_isLoading" OnClick="LoadSessions">Refresh</MudButton>
+        </MudStack>
+    </MudStack>
+
+    <MudGrid>
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Active Sessions</MudText>
+                    <MudText Typo="Typo.h4">@_sessions.Count</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Average Idle Time</MudText>
+                    <MudText Typo="Typo.h4">@FormatDuration(_sessions.Any() ? TimeSpan.FromSeconds(_sessions.Average(s => s.IdleRemaining.TotalSeconds)) : TimeSpan.Zero)</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="2">
+                <MudCardContent>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Expiring In &lt; 5 min</MudText>
+                    <MudText Typo="Typo.h4">@_sessions.Count(s => s.IdleRemaining < TimeSpan.FromMinutes(5))</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    @if (_isLoading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" Class="ma-auto" />
+    }
+    else if (!_sessions.Any())
+    {
+        <MudAlert Severity="Severity.Info">No active sessions are currently connected.</MudAlert>
+    }
+    else
+    {
+        <MudTable Items="FilteredSessions" Dense="true" Hover="true" Breakpoint="Breakpoint.Md">
+            <HeaderContent>
+                <MudTh>User</MudTh>
+                <MudTh>Device</MudTh>
+                <MudTh>IP Address</MudTh>
+                <MudTh>Last Seen</MudTh>
+                <MudTh>Idle Remaining</MudTh>
+                <MudTh>Absolute Remaining</MudTh>
+                <MudTh Class="text-right">Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudStack Spacing="1">
+                        <MudText Typo="Typo.body2">@GetDisplayName(context.Session)</MudText>
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@context.Session.UserId</MudText>
+                    </MudStack>
+                </MudTd>
+                <MudTd>@(context.Session.DeviceName ?? "Unknown Device")</MudTd>
+                <MudTd>@(context.Session.IpAddress ?? "?")</MudTd>
+                <MudTd>@context.Session.LastSeenAt.ToLocalTime().ToString("g")</MudTd>
+                <MudTd>
+                    <MudChip T="string" Color="@GetIdleColor(context.IdleRemaining)" Size="Size.Small">
+                        @FormatDuration(context.IdleRemaining)
+                    </MudChip>
+                </MudTd>
+                <MudTd>@FormatDuration(context.AbsoluteRemaining)</MudTd>
+                <MudTd Class="text-right">
+                    <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Close" OnClick="() => RevokeSession(context.Session.Id)">
+                        Revoke
+                    </MudButton>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudStack>
+
+@code {
+    private List<ActiveSessionInfo> _sessions = new();
+    private bool _isLoading;
+    private string _search = string.Empty;
+
+    private IEnumerable<ActiveSessionInfo> FilteredSessions => string.IsNullOrWhiteSpace(_search)
+        ? _sessions
+        : _sessions.Where(info =>
+            (info.Session.User?.DisplayName?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            info.Session.UserId.Contains(_search, StringComparison.OrdinalIgnoreCase) ||
+            (info.Session.DeviceName?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false) ||
+            (info.Session.IpAddress?.Contains(_search, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSessions();
+    }
+
+    private async Task LoadSessions()
+    {
+        _isLoading = true;
+        try
+        {
+            _sessions = await SessionService.GetActiveSessionInfosAsync();
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task RevokeSession(Guid sessionId)
+    {
+        await SessionService.RevokeSessionAsync(sessionId, "admin_revoked");
+        Snackbar.Add("Session revoked", Severity.Success);
+        await LoadSessions();
+    }
+
+    private static string GetDisplayName(UserSession session) =>
+        string.IsNullOrWhiteSpace(session.User?.DisplayName)
+            ? (session.User?.UserName ?? "Unknown User")
+            : session.User!.DisplayName!;
+
+    private static string FormatDuration(TimeSpan span)
+    {
+        if (span <= TimeSpan.Zero)
+        {
+            return "Expired";
+        }
+        if (span.TotalHours >= 1)
+        {
+            return span.ToString(@"hh\:mm\:ss");
+        }
+        return span.ToString(@"mm\:ss");
+    }
+
+    private static Color GetIdleColor(TimeSpan remaining) => remaining switch
+    {
+        var t when t <= TimeSpan.Zero => Color.Error,
+        var t when t < TimeSpan.FromMinutes(2) => Color.Error,
+        var t when t < TimeSpan.FromMinutes(5) => Color.Warning,
+        _ => Color.Success
+    };
+}

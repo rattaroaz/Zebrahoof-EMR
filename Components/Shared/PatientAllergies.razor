@@ -1,0 +1,102 @@
+@inject MockClinicalDataService ClinicalDataService
+@implements IDisposable
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Allergies</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">
+                Add Allergy
+            </MudButton>
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent Class="pa-0">
+        @if (_allergies.Count == 0)
+        {
+            <MudAlert Severity="Severity.Success" Class="ma-4">
+                <MudStack Row="true" AlignItems="AlignItems.Center">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" />
+                    <MudText>No Known Allergies (NKA)</MudText>
+                </MudStack>
+            </MudAlert>
+        }
+        else
+        {
+            <MudTable Items="@_allergies" Hover="true" Dense="true">
+                <HeaderContent>
+                    <MudTh>Allergen</MudTh>
+                    <MudTh>Reaction</MudTh>
+                    <MudTh>Severity</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Onset Date</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Allergen">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="@GetSeverityColor(context.Severity)" Size="Size.Small" />
+                            @context.Allergen
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Reaction">@(context.Reaction ?? "—")</MudTd>
+                    <MudTd DataLabel="Severity">
+                        <MudChip T="string" Size="Size.Small" Color="@GetSeverityColor(context.Severity)">@context.Severity</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Onset">@(context.OnsetDate?.ToString("MM/dd/yyyy") ?? "Unknown")</MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    private List<Allergy> _allergies = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        ClinicalDataService.PatientDataChanged += OnPatientDataChanged;
+        _allergies = await ClinicalDataService.GetAllergiesByPatientAsync(PatientId);
+    }
+
+    private async void OnPatientDataChanged(int patientId)
+    {
+        if (patientId != PatientId) return;
+        _allergies = await ClinicalDataService.GetAllergiesByPatientAsync(PatientId);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+    }
+
+    private Color GetSeverityColor(AllergySeverity severity) => severity switch
+    {
+        AllergySeverity.LifeThreatening => Color.Error,
+        AllergySeverity.Severe => Color.Error,
+        AllergySeverity.Moderate => Color.Warning,
+        AllergySeverity.Mild => Color.Info,
+        _ => Color.Default
+    };
+
+    private Color GetStatusColor(AllergyStatus status) => status switch
+    {
+        AllergyStatus.Active => Color.Warning,
+        AllergyStatus.Inactive => Color.Default,
+        AllergyStatus.Resolved => Color.Success,
+        _ => Color.Default
+    };
+}

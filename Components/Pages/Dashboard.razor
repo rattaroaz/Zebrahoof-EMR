@@ -1,0 +1,377 @@
+@page "/"
+@page "/dashboard"
+@inject AuthStateService AuthState
+@inject MockAppointmentService AppointmentService
+@inject MockTaskService TaskService
+@inject MockMessageService MessageService
+@inject MockClinicalDataService ClinicalDataService
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard - Zebrahoof EMR</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">
+    Welcome back, @(AuthState.CurrentUser?.FullName ?? "User")
+</MudText>
+
+<MudGrid>
+    @* Today's Appointments *@
+    <MudItem xs="12" md="6" lg="4">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Primary" Variant="Variant.Filled">
+                        <MudIcon Icon="@Icons.Material.Filled.CalendarToday" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Today's Appointments</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@DateTime.Today.ToString("dddd, MMMM d")</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Href="/schedule" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_todaysAppointments.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Class="ma-4">No appointments scheduled for today</MudAlert>
+                }
+                else
+                {
+                    <MudList T="Appointment" Dense="true">
+                        @foreach (var apt in _todaysAppointments.Take(5))
+                        {
+                            <MudListItem OnClick="@(() => Navigation.NavigateTo($"/patients/{apt.PatientId}"))">
+                                <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                    <div>
+                                        <MudText Typo="Typo.body2">@apt.PatientName</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @apt.DateTime.ToString("h:mm tt") - @apt.VisitType
+                                        </MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(apt.Status)">
+                                        @apt.Status
+                                    </MudChip>
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudCardContent>
+            @if (_todaysAppointments.Count > 5)
+            {
+                <MudCardActions>
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" Href="/schedule">
+                        View All (@_todaysAppointments.Count)
+                    </MudButton>
+                </MudCardActions>
+            }
+        </MudCard>
+    </MudItem>
+
+    @* Pending Tasks *@
+    <MudItem xs="12" md="6" lg="4">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Warning" Variant="Variant.Filled">
+                        <MudIcon Icon="@Icons.Material.Filled.Task" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Pending Tasks</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@_pendingTasks.Count items require attention</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Href="/tasks" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_pendingTasks.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Success" Class="ma-4">All tasks completed!</MudAlert>
+                }
+                else
+                {
+                    <MudList T="ClinicalTask" Dense="true">
+                        @foreach (var task in _pendingTasks.Take(5))
+                        {
+                            <MudListItem>
+                                <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                    <div>
+                                        <MudText Typo="Typo.body2">@task.Title</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @(task.PatientName ?? "General") - @task.Type
+                                        </MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetPriorityColor(task.Priority)">
+                                        @task.Priority
+                                    </MudChip>
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudCardContent>
+            @if (_pendingTasks.Count > 5)
+            {
+                <MudCardActions>
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" Href="/tasks">
+                        View All (@_pendingTasks.Count)
+                    </MudButton>
+                </MudCardActions>
+            }
+        </MudCard>
+    </MudItem>
+
+    @* Inbox Summary *@
+    <MudItem xs="12" md="6" lg="4">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Info" Variant="Variant.Filled">
+                        <MudIcon Icon="@Icons.Material.Filled.Inbox" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Messages</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@_unreadMessages.Count unread</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Href="/inbox" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_unreadMessages.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Class="ma-4">No unread messages</MudAlert>
+                }
+                else
+                {
+                    <MudList T="Message" Dense="true">
+                        @foreach (var msg in _unreadMessages.Take(5))
+                        {
+                            <MudListItem OnClick="@(() => Navigation.NavigateTo("/inbox"))">
+                                <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                    <div style="overflow: hidden;">
+                                        <MudText Typo="Typo.body2" Style="font-weight: 600;">@msg.Subject</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary text-truncate">
+                                            From: @msg.From
+                                        </MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetMessageTypeColor(msg.Type)">
+                                        @msg.Type
+                                    </MudChip>
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudCardContent>
+            @if (_unreadMessages.Count > 5)
+            {
+                <MudCardActions>
+                    <MudButton Variant="Variant.Text" Color="Color.Primary" Href="/inbox">
+                        View All (@_unreadMessages.Count)
+                    </MudButton>
+                </MudCardActions>
+            }
+        </MudCard>
+    </MudItem>
+
+    @* Recent Patient Interactions *@
+    <MudItem xs="12" md="6" lg="4">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Success" Variant="Variant.Filled">
+                        <MudIcon Icon="@Icons.Material.Filled.History" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Recent Interactions</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Latest patient activity</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Href="/patients" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_recentInteractions.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Class="ma-4">No recent interactions</MudAlert>
+                }
+                else
+                {
+                    <MudList T="PatientInteraction" Dense="true">
+                        @foreach (var interaction in _recentInteractions.Take(5))
+                        {
+                            <MudListItem OnClick="@(() => Navigation.NavigateTo($"/patients/{interaction.PatientId}/chart"))">
+                                <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                    <div>
+                                        <MudText Typo="Typo.body2">@interaction.PatientName</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @interaction.Summary
+                                        </MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetInteractionTypeColor(interaction.Type)">
+                                        @interaction.Type
+                                    </MudChip>
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    @* Clinical Alerts *@
+    <MudItem xs="12" md="6" lg="4">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudAvatar Color="Color.Error" Variant="Variant.Filled">
+                        <MudIcon Icon="@Icons.Material.Filled.NotificationsActive" />
+                    </MudAvatar>
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Clinical Alerts</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@_clinicalAlerts.Count pending alerts</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                @if (_clinicalAlerts.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Success" Class="ma-4">No pending alerts</MudAlert>
+                }
+                else
+                {
+                    <MudList T="ClinicalAlert" Dense="true">
+                        @foreach (var alert in _clinicalAlerts.Take(5))
+                        {
+                            <MudListItem OnClick="@(() => HandleAlertClick(alert))">
+                                <div class="d-flex align-center justify-space-between" style="width: 100%;">
+                                    <div>
+                                        <MudText Typo="Typo.body2" Style="@(alert.Severity == AlertSeverity.Critical ? "font-weight: 600; color: var(--mud-palette-error);" : "")">
+                                            @alert.Title
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @(alert.PatientName ?? "General") - @alert.Description.Truncate(40)
+                                        </MudText>
+                                    </div>
+                                    <MudChip T="string" Size="Size.Small" Color="@GetAlertSeverityColor(alert.Severity)">
+                                        @alert.Severity
+                                    </MudChip>
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudCardContent>
+            @if (_clinicalAlerts.Count > 5)
+            {
+                <MudCardActions>
+                    <MudButton Variant="Variant.Text" Color="Color.Primary">
+                        View All (@_clinicalAlerts.Count)
+                    </MudButton>
+                </MudCardActions>
+            }
+        </MudCard>
+    </MudItem>
+
+    @* Quick Actions *@
+    <MudItem xs="12">
+        <MudPaper Elevation="0" Class="pa-4 mud-background">
+            <MudText Typo="Typo.h6" Class="mb-3">Quick Actions</MudText>
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.PersonSearch" Href="/patients">
+                    Find Patient
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.EventAvailable" Href="/schedule">
+                    View Schedule
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Assignment" Href="/orders">
+                    Orders
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Mail" Href="/inbox">
+                    Check Messages
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private List<Appointment> _todaysAppointments = new();
+    private List<ClinicalTask> _pendingTasks = new();
+    private List<Message> _unreadMessages = new();
+    private List<PatientInteraction> _recentInteractions = new();
+    private List<ClinicalAlert> _clinicalAlerts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _todaysAppointments = await AppointmentService.GetTodaysAppointmentsAsync();
+        _pendingTasks = await TaskService.GetPendingTasksAsync();
+        _unreadMessages = await MessageService.GetUnreadMessagesAsync();
+        _recentInteractions = await ClinicalDataService.GetRecentInteractionsAsync(5);
+        _clinicalAlerts = await ClinicalDataService.GetUnacknowledgedAlertsAsync();
+    }
+
+    private void HandleAlertClick(ClinicalAlert alert)
+    {
+        if (alert.PatientId.HasValue)
+        {
+            Navigation.NavigateTo($"/patients/{alert.PatientId}/chart");
+        }
+    }
+
+    private Color GetStatusColor(AppointmentStatus status) => status switch
+    {
+        AppointmentStatus.Completed => Color.Success,
+        AppointmentStatus.InProgress => Color.Primary,
+        AppointmentStatus.InRoom => Color.Info,
+        AppointmentStatus.CheckedIn => Color.Warning,
+        AppointmentStatus.NoShow => Color.Error,
+        AppointmentStatus.Cancelled => Color.Default,
+        _ => Color.Default
+    };
+
+    private Color GetPriorityColor(ClinicalTaskPriority priority) => priority switch
+    {
+        ClinicalTaskPriority.Urgent => Color.Error,
+        ClinicalTaskPriority.High => Color.Warning,
+        ClinicalTaskPriority.Normal => Color.Info,
+        ClinicalTaskPriority.Low => Color.Default,
+        _ => Color.Default
+    };
+
+    private Color GetMessageTypeColor(MessageType type) => type switch
+    {
+        MessageType.Results => Color.Warning,
+        MessageType.Refill => Color.Info,
+        MessageType.PatientPortal => Color.Primary,
+        MessageType.Administrative => Color.Secondary,
+        _ => Color.Default
+    };
+
+    private Color GetInteractionTypeColor(InteractionType type) => type switch
+    {
+        InteractionType.OfficeVisit => Color.Primary,
+        InteractionType.PhoneCall => Color.Info,
+        InteractionType.Message => Color.Secondary,
+        InteractionType.LabReview => Color.Warning,
+        InteractionType.Prescription => Color.Success,
+        InteractionType.Referral => Color.Tertiary,
+        _ => Color.Default
+    };
+
+    private Color GetAlertSeverityColor(AlertSeverity severity) => severity switch
+    {
+        AlertSeverity.Critical => Color.Error,
+        AlertSeverity.High => Color.Warning,
+        AlertSeverity.Medium => Color.Info,
+        AlertSeverity.Low => Color.Default,
+        _ => Color.Default
+    };
+}

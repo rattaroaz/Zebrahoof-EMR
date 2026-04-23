@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Zebrahoof EMR.csproj" />
+  <Project Path="tests/Zebrahoof.EMR.UnitTests/Zebrahoof.EMR.UnitTests.csproj" />
+  <Project Path="tests/Zebrahoof.EMR.IntegrationTests/Zebrahoof.EMR.IntegrationTests.csproj" />
+  <Project Path="tests/Zebrahoof.EMR.UiSmokeTests/Zebrahoof.EMR.UiSmokeTests.csproj" />
+</Solution>

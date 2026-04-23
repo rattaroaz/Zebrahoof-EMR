@@ -1,0 +1,137 @@
+@* Patient History - Medical, Surgical, Family, Social *@
+
+<MudGrid>
+    @* Medical History *@
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Past Medical History</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudList T="string" Dense="true">
+                    <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small" IconColor="Color.Primary">
+                        Hypertension - Diagnosed 2018
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small" IconColor="Color.Primary">
+                        Type 2 Diabetes Mellitus - Diagnosed 2015
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small" IconColor="Color.Primary">
+                        Hyperlipidemia - Diagnosed 2019
+                    </MudListItem>
+                </MudList>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    @* Surgical History *@
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Surgical History</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudList T="string" Dense="true">
+                    <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small" IconColor="Color.Secondary">
+                        Appendectomy - 2005
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Circle" IconSize="Size.Small" IconColor="Color.Secondary">
+                        Cholecystectomy - 2018
+                    </MudListItem>
+                </MudList>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    @* Family History *@
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Family History</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudList T="string" Dense="true">
+                    <MudListItem Icon="@Icons.Material.Filled.Person" IconSize="Size.Small">
+                        <div>
+                            <MudText Typo="Typo.body2">Father</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Heart disease, Diabetes</MudText>
+                        </div>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Person" IconSize="Size.Small">
+                        <div>
+                            <MudText Typo="Typo.body2">Mother</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Breast cancer (age 62)</MudText>
+                        </div>
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Person" IconSize="Size.Small">
+                        <div>
+                            <MudText Typo="Typo.body2">Sibling</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Hypertension</MudText>
+                        </div>
+                    </MudListItem>
+                </MudList>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    @* Social History *@
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2" Class="mb-4">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Social History</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Tobacco Use</MudText>
+                        <MudText Typo="Typo.body2">Never smoker</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Alcohol Use</MudText>
+                        <MudText Typo="Typo.body2">Occasional (social)</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Drug Use</MudText>
+                        <MudText Typo="Typo.body2">None</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Exercise</MudText>
+                        <MudText Typo="Typo.body2">2-3 times/week</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Occupation</MudText>
+                        <MudText Typo="Typo.body2">Office Worker</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Marital Status</MudText>
+                        <MudText Typo="Typo.body2">Married</MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+}

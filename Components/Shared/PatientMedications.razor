@@ -1,0 +1,892 @@
+@inject MockClinicalDataService ClinicalDataService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">
+    @* Medication List Tab - Active Long-Term Medications *@
+    <MudTabPanel Text="Medication List" Icon="@Icons.Material.Filled.List">
+        <MudCard Elevation="0">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Current Medications</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Active long-term medications only</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PlaylistAdd" OnClick="OpenAddToListDialog" Class="mr-2">
+                        Add to List
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenPrescribeDialog">
+                        Prescribe New
+                    </MudButton>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                <MudTable Items="@MedicationList" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Medication</MudTh>
+                        <MudTh>Dose</MudTh>
+                        <MudTh>Route</MudTh>
+                        <MudTh>Frequency</MudTh>
+                        <MudTh>Refills</MudTh>
+                        <MudTh>Pharmacy</MudTh>
+                        <MudTh>Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Medication">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                @context.Name
+                                @if (context.IsHighRisk)
+                                {
+                                    <MudTooltip Text="High-risk medication">
+                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Small" />
+                                    </MudTooltip>
+                                }
+                            </MudStack>
+                        </MudTd>
+                        <MudTd DataLabel="Dose">@context.Dose</MudTd>
+                        <MudTd DataLabel="Route">@context.Route</MudTd>
+                        <MudTd DataLabel="Frequency">@context.Frequency</MudTd>
+                        <MudTd DataLabel="Refills">@(context.RefillsRemaining ?? 0)</MudTd>
+                        <MudTd DataLabel="Pharmacy">@context.Pharmacy</MudTd>
+                        <MudTd>
+                            <MudTooltip Text="Edit Medication">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Secondary" OnClick="@(() => OpenEditMedicationDialog(context))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Order Refill">
+                                <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Color="Color.Primary" OnClick="@(() => OrderRefill(context))" />
+                            </MudTooltip>
+                            <MudTooltip Text="View History">
+                                <MudIconButton Icon="@Icons.Material.Filled.History" Size="Size.Small" OnClick="@(() => ViewMedicationHistory(context))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Discontinue">
+                                <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" OnClick="@(() => DiscontinueMedication(context))" />
+                            </MudTooltip>
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Class="pa-4">No active medications on the medication list</MudText>
+                    </NoRecordsContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    </MudTabPanel>
+
+    @* Prescription History Tab *@
+    <MudTabPanel Text="Prescription History" Icon="@Icons.Material.Filled.History">
+        <MudCard Elevation="0">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Prescription History</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">All prescriptions including short-term medications</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                <MudTable Items="@_prescriptions" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Date</MudTh>
+                        <MudTh>Medication</MudTh>
+                        <MudTh>Dose</MudTh>
+                        <MudTh>Frequency</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Prescriber</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Date">@context.PrescribedDate.ToString("MM/dd/yyyy")</MudTd>
+                        <MudTd DataLabel="Medication">
+                            @context.MedicationName
+                            @if (context.IsRefill)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ml-2">Refill</MudChip>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Dose">@context.Dose</MudTd>
+                        <MudTd DataLabel="Frequency">@context.Frequency</MudTd>
+                        <MudTd DataLabel="Type">
+                            <MudChip T="string" Size="Size.Small" Color="@(context.Type == PrescriptionType.LongTerm ? Color.Primary : Color.Secondary)">
+                                @(context.Type == PrescriptionType.LongTerm ? "Long-term" : "Short-term")
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Size="Size.Small" Color="@GetPrescriptionStatusColor(context.Status)">@context.Status</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Prescriber">@context.Prescriber</MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Class="pa-4">No prescription history found</MudText>
+                    </NoRecordsContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    </MudTabPanel>
+
+    @* All Medications Tab (including discontinued) *@
+    <MudTabPanel Text="All Medications" Icon="@Icons.Material.Filled.Medication">
+        <MudCard Elevation="0">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">All Medications</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Including discontinued medications</MudText>
+                </CardHeaderContent>
+                <CardHeaderActions>
+                    <MudToggleGroup T="string" @bind-Value="_statusFilter" Style="height: 36px;">
+                        <MudToggleItem Value="@("active")">Active</MudToggleItem>
+                        <MudToggleItem Value="@("discontinued")">Discontinued</MudToggleItem>
+                        <MudToggleItem Value="@("all")">All</MudToggleItem>
+                    </MudToggleGroup>
+                </CardHeaderActions>
+            </MudCardHeader>
+            <MudCardContent Class="pa-0">
+                <MudTable Items="@FilteredMedications" Hover="true" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Medication</MudTh>
+                        <MudTh>Dose</MudTh>
+                        <MudTh>Route</MudTh>
+                        <MudTh>Frequency</MudTh>
+                        <MudTh>Start Date</MudTh>
+                        <MudTh>End Date</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Type</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Medication">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                @context.Name
+                                @if (context.IsHighRisk)
+                                {
+                                    <MudTooltip Text="High-risk medication">
+                                        <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Error" Size="Size.Small" />
+                                    </MudTooltip>
+                                }
+                            </MudStack>
+                        </MudTd>
+                        <MudTd DataLabel="Dose">@context.Dose</MudTd>
+                        <MudTd DataLabel="Route">@context.Route</MudTd>
+                        <MudTd DataLabel="Frequency">@context.Frequency</MudTd>
+                        <MudTd DataLabel="Start">@context.StartDate.ToString("MM/dd/yyyy")</MudTd>
+                        <MudTd DataLabel="End">@(context.EndDate?.ToString("MM/dd/yyyy") ?? "—")</MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Type">
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@(context.IsLongTerm ? Color.Primary : Color.Secondary)">
+                                @(context.IsLongTerm ? "Long-term" : "Short-term")
+                            </MudChip>
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Class="pa-4">No medications found</MudText>
+                    </NoRecordsContent>
+                </MudTable>
+            </MudCardContent>
+        </MudCard>
+    </MudTabPanel>
+</MudTabs>
+
+@* Prescribe Medication Dialog *@
+<MudDialog @bind-Visible="_showPrescribeDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" /> Prescribe Medication
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_prescribeForm" @bind-IsValid="_prescribeFormValid">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudAutocomplete T="MedicationCatalog" Label="Medication Name" Value="_newPrescription.SelectedMedication" ValueChanged="OnMedicationSelected" Required="true" RequiredError="Medication is required" SearchFunc="@SearchMedications" ToStringFunc="@GetMedicationName" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_newPrescription.Dose" Label="Dose" Required="true" RequiredError="Dose is required" Placeholder="e.g., 10mg, 500mg" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudSelect @bind-Value="_newPrescription.Route" Label="Route" Required="true" RequiredError="Route is required">
+                        <MudSelectItem Value="@("Oral")">Oral</MudSelectItem>
+                        <MudSelectItem Value="@("Subcutaneous")">Subcutaneous</MudSelectItem>
+                        <MudSelectItem Value="@("Intramuscular")">Intramuscular</MudSelectItem>
+                        <MudSelectItem Value="@("Intravenous")">Intravenous</MudSelectItem>
+                        <MudSelectItem Value="@("Topical")">Topical</MudSelectItem>
+                        <MudSelectItem Value="@("Inhalation")">Inhalation</MudSelectItem>
+                        <MudSelectItem Value="@("Ophthalmic")">Ophthalmic</MudSelectItem>
+                        <MudSelectItem Value="@("Otic")">Otic</MudSelectItem>
+                        <MudSelectItem Value="@("Rectal")">Rectal</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_newPrescription.Frequency" Label="Frequency" Required="true" RequiredError="Frequency is required" Placeholder="e.g., Once daily, Twice daily" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudNumericField @bind-Value="_newPrescription.DaysSupply" Label="Days Supply" Min="1" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudNumericField @bind-Value="_newPrescription.Quantity" Label="Quantity" Min="1" />
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudNumericField @bind-Value="_newPrescription.Refills" Label="Refills" Min="0" Max="12" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_newPrescription.Instructions" Label="Instructions" Lines="2" Placeholder="Special instructions for the patient" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_newPrescription.Pharmacy" Label="Pharmacy" Placeholder="e.g., CVS Pharmacy" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_newPrescription.Prescriber" Label="Prescriber" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center">
+                        <MudSwitch @bind-Value="_newPrescription.IsLongTerm" Color="Color.Primary" Label="Long-term medication" />
+                        <MudSwitch @bind-Value="_newPrescription.IsHighRisk" Color="Color.Error" Label="High-risk medication" />
+                    </MudStack>
+                    @if (_newPrescription.IsLongTerm)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-2">
+                            Long-term medications will be added to the patient's medication list.
+                        </MudAlert>
+                    }
+                    @if (_duplicateWarning)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                            This medication is already on the patient's medication list. A new prescription will be created but the medication list will not be duplicated.
+                        </MudAlert>
+                    }
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="ClosePrescribeDialog">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitPrescription" Disabled="@(!_prescribeFormValid)">
+            Prescribe
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Refill Dialog *@
+<MudDialog @bind-Visible="_showRefillDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Refresh" Class="mr-2" /> Order Refill
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedMedication != null)
+        {
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.body1"><strong>@_selectedMedication.Name</strong> @_selectedMedication.Dose</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_selectedMedication.Frequency • @_selectedMedication.Route</MudText>
+                <MudDivider Class="my-2" />
+                <MudNumericField @bind-Value="_refillDaysSupply" Label="Days Supply" Min="1" />
+                <MudTextField @bind-Value="_refillPharmacy" Label="Pharmacy" />
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseRefillDialog">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitRefill">
+            Order Refill
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Discontinue Dialog *@
+<MudDialog @bind-Visible="_showDiscontinueDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Cancel" Class="mr-2" Color="Color.Error" /> Discontinue Medication
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedMedication != null)
+        {
+            <MudStack Spacing="2">
+                <MudAlert Severity="Severity.Warning" Dense="true">
+                    Are you sure you want to discontinue this medication?
+                </MudAlert>
+                <MudText Typo="Typo.body1"><strong>@_selectedMedication.Name</strong> @_selectedMedication.Dose</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@_selectedMedication.Frequency • @_selectedMedication.Route</MudText>
+                <MudDivider Class="my-2" />
+                <MudTextField @bind-Value="_discontinueReason" Label="Reason for Discontinuation" Lines="2" />
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDiscontinueDialog">Cancel</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="SubmitDiscontinue">
+            Discontinue
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Medication History Dialog *@
+<MudDialog @bind-Visible="_showHistoryDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" /> Medication History
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedMedication != null)
+        {
+            <MudStack Spacing="2">
+                <MudText Typo="Typo.body1"><strong>@_selectedMedication.Name</strong> @_selectedMedication.Dose</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Started: @_selectedMedication.StartDate.ToString("MM/dd/yyyy") • Prescriber: @_selectedMedication.Prescriber</MudText>
+                <MudDivider Class="my-2" />
+                <MudText Typo="Typo.subtitle2">Prescription History</MudText>
+                <MudTable Items="@_medicationPrescriptions" Dense="true" Hover="true">
+                    <HeaderContent>
+                        <MudTh>Date</MudTh>
+                        <MudTh>Type</MudTh>
+                        <MudTh>Days Supply</MudTh>
+                        <MudTh>Quantity</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Prescriber</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.PrescribedDate.ToString("MM/dd/yyyy")</MudTd>
+                        <MudTd>
+                            @if (context.IsRefill)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info">Refill</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary">New</MudChip>
+                            }
+                        </MudTd>
+                        <MudTd>@context.DaysSupply days</MudTd>
+                        <MudTd>@context.Quantity</MudTd>
+                        <MudTd>
+                            <MudChip T="string" Size="Size.Small" Color="@GetPrescriptionStatusColor(context.Status)">@context.Status</MudChip>
+                        </MudTd>
+                        <MudTd>@context.Prescriber</MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Class="pa-4">No prescription history found</MudText>
+                    </NoRecordsContent>
+                </MudTable>
+            </MudStack>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseHistoryDialog">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Add to List Dialog (without prescription) *@
+<MudDialog @bind-Visible="_showAddToListDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.PlaylistAdd" Class="mr-2" /> Add Medication to List
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+            Add a medication the patient is taking without creating a prescription (e.g., medication from another provider).
+        </MudAlert>
+        <MudForm @ref="_addToListForm" @bind-IsValid="_addToListFormValid">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_addToListModel.MedicationName" Label="Medication Name" Required="true" RequiredError="Medication name is required" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_addToListModel.Dose" Label="Dose" Required="true" RequiredError="Dose is required" Placeholder="e.g., 10mg, 500mg" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudSelect @bind-Value="_addToListModel.Route" Label="Route" Required="true" RequiredError="Route is required">
+                        <MudSelectItem Value="@("Oral")">Oral</MudSelectItem>
+                        <MudSelectItem Value="@("Subcutaneous")">Subcutaneous</MudSelectItem>
+                        <MudSelectItem Value="@("Intramuscular")">Intramuscular</MudSelectItem>
+                        <MudSelectItem Value="@("Intravenous")">Intravenous</MudSelectItem>
+                        <MudSelectItem Value="@("Topical")">Topical</MudSelectItem>
+                        <MudSelectItem Value="@("Inhalation")">Inhalation</MudSelectItem>
+                        <MudSelectItem Value="@("Ophthalmic")">Ophthalmic</MudSelectItem>
+                        <MudSelectItem Value="@("Otic")">Otic</MudSelectItem>
+                        <MudSelectItem Value="@("Rectal")">Rectal</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_addToListModel.Frequency" Label="Frequency" Required="true" RequiredError="Frequency is required" Placeholder="e.g., Once daily, Twice daily" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_addToListModel.Prescriber" Label="Prescriber" Placeholder="e.g., Dr. External Provider" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_addToListModel.Pharmacy" Label="Pharmacy" Placeholder="e.g., CVS Pharmacy" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_addToListModel.Instructions" Label="Instructions" Lines="2" Placeholder="Special instructions for the patient" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_addToListModel.IsHighRisk" Color="Color.Error" Label="High-risk medication" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseAddToListDialog">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAddToList" Disabled="@(!_addToListFormValid)">
+            Add to List
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@* Edit Medication Dialog *@
+<MudDialog @bind-Visible="_showEditMedicationDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" /> Edit Medication
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_editMedicationForm" @bind-IsValid="_editMedicationFormValid">
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle1"><strong>@_editMedicationModel.MedicationName</strong></MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_editMedicationModel.Dose" Label="Dose" Required="true" RequiredError="Dose is required" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudSelect @bind-Value="_editMedicationModel.Route" Label="Route" Required="true" RequiredError="Route is required">
+                        <MudSelectItem Value="@("Oral")">Oral</MudSelectItem>
+                        <MudSelectItem Value="@("Subcutaneous")">Subcutaneous</MudSelectItem>
+                        <MudSelectItem Value="@("Intramuscular")">Intramuscular</MudSelectItem>
+                        <MudSelectItem Value="@("Intravenous")">Intravenous</MudSelectItem>
+                        <MudSelectItem Value="@("Topical")">Topical</MudSelectItem>
+                        <MudSelectItem Value="@("Inhalation")">Inhalation</MudSelectItem>
+                        <MudSelectItem Value="@("Ophthalmic")">Ophthalmic</MudSelectItem>
+                        <MudSelectItem Value="@("Otic")">Otic</MudSelectItem>
+                        <MudSelectItem Value="@("Rectal")">Rectal</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_editMedicationModel.Frequency" Label="Frequency" Required="true" RequiredError="Frequency is required" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_editMedicationModel.RefillsRemaining" Label="Refills Remaining" Min="0" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudNumericField @bind-Value="_editMedicationModel.DaysSupply" Label="Days Supply" Min="1" />
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTextField @bind-Value="_editMedicationModel.Pharmacy" Label="Pharmacy" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_editMedicationModel.Instructions" Label="Instructions" Lines="2" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_editMedicationModel.IsHighRisk" Color="Color.Error" Label="High-risk medication" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseEditMedicationDialog">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitEditMedication" Disabled="@(!_editMedicationFormValid)">
+            Save Changes
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    private List<Medication> _medications = new();
+    private List<Prescription> _prescriptions = new();
+    private List<Prescription> _medicationPrescriptions = new();
+    private List<MedicationCatalog> _medicationCatalog = new();
+    private string _statusFilter = "active";
+
+    // Medication list (active long-term only)
+    private IEnumerable<Medication> MedicationList => _medications.Where(m => m.IsLongTerm && m.Status == MedicationStatus.Active);
+
+    private IEnumerable<Medication> FilteredMedications => _statusFilter switch
+    {
+        "active" => _medications.Where(m => m.Status == MedicationStatus.Active),
+        "discontinued" => _medications.Where(m => m.Status == MedicationStatus.Discontinued),
+        _ => _medications
+    };
+
+    // Dialog state
+    private bool _showPrescribeDialog;
+    private bool _showRefillDialog;
+    private bool _showDiscontinueDialog;
+    private bool _showHistoryDialog;
+    private bool _showAddToListDialog;
+    private bool _showEditMedicationDialog;
+    private MudForm? _prescribeForm;
+    private MudForm? _addToListForm;
+    private MudForm? _editMedicationForm;
+    private bool _prescribeFormValid;
+    private bool _addToListFormValid;
+    private bool _editMedicationFormValid;
+    private bool _duplicateWarning;
+    private Medication? _selectedMedication;
+
+    // New prescription form
+    private PrescriptionFormModel _newPrescription = new();
+
+    // Add to list form (without prescription)
+    private AddToListFormModel _addToListModel = new();
+
+    // Edit medication form
+    private EditMedicationFormModel _editMedicationModel = new();
+
+    // Refill form
+    private int _refillDaysSupply = 30;
+    private string _refillPharmacy = string.Empty;
+
+    // Discontinue form
+    private string _discontinueReason = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        ClinicalDataService.PatientDataChanged += OnPatientDataChanged;
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        _medications = await ClinicalDataService.GetMedicationsByPatientAsync(PatientId);
+        _prescriptions = await ClinicalDataService.GetPrescriptionsByPatientAsync(PatientId);
+        _medicationCatalog = await ClinicalDataService.GetMedicationCatalogAsync();
+    }
+
+    private async void OnPatientDataChanged(int patientId)
+    {
+        if (patientId != PatientId) return;
+        await LoadData();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+    }
+
+    private void OpenPrescribeDialog()
+    {
+        _newPrescription = new PrescriptionFormModel
+        {
+            Prescriber = "Dr. Sarah Smith",
+            Route = "Oral",
+            IsLongTerm = true
+        };
+        _duplicateWarning = false;
+        _showPrescribeDialog = true;
+    }
+
+    private void ClosePrescribeDialog()
+    {
+        _showPrescribeDialog = false;
+        _newPrescription = new();
+    }
+
+    private async Task SubmitPrescription()
+    {
+        if (_prescribeForm != null)
+        {
+            await _prescribeForm.Validate();
+            if (!_prescribeFormValid) return;
+        }
+
+        // Check for duplicates if long-term
+        if (_newPrescription.IsLongTerm)
+        {
+            var isDuplicate = await ClinicalDataService.IsMedicationOnListAsync(PatientId, _newPrescription.MedicationName);
+            if (isDuplicate)
+            {
+                _duplicateWarning = true;
+                // Still allow prescription, just warn - medication list won't be duplicated
+            }
+        }
+
+        await ClinicalDataService.PrescribeMedicationAsync(
+            PatientId,
+            _newPrescription.MedicationName,
+            _newPrescription.Dose,
+            _newPrescription.Route,
+            _newPrescription.Frequency,
+            _newPrescription.IsLongTerm,
+            _newPrescription.DaysSupply,
+            _newPrescription.Quantity,
+            _newPrescription.Refills,
+            _newPrescription.Instructions,
+            _newPrescription.Prescriber,
+            _newPrescription.Pharmacy,
+            _newPrescription.IsHighRisk
+        );
+
+        await LoadData();
+        ClosePrescribeDialog();
+        Snackbar.Add("Prescription created successfully", Severity.Success);
+    }
+
+    private void OrderRefill(Medication medication)
+    {
+        _selectedMedication = medication;
+        _refillDaysSupply = medication.DaysSupply ?? 30;
+        _refillPharmacy = medication.Pharmacy ?? string.Empty;
+        _showRefillDialog = true;
+    }
+
+    private void CloseRefillDialog()
+    {
+        _showRefillDialog = false;
+        _selectedMedication = null;
+    }
+
+    private async Task SubmitRefill()
+    {
+        if (_selectedMedication == null) return;
+
+        var medName = _selectedMedication.Name;
+        
+        await ClinicalDataService.OrderRefillAsync(
+            PatientId,
+            _selectedMedication.Id,
+            "Dr. Sarah Smith",
+            _refillDaysSupply
+        );
+
+        await LoadData();
+        CloseRefillDialog();
+        Snackbar.Add($"Refill ordered for {medName}", Severity.Success);
+    }
+
+    private void DiscontinueMedication(Medication medication)
+    {
+        _selectedMedication = medication;
+        _discontinueReason = string.Empty;
+        _showDiscontinueDialog = true;
+    }
+
+    private void CloseDiscontinueDialog()
+    {
+        _showDiscontinueDialog = false;
+        _selectedMedication = null;
+    }
+
+    private async Task SubmitDiscontinue()
+    {
+        if (_selectedMedication == null) return;
+
+        await ClinicalDataService.DiscontinueMedicationAsync(_selectedMedication.Id, _discontinueReason);
+
+        await LoadData();
+        CloseDiscontinueDialog();
+        Snackbar.Add($"{_selectedMedication.Name} has been discontinued", Severity.Info);
+    }
+
+    private async Task ViewMedicationHistory(Medication medication)
+    {
+        _selectedMedication = medication;
+        _medicationPrescriptions = await ClinicalDataService.GetPrescriptionsByMedicationAsync(medication.Id);
+        _showHistoryDialog = true;
+    }
+
+    private void CloseHistoryDialog()
+    {
+        _showHistoryDialog = false;
+        _selectedMedication = null;
+        _medicationPrescriptions = new();
+    }
+
+    // Add to List (without prescription) methods
+    private void OpenAddToListDialog()
+    {
+        _addToListModel = new AddToListFormModel
+        {
+            Route = "Oral"
+        };
+        _showAddToListDialog = true;
+    }
+
+    private void CloseAddToListDialog()
+    {
+        _showAddToListDialog = false;
+        _addToListModel = new();
+    }
+
+    private async Task SubmitAddToList()
+    {
+        if (_addToListForm != null)
+        {
+            await _addToListForm.Validate();
+            if (!_addToListFormValid) return;
+        }
+
+        // Check for duplicates
+        var isDuplicate = await ClinicalDataService.IsMedicationOnListAsync(PatientId, _addToListModel.MedicationName);
+        if (isDuplicate)
+        {
+            Snackbar.Add("This medication is already on the patient's medication list", Severity.Warning);
+            return;
+        }
+
+        await ClinicalDataService.AddMedicationToListAsync(
+            PatientId,
+            _addToListModel.MedicationName,
+            _addToListModel.Dose,
+            _addToListModel.Route,
+            _addToListModel.Frequency,
+            _addToListModel.Prescriber,
+            _addToListModel.Pharmacy,
+            _addToListModel.Instructions,
+            _addToListModel.IsHighRisk
+        );
+
+        await LoadData();
+        CloseAddToListDialog();
+        Snackbar.Add($"{_addToListModel.MedicationName} added to medication list", Severity.Success);
+    }
+
+    // Edit Medication methods
+    private void OpenEditMedicationDialog(Medication medication)
+    {
+        _selectedMedication = medication;
+        _editMedicationModel = new EditMedicationFormModel
+        {
+            MedicationId = medication.Id,
+            MedicationName = medication.Name,
+            Dose = medication.Dose,
+            Route = medication.Route,
+            Frequency = medication.Frequency,
+            RefillsRemaining = medication.RefillsRemaining,
+            DaysSupply = medication.DaysSupply,
+            Pharmacy = medication.Pharmacy,
+            Instructions = medication.Instructions,
+            IsHighRisk = medication.IsHighRisk
+        };
+        _showEditMedicationDialog = true;
+    }
+
+    private void CloseEditMedicationDialog()
+    {
+        _showEditMedicationDialog = false;
+        _selectedMedication = null;
+        _editMedicationModel = new();
+    }
+
+    private async Task SubmitEditMedication()
+    {
+        if (_editMedicationForm != null)
+        {
+            await _editMedicationForm.Validate();
+            if (!_editMedicationFormValid) return;
+        }
+
+        await ClinicalDataService.UpdateMedicationAsync(
+            _editMedicationModel.MedicationId,
+            _editMedicationModel.Dose,
+            _editMedicationModel.Route,
+            _editMedicationModel.Frequency,
+            null, // prescriber - don't update
+            _editMedicationModel.Pharmacy,
+            _editMedicationModel.Instructions,
+            _editMedicationModel.RefillsRemaining,
+            _editMedicationModel.DaysSupply,
+            _editMedicationModel.IsHighRisk
+        );
+
+        await LoadData();
+        CloseEditMedicationDialog();
+        Snackbar.Add($"{_editMedicationModel.MedicationName} updated successfully", Severity.Success);
+    }
+
+    public Task<IEnumerable<MedicationCatalog>> SearchMedications(string value, CancellationToken token = default)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Task.FromResult(_medicationCatalog.AsEnumerable());
+        
+        var filtered = _medicationCatalog.Where(m => 
+            m.Name.Contains(value, StringComparison.OrdinalIgnoreCase) ||
+            m.BrandNames.Any(b => b.Contains(value, StringComparison.OrdinalIgnoreCase)));
+        return Task.FromResult(filtered);
+    }
+
+    public string GetMedicationName(MedicationCatalog item)
+    {
+        if (item == null) return string.Empty;
+        if (item.BrandNames.Count > 0)
+            return $"{item.Name} ({string.Join(", ", item.BrandNames)})";
+        return item.Name;
+    }
+
+    private void OnMedicationSelected(MedicationCatalog? medication)
+    {
+        if (medication != null)
+        {
+            _newPrescription.MedicationName = medication.Name;
+            _newPrescription.Dose = medication.CommonDoses.FirstOrDefault() ?? string.Empty;
+            _newPrescription.Route = medication.CommonRoutes.FirstOrDefault() ?? "Oral";
+            _newPrescription.Frequency = medication.CommonFrequencies.FirstOrDefault() ?? string.Empty;
+            _newPrescription.IsHighRisk = medication.IsHighRisk;
+        }
+    }
+
+    private Color GetStatusColor(MedicationStatus status) => status switch
+    {
+        MedicationStatus.Active => Color.Success,
+        MedicationStatus.Discontinued => Color.Error,
+        MedicationStatus.OnHold => Color.Warning,
+        MedicationStatus.Completed => Color.Info,
+        _ => Color.Default
+    };
+
+    private Color GetPrescriptionStatusColor(PrescriptionStatus status) => status switch
+    {
+        PrescriptionStatus.Active => Color.Primary,
+        PrescriptionStatus.Filled => Color.Success,
+        PrescriptionStatus.Cancelled => Color.Error,
+        PrescriptionStatus.Expired => Color.Warning,
+        _ => Color.Default
+    };
+
+    private class PrescriptionFormModel
+    {
+        public string MedicationName { get; set; } = string.Empty;
+        public MedicationCatalog? SelectedMedication { get; set; }
+        public string Dose { get; set; } = string.Empty;
+        public string Route { get; set; } = "Oral";
+        public string Frequency { get; set; } = string.Empty;
+        public int? DaysSupply { get; set; } = 30;
+        public int? Quantity { get; set; } = 30;
+        public int? Refills { get; set; } = 0;
+        public string? Instructions { get; set; }
+        public string? Prescriber { get; set; }
+        public string? Pharmacy { get; set; }
+        public bool IsLongTerm { get; set; } = true;
+        public bool IsHighRisk { get; set; }
+    }
+
+    private class AddToListFormModel
+    {
+        public string MedicationName { get; set; } = string.Empty;
+        public string Dose { get; set; } = string.Empty;
+        public string Route { get; set; } = "Oral";
+        public string Frequency { get; set; } = string.Empty;
+        public string? Prescriber { get; set; }
+        public string? Pharmacy { get; set; }
+        public string? Instructions { get; set; }
+        public bool IsHighRisk { get; set; }
+    }
+
+    private class EditMedicationFormModel
+    {
+        public int MedicationId { get; set; }
+        public string MedicationName { get; set; } = string.Empty;
+        public string Dose { get; set; } = string.Empty;
+        public string Route { get; set; } = "Oral";
+        public string Frequency { get; set; } = string.Empty;
+        public int? RefillsRemaining { get; set; }
+        public int? DaysSupply { get; set; }
+        public string? Pharmacy { get; set; }
+        public string? Instructions { get; set; }
+        public bool IsHighRisk { get; set; }
+    }
+}

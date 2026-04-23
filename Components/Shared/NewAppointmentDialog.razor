@@ -1,0 +1,244 @@
+@inject MockAppointmentService AppointmentService
+@inject MockPatientService PatientService
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.EventAvailable" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">@(_isEditing ? "Edit Appointment" : "New Appointment")</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudGrid Spacing="2">
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Patient</MudText>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudAutocomplete T="Patient"
+                                     @bind-Value="_selectedPatient"
+                                     Label="Search Patient"
+                                     SearchFunc="SearchPatients"
+                                     ToStringFunc="@(p => p?.FullName ?? string.Empty)"
+                                     Variant="Variant.Outlined"
+                                     Required="true"
+                                     RequiredError="Patient is required"
+                                     ShowProgressIndicator="true"
+                                     Disabled="@(PreselectedPatientId.HasValue)">
+                        <ItemTemplate Context="patient">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudAvatar Size="Size.Small" Color="Color.Primary">@patient.FirstName[0]@patient.LastName[0]</MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.body2">@patient.FullName</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@patient.MRN | DOB: @patient.DateOfBirth.ToShortDateString()</MudText>
+                                </div>
+                            </MudStack>
+                        </ItemTemplate>
+                    </MudAutocomplete>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Appointment Details</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_appointmentDate"
+                                   Label="Date"
+                                   Required="true"
+                                   RequiredError="Date is required"
+                                   Variant="Variant.Outlined"
+                                   MinDate="DateTime.Today"
+                                   DateFormat="MM/dd/yyyy" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTimePicker @bind-Time="_appointmentTime"
+                                   Label="Time"
+                                   Required="true"
+                                   RequiredError="Time is required"
+                                   Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_appointment.DurationMinutes"
+                               Label="Duration"
+                               Required="true"
+                               Variant="Variant.Outlined">
+                        <MudSelectItem Value="15">15 minutes</MudSelectItem>
+                        <MudSelectItem Value="20">20 minutes</MudSelectItem>
+                        <MudSelectItem Value="30">30 minutes</MudSelectItem>
+                        <MudSelectItem Value="45">45 minutes</MudSelectItem>
+                        <MudSelectItem Value="60">60 minutes</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_appointment.VisitType"
+                               Label="Visit Type"
+                               Required="true"
+                               RequiredError="Visit type is required"
+                               Variant="Variant.Outlined">
+                        @foreach (var type in MockAppointmentService.VisitTypes)
+                        {
+                            <MudSelectItem Value="@type">@type</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Provider & Location</MudText>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_appointment.Provider"
+                               Label="Provider"
+                               Required="true"
+                               RequiredError="Provider is required"
+                               Variant="Variant.Outlined">
+                        @foreach (var provider in MockAppointmentService.Providers)
+                        {
+                            <MudSelectItem Value="@provider">@provider</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect @bind-Value="_appointment.Location"
+                               Label="Location"
+                               Required="true"
+                               RequiredError="Location is required"
+                               Variant="Variant.Outlined">
+                        @foreach (var location in MockAppointmentService.Locations)
+                        {
+                            <MudSelectItem Value="@location">@location</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Notes (Optional)</MudText>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_appointment.Notes"
+                                  Label="Appointment Notes"
+                                  Variant="Variant.Outlined"
+                                  Lines="3" />
+                </MudItem>
+            </MudGrid>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="Submit"
+                   Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   Disabled="@(!_isValid || _isSaving)">
+            @if (_isSaving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(_isEditing ? "Update Appointment" : "Book Appointment")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public Appointment? ExistingAppointment { get; set; }
+
+    [Parameter]
+    public int? PreselectedPatientId { get; set; }
+
+    [Parameter]
+    public DateTime? PreselectedDate { get; set; }
+
+    [Parameter]
+    public TimeSpan? PreselectedTime { get; set; }
+
+    [Parameter]
+    public string? PreselectedProvider { get; set; }
+
+    private MudForm _form = null!;
+    private Appointment _appointment = new() { DurationMinutes = 30, Status = AppointmentStatus.Scheduled };
+    private Patient? _selectedPatient;
+    private DateTime? _appointmentDate;
+    private TimeSpan? _appointmentTime;
+    private bool _isValid;
+    private bool _isSaving;
+    private bool _isEditing;
+    private List<Patient> _patients = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _patients = await PatientService.GetAllPatientsAsync();
+
+        if (ExistingAppointment != null)
+        {
+            _isEditing = true;
+            _appointment = new Appointment
+            {
+                Id = ExistingAppointment.Id,
+                PatientId = ExistingAppointment.PatientId,
+                PatientName = ExistingAppointment.PatientName,
+                DateTime = ExistingAppointment.DateTime,
+                DurationMinutes = ExistingAppointment.DurationMinutes,
+                VisitType = ExistingAppointment.VisitType,
+                Provider = ExistingAppointment.Provider,
+                Location = ExistingAppointment.Location,
+                Status = ExistingAppointment.Status,
+                Notes = ExistingAppointment.Notes
+            };
+            _selectedPatient = _patients.FirstOrDefault(p => p.Id == ExistingAppointment.PatientId);
+            _appointmentDate = ExistingAppointment.DateTime.Date;
+            _appointmentTime = ExistingAppointment.DateTime.TimeOfDay;
+        }
+        else
+        {
+            _appointmentDate = PreselectedDate ?? DateTime.Today;
+            _appointmentTime = PreselectedTime ?? new TimeSpan(9, 0, 0);
+            _appointment.Provider = PreselectedProvider ?? MockAppointmentService.Providers.First();
+            _appointment.Location = MockAppointmentService.Locations.First();
+            _appointment.VisitType = MockAppointmentService.VisitTypes.First();
+
+            if (PreselectedPatientId.HasValue)
+            {
+                _selectedPatient = _patients.FirstOrDefault(p => p.Id == PreselectedPatientId);
+            }
+        }
+    }
+
+    private async Task<IEnumerable<Patient>> SearchPatients(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return _patients.Take(10);
+
+        return await PatientService.SearchPatientsAsync(value);
+    }
+
+    private async Task Submit()
+    {
+        await _form.Validate();
+        if (!_isValid || _selectedPatient == null || !_appointmentDate.HasValue || !_appointmentTime.HasValue)
+            return;
+
+        _isSaving = true;
+
+        _appointment.PatientId = _selectedPatient.Id;
+        _appointment.PatientName = _selectedPatient.FullName;
+        _appointment.DateTime = _appointmentDate.Value.Add(_appointmentTime.Value);
+
+        if (_isEditing)
+        {
+            await AppointmentService.UpdateAppointmentAsync(_appointment);
+        }
+        else
+        {
+            await AppointmentService.AddAppointmentAsync(_appointment);
+        }
+
+        _isSaving = false;
+        MudDialog.Close(DialogResult.Ok(_appointment));
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

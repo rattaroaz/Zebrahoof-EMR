@@ -1,0 +1,49 @@
+@page "/patients/{PatientId:int}/notes/tree"
+@inject MockClinicalDataService ClinicalDataService
+@inject MockPatientService PatientService
+@inject AuthStateService AuthState
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>Clinical Notes Tree View - Zebrahoof EMR</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+    <!-- Breadcrumb Navigation -->
+    <MudBreadcrumbs Items="@breadcrumbItems" Class="mb-4" />
+    
+    <!-- Patient Header -->
+    <PatientHeader Patient="@patient" />
+    
+    <!-- Tree View Component -->
+    <PatientNotesTreeView PatientId="@PatientId" />
+</MudContainer>
+
+@code {
+    [Parameter]
+    public int PatientId { get; set; }
+
+    private Patient? patient;
+    private List<BreadcrumbItem> breadcrumbItems = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPatient();
+        SetupBreadcrumbs();
+    }
+
+    private async Task LoadPatient()
+    {
+        patient = await PatientService.GetPatientByIdAsync(PatientId);
+    }
+
+    private void SetupBreadcrumbs()
+    {
+        breadcrumbItems = new List<BreadcrumbItem>
+        {
+            new BreadcrumbItem("Patients", href: "/patients"),
+            new BreadcrumbItem(patient?.FullName ?? "Patient", href: $"/patients/{PatientId}"),
+            new BreadcrumbItem("Notes", href: $"/patients/{PatientId}/notes"),
+            new BreadcrumbItem("Tree View", href: null, disabled: true)
+        };
+    }
+}

@@ -1,0 +1,297 @@
+@page "/preferences"
+@inject AuthStateService AuthState
+
+<PageTitle>Preferences - Zebrahoof EMR</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">System Preferences</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Palette" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Appearance</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Theme and display settings</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudSelect @bind-Value="preferences.Theme" Label="Theme" Variant="Variant.Outlined" T="string">
+                        <MudSelectItem Value="@("Light")">Light</MudSelectItem>
+                        <MudSelectItem Value="@("Dark")">Dark</MudSelectItem>
+                        <MudSelectItem Value="@("System")">System Default</MudSelectItem>
+                    </MudSelect>
+                    
+                    <MudSelect @bind-Value="preferences.Density" Label="Density" Variant="Variant.Outlined" T="string">
+                        <MudSelectItem Value="@("Comfortable")">Comfortable</MudSelectItem>
+                        <MudSelectItem Value="@("Compact")">Compact</MudSelectItem>
+                    </MudSelect>
+
+                    <MudSelect @bind-Value="preferences.Language" Label="Language Preference" Variant="Variant.Outlined" T="string">
+                        <MudSelectItem Value="@("English")">English</MudSelectItem>
+                        <MudSelectItem Value="@("Spanish")">Spanish</MudSelectItem>
+                        <MudSelectItem Value="@("French")">French</MudSelectItem>
+                        <MudSelectItem Value="@("Chinese")">Chinese</MudSelectItem>
+                    </MudSelect>
+
+                    <MudSelect @bind-Value="preferences.TimeZone" Label="Time Zone" Variant="Variant.Outlined" T="string">
+                        <MudSelectItem Value="@("Eastern Time")">Eastern Time (ET)</MudSelectItem>
+                        <MudSelectItem Value="@("Central Time")">Central Time (CT)</MudSelectItem>
+                        <MudSelectItem Value="@("Mountain Time")">Mountain Time (MT)</MudSelectItem>
+                        <MudSelectItem Value="@("Pacific Time")">Pacific Time (PT)</MudSelectItem>
+                        <MudSelectItem Value="@("UTC")">UTC</MudSelectItem>
+                    </MudSelect>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Home" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Default Views</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Dashboard and navigation preferences</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudSelect @bind-Value="preferences.LandingPage" Label="Landing Page" Variant="Variant.Outlined" T="string">
+                        <MudSelectItem Value="@("Dashboard")">Dashboard</MudSelectItem>
+                        <MudSelectItem Value="@("Schedule")">Schedule</MudSelectItem>
+                        <MudSelectItem Value="@("Patients")">Patients</MudSelectItem>
+                        <MudSelectItem Value="@("Inbox")">Inbox</MudSelectItem>
+                    </MudSelect>
+                    
+                    <MudSelect @bind-Value="preferences.ScheduleView" Label="Default Schedule View" Variant="Variant.Outlined" T="string">
+                        <MudSelectItem Value="@("Day")">Day View</MudSelectItem>
+                        <MudSelectItem Value="@("Week")">Week View</MudSelectItem>
+                        <MudSelectItem Value="@("Month")">Month View</MudSelectItem>
+                    </MudSelect>
+
+                    <MudSelect @bind-Value="preferences.PatientListDensity" Label="Patient List Density" Variant="Variant.Outlined" T="string">
+                        <MudSelectItem Value="@("Compact")">Compact</MudSelectItem>
+                        <MudSelectItem Value="@("Comfortable")">Comfortable</MudSelectItem>
+                        <MudSelectItem Value="@("Spacious")">Spacious</MudSelectItem>
+                    </MudSelect>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+    
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Notifications" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Notification Settings</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Alert and notification preferences</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudSwitch @bind-Value="preferences.DesktopNotifications" T="bool" Label="Desktop Notifications" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Show browser notifications for important updates</MudText>
+                    
+                    <MudSwitch @bind-Value="preferences.SoundAlerts" T="bool" Label="Sound Alerts" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Play sound for urgent notifications</MudText>
+                    
+                    <MudSwitch @bind-Value="preferences.EmailNotifications" T="bool" Label="Email Notifications" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Receive email summaries and alerts</MudText>
+
+                    <MudSwitch @bind-Value="preferences.SmsNotifications" T="bool" Label="SMS Notifications" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Get text messages for urgent matters</MudText>
+
+                    <MudSelect @bind-Value="preferences.NotificationLevel" Label="Notification Level" Variant="Variant.Outlined" T="string">
+                        <MudSelectItem Value="@("All")">All Notifications</MudSelectItem>
+                        <MudSelectItem Value="@("Important")">Important Only</MudSelectItem>
+                        <MudSelectItem Value="@("Urgent")">Urgent Only</MudSelectItem>
+                    </MudSelect>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.Accessibility" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Accessibility</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Display and interaction preferences</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudStack Spacing="3">
+                    <MudSwitch @bind-Value="preferences.HighContrast" T="bool" Label="High Contrast Mode" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Increase contrast for better visibility</MudText>
+                    
+                    <MudSwitch @bind-Value="preferences.LargeText" T="bool" Label="Large Text" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Increase font size throughout the application</MudText>
+
+                    <MudSwitch @bind-Value="preferences.ReduceMotion" T="bool" Label="Reduce Motion" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Minimize animations and transitions</MudText>
+
+                    <MudSelect @bind-Value="preferences.FontSize" Label="Font Size" Variant="Variant.Outlined" T="string">
+                        <MudSelectItem Value="@("Small")">Small</MudSelectItem>
+                        <MudSelectItem Value="@("Medium")">Medium</MudSelectItem>
+                        <MudSelectItem Value="@("Large")">Large</MudSelectItem>
+                        <MudSelectItem Value="@("Extra Large")">Extra Large</MudSelectItem>
+                    </MudSelect>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudCard Elevation="2">
+            <MudCardHeader>
+                <CardHeaderAvatar>
+                    <MudIcon Icon="@Icons.Material.Filled.DataObject" />
+                </CardHeaderAvatar>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.h6">Data & Privacy</MudText>
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Data handling and privacy preferences</MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudGrid>
+                    <MudItem xs="12" md="6">
+                        <MudStack Spacing="3">
+                            <MudSwitch @bind-Value="preferences.DataAnalytics" T="bool" Label="Usage Analytics" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Help improve the application with anonymous usage data</MudText>
+                            
+                            <MudSwitch @bind-Value="preferences.Autocomplete" T="bool" Label="Autocomplete Suggestions" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Show suggestions while typing in forms</MudText>
+
+                            <MudSwitch @bind-Value="preferences.AutoSave" T="bool" Label="Auto-save Forms" />
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary">Automatically save form progress</MudText>
+                        </MudStack>
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudStack Spacing="3">
+                            <MudSelect @bind-Value="preferences.DateFormat" Label="Date Format" Variant="Variant.Outlined" T="string">
+                                <MudSelectItem Value="@("MM/DD/YYYY")">MM/DD/YYYY</MudSelectItem>
+                                <MudSelectItem Value="@("DD/MM/YYYY")">DD/MM/YYYY</MudSelectItem>
+                                <MudSelectItem Value="@("YYYY-MM-DD")">YYYY-MM-DD</MudSelectItem>
+                            </MudSelect>
+
+                            <MudSelect @bind-Value="preferences.TimeFormat" Label="Time Format" Variant="Variant.Outlined" T="string">
+                                <MudSelectItem Value="@("12-hour")">12-hour (AM/PM)</MudSelectItem>
+                                <MudSelectItem Value="@("24-hour")">24-hour</MudSelectItem>
+                            </MudSelect>
+
+                            <MudSelect @bind-Value="preferences.NumberFormat" Label="Number Format" Variant="Variant.Outlined" T="string">
+                                <MudSelectItem Value="@("1,234.56")">1,234.56 (US)</MudSelectItem>
+                                <MudSelectItem Value="@("1.234,56")">1.234,56 (European)</MudSelectItem>
+                                <MudSelectItem Value="@("1 234,56")">1 234,56 (Space)</MudSelectItem>
+                            </MudSelect>
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12">
+        <MudCardActions>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save" OnClick="SavePreferences">
+                Save Preferences
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Restore" OnClick="ResetPreferences">
+                Reset to Defaults
+            </MudButton>
+        </MudCardActions>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private UserPreferences preferences = new();
+
+    protected override void OnInitialized()
+    {
+        // Initialize with default values
+        preferences = new UserPreferences
+        {
+            Theme = "System",
+            Density = "Comfortable",
+            Language = "English",
+            TimeZone = "Eastern Time",
+            LandingPage = "Dashboard",
+            ScheduleView = "Day",
+            PatientListDensity = "Comfortable",
+            DesktopNotifications = true,
+            SoundAlerts = true,
+            EmailNotifications = false,
+            SmsNotifications = false,
+            NotificationLevel = "Important",
+            HighContrast = false,
+            LargeText = false,
+            ReduceMotion = false,
+            FontSize = "Medium",
+            DataAnalytics = true,
+            Autocomplete = true,
+            AutoSave = true,
+            DateFormat = "MM/DD/YYYY",
+            TimeFormat = "12-hour",
+            NumberFormat = "1,234.56"
+        };
+    }
+
+    private void SavePreferences()
+    {
+        // Save preferences logic would go here
+        // For now, just show a success message
+    }
+
+    private void ResetPreferences()
+    {
+        // Reset to default values
+        OnInitialized();
+    }
+
+    public class UserPreferences
+    {
+        // Appearance
+        public string Theme { get; set; } = string.Empty;
+        public string Density { get; set; } = string.Empty;
+        public string Language { get; set; } = string.Empty;
+        public string TimeZone { get; set; } = string.Empty;
+
+        // Default Views
+        public string LandingPage { get; set; } = string.Empty;
+        public string ScheduleView { get; set; } = string.Empty;
+        public string PatientListDensity { get; set; } = string.Empty;
+
+        // Notifications
+        public bool DesktopNotifications { get; set; }
+        public bool SoundAlerts { get; set; }
+        public bool EmailNotifications { get; set; }
+        public bool SmsNotifications { get; set; }
+        public string NotificationLevel { get; set; } = string.Empty;
+
+        // Accessibility
+        public bool HighContrast { get; set; }
+        public bool LargeText { get; set; }
+        public bool ReduceMotion { get; set; }
+        public string FontSize { get; set; } = string.Empty;
+
+        // Data & Privacy
+        public bool DataAnalytics { get; set; }
+        public bool Autocomplete { get; set; }
+        public bool AutoSave { get; set; }
+        public string DateFormat { get; set; } = string.Empty;
+        public string TimeFormat { get; set; } = string.Empty;
+        public string NumberFormat { get; set; } = string.Empty;
+    }
+}
