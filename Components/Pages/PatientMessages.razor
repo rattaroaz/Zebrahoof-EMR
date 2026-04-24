@@ -1,0 +1,129 @@
+@page "/patient-messages"
+@using Zebrahoof_EMR.Models
+@inject MockPatientService PatientService
+@inject MockClinicalDataService ClinicalDataService
+@inject ISnackbar Snackbar
+
+<PageTitle>Patient Messages - Zebrahoof EMR</PageTitle>
+
+<MudStack Class="mb-4">
+    <MudText Typo="Typo.h4">Patient Messages</MudText>
+    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+        Send a demo message as if the patient sent it to the physician (e.g. portal). It appears in <strong>Inbox</strong> and in that patient’s chart.
+    </MudText>
+</MudStack>
+
+<MudGrid Justify="Justify.Center">
+    <MudItem xs="12" sm="10" md="8" lg="6">
+        <MudCard Elevation="2">
+            <MudCardContent Class="pa-4">
+                <MudStack Spacing="3">
+                    <MudSelect T="int?"
+                               Label="Patient"
+                               Placeholder="Choose a patient"
+                               @bind-Value="_patientId"
+                               Variant="Variant.Outlined"
+                               FullWidth="true"
+                               Clearable="true">
+                        @foreach (var p in _patients)
+                        {
+                            <MudSelectItem T="int?" Value="@p.Id">@p.FullName <span class="mud-text-secondary">@p.MRN</span></MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudTextField T="string"
+                                  @bind-Value="_subject"
+                                  Label="Subject"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true" />
+
+                    <MudTextField T="string"
+                                  @bind-Value="_body"
+                                  Label="Message (from patient)"
+                                  Variant="Variant.Outlined"
+                                  Lines="8"
+                                  FullWidth="true" />
+
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="pt-2">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Send"
+                                   Disabled="_sending"
+                                   OnClick="SendAsync">
+                            Send to inbox
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    private const string DemoPhysician = "Dr. Sarah Smith";
+
+    private bool _sending;
+    private int? _patientId;
+    private string _subject = string.Empty;
+    private string _body = string.Empty;
+    private List<Patient> _patients = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _patients = await PatientService.GetAllPatientsAsync();
+        _patients.Sort((a, b) => string.Compare(a.FullName, b.FullName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task SendAsync()
+    {
+        if (!_patientId.HasValue)
+        {
+            Snackbar.Add("Select a patient.", Severity.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_subject) || string.IsNullOrWhiteSpace(_body))
+        {
+            Snackbar.Add("Subject and message are required.", Severity.Warning);
+            return;
+        }
+
+        var patient = _patients.FirstOrDefault(p => p.Id == _patientId);
+
+        if (patient == null)
+        {
+            Snackbar.Add("Patient not found.", Severity.Error);
+            return;
+        }
+
+        _sending = true;
+        try
+        {
+            var message = new InboxMessage
+            {
+                Subject = _subject.Trim(),
+                Body = _body.Trim(),
+                FromName = patient.FullName,
+                FromRole = "Patient",
+                ToName = DemoPhysician,
+                PatientId = patient.Id,
+                PatientName = patient.FullName,
+                Category = MessageCategory.PatientMessage,
+                SentAt = DateTime.Now,
+                IsRead = false,
+                IsUrgent = false,
+                Status = MessageStatus.New
+            };
+
+            await ClinicalDataService.SendMessageAsync(message);
+            Snackbar.Add("Message sent. Open Inbox or the patient chart to read it.", Severity.Success);
+            _subject = string.Empty;
+            _body = string.Empty;
+            _patientId = null;
+        }
+        finally
+        {
+            _sending = false;
+        }
+    }
+}

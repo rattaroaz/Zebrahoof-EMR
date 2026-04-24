@@ -1,0 +1,229 @@
+@using Zebrahoof_EMR.Models
+@implements IDisposable
+@inject MockClinicalDataService ClinicalDataService
+@inject NavigationManager Navigation
+
+<MudPaper Elevation="1" Class="pa-3 mb-3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+        <MudText Typo="Typo.subtitle1">Inbox</MudText>
+        @if (_messages.Count > 0)
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@_messages.Count</MudChip>
+        }
+    </MudStack>
+    @if (_messages.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary">No inbox items for this patient.</MudText>
+    }
+    else
+    {
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="4">
+                <MudList T="InboxMessage" Dense="true" Class="overflow-auto" Style="max-height: 320px;">
+                    @foreach (var msg in _messages)
+                    {
+                        <MudListItem OnClick="@(() => SelectMessageAsync(msg))"
+                                     Class="@(_selected?.Id == msg.Id ? "mud-primary-lighten" : "")"
+                                     Style="@(!msg.IsRead ? "font-weight: 600;" : "")">
+                            <MudStack Spacing="0" Class="py-1">
+                                <MudText Typo="Typo.body2">@(msg.Subject.Length > 40 ? msg.Subject[..40] + "…" : msg.Subject)</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@msg.FromName · @msg.SentAt.ToString("MM/dd HH:mm")</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Tertiary">@GetCategoryName(msg.Category)</MudText>
+                            </MudStack>
+                        </MudListItem>
+                    }
+                </MudList>
+            </MudItem>
+            <MudItem xs="12" md="8">
+                @if (_selected != null)
+                {
+                    <MudCard Elevation="0" Outlined="true" Class="h-100">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudStack Spacing="1">
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+                                        <MudText Typo="Typo.h6">@_selected.Subject</MudText>
+                                        <MudStack Row="true" Spacing="1">
+                                            @if (_selected.IsUrgent)
+                                            {
+                                                <MudChip T="string" Color="Color.Error" Size="Size.Small">Urgent</MudChip>
+                                            }
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@GetCategoryName(_selected.Category)</MudChip>
+                                        </MudStack>
+                                    </MudStack>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                        From <strong>@_selected.FromName</strong>
+                                        @if (!string.IsNullOrEmpty(_selected.FromRole))
+                                        {
+                                            <text> (@_selected.FromRole)</text>
+                                        }
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Tertiary">@_selected.SentAt.ToString("f")</MudText>
+                                </MudStack>
+                            </CardHeaderContent>
+                            <CardHeaderActions>
+                                <MudIconButton Icon="@(_selected.IsFlagged ? Icons.Material.Filled.Flag : Icons.Material.Outlined.Flag)"
+                                               Color="@(_selected.IsFlagged ? Color.Warning : Color.Default)"
+                                               OnClick="ToggleFlagAsync" />
+                            </CardHeaderActions>
+                        </MudCardHeader>
+                        <MudDivider />
+                        <MudCardContent>
+                            <MudText Typo="Typo.body1" Style="white-space: pre-wrap;">@_selected.Body</MudText>
+                        </MudCardContent>
+                        <MudDivider />
+                        <MudCardActions>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Reply"
+                                       OnClick="@(() => _showReplyDialog = true)">
+                                Reply
+                            </MudButton>
+                        </MudCardActions>
+                    </MudCard>
+                }
+                else
+                {
+                    <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="min-height: 200px;">
+                        <MudIcon Icon="@Icons.Material.Filled.Email" Color="Color.Secondary" Size="Size.Large" Class="mb-2" />
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Select a message to read</MudText>
+                    </MudStack>
+                }
+            </MudItem>
+        </MudGrid>
+    }
+</MudPaper>
+
+<MudDialog @bind-Visible="_showReplyDialog" Options="new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true }">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Reply to: @_selected?.Subject</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField T="string" @bind-Value="_replyBody" Label="Message" Lines="6" Variant="Variant.Outlined" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showReplyDialog = false)">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SendReplyAsync">Send</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    /// <summary>When set (e.g. from <c>?message=</c> after opening from global inbox), selects that thread after load.</summary>
+    [Parameter]
+    public int? InitialMessageId { get; set; }
+
+    private List<InboxMessage> _messages = new();
+    private InboxMessage? _selected;
+    private int? _loadedForPatientId;
+    private int? _consumedInitialMessageId;
+
+    private bool _showReplyDialog;
+    private string _replyBody = "";
+
+    protected override void OnInitialized()
+    {
+        ClinicalDataService.InboxChanged += OnGlobalInboxChanged;
+    }
+
+    public void Dispose()
+    {
+        ClinicalDataService.InboxChanged -= OnGlobalInboxChanged;
+    }
+
+    private void OnGlobalInboxChanged() => _ = RefreshPatientMessagesAsync();
+
+    private async Task RefreshPatientMessagesAsync()
+    {
+        await InvokeAsync(async () =>
+        {
+            _messages = await ClinicalDataService.GetInboxMessagesAsync(patientId: PatientId);
+            if (_selected != null)
+            {
+                var updated = _messages.FirstOrDefault(m => m.Id == _selected.Id);
+                if (updated != null) _selected = updated;
+            }
+            StateHasChanged();
+        });
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (PatientId != _loadedForPatientId)
+        {
+            _loadedForPatientId = PatientId;
+            _messages = await ClinicalDataService.GetInboxMessagesAsync(patientId: PatientId);
+            _selected = null;
+            _consumedInitialMessageId = null;
+        }
+
+        if (InitialMessageId is { } openId && _consumedInitialMessageId != openId)
+        {
+            _consumedInitialMessageId = openId;
+            var match = _messages.FirstOrDefault(m => m.Id == openId)
+                        ?? await ClinicalDataService.GetMessageByIdAsync(openId);
+            if (match != null && match.PatientId == PatientId)
+                await SelectMessageAsync(match);
+            ClearMessageFromQuery();
+        }
+    }
+
+    private void ClearMessageFromQuery()
+    {
+        var uri = Navigation.GetUriWithQueryParameter("message", (string?)null);
+        Navigation.NavigateTo(uri, replace: true);
+    }
+
+    private async Task SelectMessageAsync(InboxMessage message)
+    {
+        _selected = message;
+        if (!message.IsRead)
+        {
+            await ClinicalDataService.MarkMessageAsReadAsync(message.Id);
+            message.IsRead = true;
+        }
+    }
+
+    private async Task ToggleFlagAsync()
+    {
+        if (_selected == null) return;
+        await ClinicalDataService.ToggleMessageFlagAsync(_selected.Id);
+        _selected.IsFlagged = !_selected.IsFlagged;
+    }
+
+    private async Task SendReplyAsync()
+    {
+        if (_selected == null) return;
+
+        var reply = new InboxMessage
+        {
+            Subject = $"RE: {_selected.Subject}",
+            Body = _replyBody,
+            FromName = "Dr. Sarah Smith",
+            ToName = _selected.FromName,
+            PatientId = _selected.PatientId,
+            PatientName = _selected.PatientName,
+            Category = _selected.Category,
+            ParentMessageId = _selected.Id
+        };
+
+        var saved = await ClinicalDataService.SendMessageAsync(reply);
+        _showReplyDialog = false;
+        _replyBody = "";
+        _messages = await ClinicalDataService.GetInboxMessagesAsync(patientId: PatientId);
+        _selected = _messages.FirstOrDefault(m => m.Id == saved.Id) ?? _selected;
+    }
+
+    private static string GetCategoryName(MessageCategory category) => category switch
+    {
+        MessageCategory.PatientMessage => "Patient",
+        MessageCategory.LabResult => "Lab Result",
+        MessageCategory.ImagingResult => "Imaging",
+        MessageCategory.RefillRequest => "Refill",
+        MessageCategory.ReferralResponse => "Referral",
+        MessageCategory.Administrative => "Admin",
+        MessageCategory.ClinicalQuestion => "Clinical",
+        MessageCategory.TeamMessage => "Team",
+        _ => category.ToString()
+    };
+}

@@ -9,6 +9,9 @@ namespace Zebrahoof_EMR.Services;
 
 public class MockClinicalDataService
 {
+    /// <summary>Raised when inbox content or read state may have changed (demo UI refresh).</summary>
+    public event Action? InboxChanged;
+
     private readonly IServiceScopeFactory? _scopeFactory;
     private readonly ILogger<MockClinicalDataService>? _logger;
     private readonly object _persistenceLock = new();
@@ -1271,11 +1274,12 @@ public class MockClinicalDataService
     }
 
     // Inbox and Messaging Methods
-    public Task<List<InboxMessage>> GetInboxMessagesAsync(string? category = null, bool? unreadOnly = null, bool? flaggedOnly = null) =>
+    public Task<List<InboxMessage>> GetInboxMessagesAsync(string? category = null, bool? unreadOnly = null, bool? flaggedOnly = null, int? patientId = null) =>
         Task.FromResult(_inboxMessages
             .Where(m => category == null || m.Category.ToString() == category)
             .Where(m => unreadOnly != true || !m.IsRead)
             .Where(m => flaggedOnly != true || m.IsFlagged)
+            .Where(m => patientId == null || m.PatientId == patientId)
             .OrderByDescending(m => m.SentAt)
             .ToList());
 
@@ -1297,12 +1301,13 @@ public class MockClinicalDataService
     public Task MarkMessageAsReadAsync(int messageId)
     {
         var message = _inboxMessages.FirstOrDefault(m => m.Id == messageId);
-        if (message != null)
-        {
-            message.IsRead = true;
-            message.ReadAt = DateTime.Now;
-            message.Status = MessageStatus.Read;
-        }
+        if (message == null) return Task.CompletedTask;
+
+        var wasUnread = !message.IsRead;
+        message.IsRead = true;
+        message.ReadAt = DateTime.Now;
+        message.Status = MessageStatus.Read;
+        if (wasUnread) InboxChanged?.Invoke();
         return Task.CompletedTask;
     }
 
@@ -1322,6 +1327,7 @@ public class MockClinicalDataService
         message.SentAt = DateTime.Now;
         message.Status = MessageStatus.New;
         _inboxMessages.Add(message);
+        InboxChanged?.Invoke();
         return Task.FromResult(message);
     }
 

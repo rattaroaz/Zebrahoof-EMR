@@ -1,8 +1,10 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
 @inject AuthStateService AuthState
 @inject AppStateService AppState
 @inject NotificationService Notifications
 @inject NavigationManager Navigation
+@inject MockClinicalDataService ClinicalData
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -126,16 +128,33 @@
         }
     };
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         AuthState.OnAuthStateChanged += OnStateChangedHandler;
         AppState.OnStateChanged += OnStateChangedHandler;
-        UpdateUnreadCount();
+        ClinicalData.InboxChanged += OnInboxDataChanged;
+        await RefreshUnreadMessageCountAsync();
+    }
+
+    private void OnInboxDataChanged() => _ = InboxUpdateAsync();
+
+    private async Task InboxUpdateAsync()
+    {
+        await InvokeAsync(async () =>
+        {
+            await RefreshUnreadMessageCountAsync();
+            StateHasChanged();
+        });
     }
 
     private async void OnStateChangedHandler()
     {
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshUnreadMessageCountAsync()
+    {
+        _unreadMessages = await ClinicalData.GetUnreadMessageCountAsync();
     }
 
     private void ToggleDrawer() => _drawerOpen = !_drawerOpen;
@@ -147,15 +166,10 @@
         AuthState.SetLocation(location);
     }
 
-    private void UpdateUnreadCount()
-    {
-        // Mock unread count
-        _unreadMessages = 4;
-    }
-
     public void Dispose()
     {
         AuthState.OnAuthStateChanged -= OnStateChangedHandler;
         AppState.OnStateChanged -= OnStateChangedHandler;
+        ClinicalData.InboxChanged -= OnInboxDataChanged;
     }
 }

@@ -47,6 +47,7 @@
             </MudMenu>
         </div>
     </MudNavLink>
+    <MudNavLink Href="/patient-messages" Icon="@Icons.Material.Filled.QuestionAnswer" Match="NavLinkMatch.Prefix">Patient Messages</MudNavLink>
     @if (AuthState.CurrentUser?.Role == UserRole.Admin)
     {
         <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.ManageAccounts" Match="NavLinkMatch.Prefix">Users</MudNavLink>

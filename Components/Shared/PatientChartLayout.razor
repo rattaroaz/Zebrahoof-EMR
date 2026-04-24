@@ -13,6 +13,8 @@
     @* Patient Header Banner *@
     <PatientHeader Patient="Patient" />
 
+    <PatientChartMessages PatientId="Patient.Id" InitialMessageId="InboxMessageId" />
+
     @* Send uploaded documents to Grok *@
     <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="my-2">
         <MudButton Variant="Variant.Filled"
@@ -128,6 +130,10 @@
 
     [Parameter]
     public string? Tab { get; set; }
+
+    /// <summary>Optional inbox message to open (from <c>?message=</c> when navigating from global inbox).</summary>
+    [Parameter]
+    public int? InboxMessageId { get; set; }
 
     private int _activeTabIndex;
     private bool _isSendingToGrok;

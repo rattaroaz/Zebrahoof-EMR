@@ -8,4 +8,8 @@ upload files
 Login:  Userprofile@zebrahoof.com Password: password
 example:  Admin@zebrahoof.com Password: password
 
-In the demographics for each patient, have a button next to the patient name.  when the 
+
+
+fake patient messages.
+mutliagent only.  when to Use vs single agent
+ 

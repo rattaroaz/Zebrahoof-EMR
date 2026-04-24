@@ -1,7 +1,9 @@
 @page "/inbox"
 @using Zebrahoof_EMR.Models
+@implements IDisposable
 @inject MockClinicalDataService ClinicalDataService
 @inject NavigationManager Navigation
+@inject ISnackbar Snackbar
 
 <PageTitle>Inbox - Zebrahoof EMR</PageTitle>
 
@@ -79,13 +81,6 @@
                                 }
                             </MudText>
                             <MudText Typo="Typo.caption" Color="Color.Tertiary">@_selectedMessage.SentAt.ToString("f")</MudText>
-                            @if (_selectedMessage.PatientId.HasValue)
-                            {
-                                <MudLink Href="@($"/patients/{_selectedMessage.PatientId}")" Typo="Typo.body2">
-                                    <MudIcon Icon="@Icons.Material.Filled.Person" Size="Size.Small" Class="mr-1" />
-                                    @_selectedMessage.PatientName
-                                </MudLink>
-                            }
                         </MudStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
@@ -109,13 +104,6 @@
                     <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Forward">
                         Forward
                     </MudButton>
-                    @if (_selectedMessage.PatientId.HasValue)
-                    {
-                        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.OpenInNew"
-                                   Href="@($"/patients/{_selectedMessage.PatientId}")">
-                            Open Chart
-                        </MudButton>
-                    }
                 </MudCardActions>
             </MudCard>
         }
@@ -126,6 +114,9 @@
                     <MudStack AlignItems="AlignItems.Center" Spacing="2">
                         <MudIcon Icon="@Icons.Material.Filled.Email" Size="Size.Large" Color="Color.Secondary" />
                         <MudText Typo="Typo.body1" Color="Color.Secondary">Select a message to view</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Tertiary" Class="mt-2 mud-width-full" Style="max-width: 360px; text-align: center;">
+                            Items linked to a patient open in that patient’s chart (inbox under the patient banner).
+                        </MudText>
                     </MudStack>
                 </MudCardContent>
             </MudCard>
@@ -182,6 +173,18 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadMessages();
+        ClinicalDataService.InboxChanged += OnInboxChanged;
+    }
+
+    private void OnInboxChanged() => _ = InboxUpdateAsync();
+
+    private async Task InboxUpdateAsync()
+    {
+        await InvokeAsync(async () =>
+        {
+            await LoadMessages();
+            StateHasChanged();
+        });
     }
 
     private async Task LoadMessages()
@@ -194,6 +197,25 @@
 
     private async Task SelectMessage(InboxMessage message)
     {
+        if (message.PatientId.HasValue)
+        {
+            if (!message.IsRead)
+            {
+                await ClinicalDataService.MarkMessageAsReadAsync(message.Id);
+                message.IsRead = true;
+                _unreadCount = await ClinicalDataService.GetUnreadMessageCountAsync();
+            }
+
+            Navigation.NavigateTo($"/patients/{message.PatientId}/chart?message={message.Id}");
+            return;
+        }
+
+        if (message.Category == MessageCategory.PatientMessage)
+        {
+            Snackbar.Add("Patient messages can only be read in the patient chart. This message is not linked to a patient.", Severity.Warning);
+            return;
+        }
+
         _selectedMessage = message;
         if (!message.IsRead)
         {
@@ -273,6 +295,8 @@
         MessageCategory.TeamMessage => "Team",
         _ => category.ToString()
     };
+
+    public void Dispose() => ClinicalDataService.InboxChanged -= OnInboxChanged;
 }
 
 @code {
