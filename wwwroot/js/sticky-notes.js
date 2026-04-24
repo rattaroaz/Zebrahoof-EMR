@@ -36,18 +36,3 @@ window.stickyNoteDrag = {
         document.addEventListener('mouseup', onMouseUp);
     }
 };
-
-window.stickyNoteStorage = {
-    saveJson: function(userId, json) {
-        const key = 'stickyNotes_' + userId;
-        localStorage.setItem(key, json);
-    },
-    loadJson: function(userId) {
-        const key = 'stickyNotes_' + userId;
-        return localStorage.getItem(key) || "";
-    },
-    clear: function(userId) {
-        const key = 'stickyNotes_' + userId;
-        localStorage.removeItem(key);
-    }
-};
