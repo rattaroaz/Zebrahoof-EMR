@@ -9,6 +9,7 @@ using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Zebrahoof_EMR.Logging;
 
 namespace Zebrahoof_EMR.Services;
 
@@ -170,7 +171,8 @@ public class GrokApiService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Grok API Error: {StatusCode} - {ErrorContent}", response.StatusCode, responseBody);
+                _logger.LogError("Grok API Error: {StatusCode} - {ErrorContentPrefix}", response.StatusCode,
+                    SafeLogContent.Truncate(responseBody, SafeLogContent.DefaultMaxLength));
                 return $"Error from Grok API: {response.StatusCode}. Please check logs for details.";
             }
 
@@ -183,7 +185,7 @@ public class GrokApiService
             }
 
             _logger.LogWarning("Grok response had no assistant text. Body prefix: {Prefix}",
-                responseBody.Length > 500 ? responseBody[..500] : responseBody);
+                SafeLogContent.Truncate(responseBody, SafeLogContent.ShortMaxLength));
             return "No content returned from Grok.";
         }
         catch (Exception ex)

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using Zebrahoof_EMR.Helpers;
 using Zebrahoof_EMR.Models;
 using Zebrahoof_EMR.Services;
@@ -21,8 +22,10 @@ public static class AccountEndpoints
         SignInManager<ApplicationUser> signInManager,
         UserManager<ApplicationUser> userManager,
         SessionService sessionService,
-        AuthSyncService authSyncService)
+        AuthSyncService authSyncService,
+        ILoggerFactory loggerFactory)
     {
+        var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Auth.Account");
         var form = await context.Request.ReadFormAsync();
         var rawInput = form["Username"].ToString().Trim();
         var password = form["Password"].ToString();
@@ -43,37 +46,43 @@ public static class AccountEndpoints
 
         if (user == null)
         {
+            log.LogWarning("Login failed: no matching account");
             return Results.Redirect($"/login?error=invalid&returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
         if (!user.IsActive)
         {
+            log.LogWarning("Login rejected: inactive account for user id {UserId}", user.Id);
             return Results.Redirect($"/login?error=inactive&returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
         var result = await signInManager.PasswordSignInAsync(user.UserName!, password, rememberMe, lockoutOnFailure: true);
         if (result.Succeeded)
         {
+            log.LogInformation("Login succeeded for user id {UserId}", user.Id);
             var roles = await userManager.GetRolesAsync(user);
             var idleWindow = ResolveIdleWindow(roles);
             await IssueSessionAsync(context, user, sessionService, idleWindow);
-            
+
             // Sync user authentication state with actual roles
             await authSyncService.SyncUserAuthenticationAsync(user.UserName!);
-            
+
             return Results.Redirect(returnUrl);
         }
 
         if (result.RequiresTwoFactor)
         {
+            log.LogInformation("Login requires two-factor for user id {UserId}", user.Id);
             return Results.Redirect($"/mfa-challenge?returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
         if (result.IsLockedOut)
         {
+            log.LogWarning("Login failed: account locked for user id {UserId}", user.Id);
             return Results.Redirect($"/login?error=locked&returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
+        log.LogWarning("Login failed: invalid credentials for user id {UserId}", user.Id);
         return Results.Redirect($"/login?error=invalid&returnUrl={Uri.EscapeDataString(returnUrl)}");
     }
 
@@ -81,8 +90,11 @@ public static class AccountEndpoints
         HttpContext context,
         SignInManager<ApplicationUser> signInManager,
         SessionService sessionService,
-        AuthSyncService authSyncService)
+        AuthSyncService authSyncService,
+        ILoggerFactory loggerFactory)
     {
+        var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Auth.Account");
+        log.LogInformation("User logout (session cookies cleared)");
         await signInManager.SignOutAsync();
         await RevokeSessionAsync(context, sessionService, "logout");
         ClearSessionCookies(context);
@@ -93,10 +105,15 @@ public static class AccountEndpoints
         return Results.Redirect("/login?logout=success");
     }
 
-    private static async Task<IResult> HandleRefresh(HttpContext context, SessionService sessionService)
+    private static async Task<IResult> HandleRefresh(
+        HttpContext context,
+        SessionService sessionService,
+        ILoggerFactory loggerFactory)
     {
+        var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Auth.Account");
         if (!TryReadSessionCookies(context, out var sessionId, out var refreshToken))
         {
+            log.LogWarning("Session refresh rejected: missing or invalid refresh cookie");
             ClearSessionCookies(context);
             return Results.Unauthorized();
         }
@@ -104,6 +121,7 @@ public static class AccountEndpoints
         var session = await sessionService.ValidateRefreshTokenAsync(sessionId, refreshToken);
         if (session == null || await sessionService.IsIdleExpiredAsync(sessionId))
         {
+            log.LogWarning("Session refresh rejected: invalid, revoked, or idle-expired session");
             ClearSessionCookies(context);
             return Results.Unauthorized();
         }
@@ -111,10 +129,12 @@ public static class AccountEndpoints
         var newToken = await sessionService.RotateRefreshTokenAsync(sessionId);
         if (newToken == null)
         {
+            log.LogWarning("Session refresh rejected: token rotation failed");
             ClearSessionCookies(context);
             return Results.Unauthorized();
         }
 
+        log.LogDebug("Session refresh succeeded");
         WriteSessionCookies(context, sessionId, newToken);
         return Results.Ok();
     }

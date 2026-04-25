@@ -1,5 +1,8 @@
 ﻿@page "/Error"
 @using System.Diagnostics
+@using Microsoft.AspNetCore.Diagnostics
+@using Microsoft.Extensions.Logging
+@inject ILogger<Error> Logger
 
 <PageTitle>Error</PageTitle>
 
@@ -31,6 +34,17 @@
     private string? RequestId { get; set; }
     private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
 
-    protected override void OnInitialized() =>
+    protected override void OnInitialized()
+    {
         RequestId = Activity.Current?.Id ?? HttpContext?.TraceIdentifier;
+
+        if (HttpContext is not null)
+        {
+            var feature = HttpContext.Features.Get<IExceptionHandlerPathFeature>();
+            if (feature?.Error is { } ex)
+            {
+                Logger.LogError(ex, "Unhandled exception (path: {Path}) RequestId: {RequestId}", feature.Path, RequestId);
+            }
+        }
+    }
 }

@@ -192,7 +192,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
                   .HasConversion(EncryptedStringConverter);
             entity.Property(us => us.DeviceFingerprint)
                   .HasMaxLength(256);
-            entity.HasOne<ApplicationUser>()
+            entity.HasOne(us => us.User)
                   .WithMany()
                   .HasForeignKey(us => us.UserId)
                   .OnDelete(DeleteBehavior.Cascade);

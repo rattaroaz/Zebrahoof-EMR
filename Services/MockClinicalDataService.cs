@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Zebrahoof_EMR.Data;
 using Zebrahoof_EMR.Models;
 using LocationModel = Zebrahoof_EMR.Models.Location;
@@ -13,7 +14,7 @@ public class MockClinicalDataService
     public event Action? InboxChanged;
 
     private readonly IServiceScopeFactory? _scopeFactory;
-    private readonly ILogger<MockClinicalDataService>? _logger;
+    private readonly ILogger<MockClinicalDataService> _logger;
     private readonly object _persistenceLock = new();
 
     private readonly List<Encounter> _encounters;
@@ -57,13 +58,13 @@ public class MockClinicalDataService
     public void NotifyPatientDataChanged(int patientId) => PatientDataChanged?.Invoke(patientId);
 
     public MockClinicalDataService()
-        : this(scopeFactory: null, logger: null)
+        : this(null, NullLogger<MockClinicalDataService>.Instance)
     {
     }
 
     public MockClinicalDataService(
         IServiceScopeFactory? scopeFactory,
-        ILogger<MockClinicalDataService>? logger)
+        ILogger<MockClinicalDataService> logger)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
@@ -147,7 +148,7 @@ public class MockClinicalDataService
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to hydrate clinical data from database; running with in-memory mock state only.");
+            _logger.LogError(ex, "Failed to hydrate clinical data from database; running with in-memory mock state only.");
         }
     }
 
@@ -201,7 +202,7 @@ public class MockClinicalDataService
             }
             catch (Exception ex)
             {
-                _logger?.LogError(ex, "Failed to persist clinical data mutation to database.");
+                _logger.LogError(ex, "Failed to persist clinical data mutation to database.");
             }
         });
     }

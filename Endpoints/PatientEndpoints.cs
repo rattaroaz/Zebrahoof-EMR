@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Zebrahoof_EMR.Data;
+using Zebrahoof_EMR.Logging;
 using Zebrahoof_EMR.Models;
+using Zebrahoof_EMR.Services;
 
 namespace Zebrahoof_EMR.Endpoints;
 
@@ -56,15 +59,17 @@ public static class PatientEndpoints
 
     private static async Task<IResult> GetPatients(
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] ILoggerFactory loggerFactory,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string? search = null)
     {
+        var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Api.Patients");
         var query = dbContext.Patients.AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            query = query.Where(p => 
+            query = query.Where(p =>
                 p.FirstName.Contains(search) ||
                 p.LastName.Contains(search) ||
                 p.MRN.Contains(search) ||
@@ -79,6 +84,13 @@ public static class PatientEndpoints
             .Take(pageSize)
             .ToListAsync();
 
+        log.LogInformation(
+            "Listed patients page {Page} size {PageSize} total {TotalCount} hasSearchFilter {HasSearch}",
+            page,
+            pageSize,
+            totalCount,
+            !string.IsNullOrWhiteSpace(search));
+
         return Results.Ok(new PatientListResponse
         {
             Patients = patients,
@@ -90,34 +102,45 @@ public static class PatientEndpoints
     }
 
     private static async Task<IResult> GetPatientById(
+        HttpContext http,
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] IAuditLogger audit,
+        [FromServices] ILoggerFactory loggerFactory,
         int id)
     {
+        var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Api.Patients");
         var patient = await dbContext.Patients.FindAsync(id);
-        
+
         if (patient == null)
         {
+            log.LogWarning("GetPatientById: patient {PatientId} not found", id);
             return Results.NotFound(new { Message = $"Patient with ID {id} not found" });
         }
 
+        await EndpointAuditHelper.AuditAsync(audit, http, "patient_view", $"patient:{id}", new { patientId = id });
         return Results.Ok(patient);
     }
 
     private static async Task<IResult> CreatePatient(
+        HttpContext http,
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] IAuditLogger audit,
+        [FromServices] ILoggerFactory loggerFactory,
         [FromBody] CreatePatientRequest request)
     {
+        var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Api.Patients");
         if (!IsValidPatientRequest(request))
         {
+            log.LogWarning("CreatePatient: validation failed");
             return Results.BadRequest(new { Message = "Invalid patient data", Errors = GetValidationErrors(request) });
         }
 
-        // Check if MRN already exists
         var existingPatient = await dbContext.Patients
             .FirstOrDefaultAsync(p => p.MRN == request.MRN);
-        
+
         if (existingPatient != null)
         {
+            log.LogWarning("CreatePatient: MRN conflict");
             return Results.Conflict(new { Message = $"Patient with MRN {request.MRN} already exists" });
         }
 
@@ -144,27 +167,34 @@ public static class PatientEndpoints
         dbContext.Patients.Add(patient);
         await dbContext.SaveChangesAsync();
 
+        log.LogInformation("CreatePatient: created patient id {PatientId}", patient.Id);
+        await EndpointAuditHelper.AuditAsync(audit, http, "patient_create", $"patient:{patient.Id}", new { patientId = patient.Id });
         return Results.Created($"/api/patients/{patient.Id}", patient);
     }
 
     private static async Task<IResult> UpdatePatient(
+        HttpContext http,
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] IAuditLogger audit,
+        [FromServices] ILoggerFactory loggerFactory,
         int id,
         [FromBody] UpdatePatientRequest request)
     {
+        var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Api.Patients");
         if (!IsValidUpdateRequest(request))
         {
+            log.LogWarning("UpdatePatient: validation failed for id {PatientId}", id);
             return Results.BadRequest(new { Message = "Invalid patient data", Errors = GetUpdateValidationErrors(request) });
         }
 
         var patient = await dbContext.Patients.FindAsync(id);
-        
+
         if (patient == null)
         {
+            log.LogWarning("UpdatePatient: patient {PatientId} not found", id);
             return Results.NotFound(new { Message = $"Patient with ID {id} not found" });
         }
 
-        // Update properties
         if (request.FirstName != null) patient.FirstName = request.FirstName;
         if (request.LastName != null) patient.LastName = request.LastName;
         if (request.Phone != null) patient.Phone = request.Phone;
@@ -181,35 +211,49 @@ public static class PatientEndpoints
 
         await dbContext.SaveChangesAsync();
 
+        log.LogInformation("UpdatePatient: updated patient id {PatientId}", id);
+        await EndpointAuditHelper.AuditAsync(audit, http, "patient_update", $"patient:{id}", new { patientId = id });
         return Results.Ok(patient);
     }
 
     private static async Task<IResult> DeletePatient(
+        HttpContext http,
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] IAuditLogger audit,
+        [FromServices] ILoggerFactory loggerFactory,
         int id)
     {
+        var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Api.Patients");
         var patient = await dbContext.Patients.FindAsync(id);
-        
+
         if (patient == null)
         {
+            log.LogWarning("DeletePatient: patient {PatientId} not found", id);
             return Results.NotFound(new { Message = $"Patient with ID {id} not found" });
         }
 
         dbContext.Patients.Remove(patient);
         await dbContext.SaveChangesAsync();
 
+        log.LogWarning("DeletePatient: deleted patient id {PatientId}", id);
+        await EndpointAuditHelper.AuditAsync(audit, http, "patient_delete", $"patient:{id}", new { patientId = id });
         return Results.NoContent();
     }
 
     private static async Task<IResult> GetPatientAppointments(
+        HttpContext http,
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] IAuditLogger audit,
+        [FromServices] ILoggerFactory loggerFactory,
         int id,
         [FromQuery] DateTime? fromDate = null,
         [FromQuery] DateTime? toDate = null)
     {
+        var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Api.Patients");
         var patientExists = await dbContext.Patients.AnyAsync(p => p.Id == id);
         if (!patientExists)
         {
+            log.LogWarning("GetPatientAppointments: patient {PatientId} not found", id);
             return Results.NotFound(new { Message = $"Patient with ID {id} not found" });
         }
 
@@ -229,21 +273,32 @@ public static class PatientEndpoints
             .OrderBy(a => a.DateTime)
             .ToListAsync();
 
+        await EndpointAuditHelper.AuditAsync(
+            audit,
+            http,
+            "patient_appointments_view",
+            $"patient:{id}",
+            new { patientId = id, count = appointments.Count });
         return Results.Ok(appointments);
     }
 
     private static async Task<IResult> SearchPatients(
+        HttpContext http,
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] IAuditLogger audit,
+        [FromServices] ILoggerFactory loggerFactory,
         [FromQuery] string q,
         [FromQuery] int limit = 20)
     {
+        var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Api.Patients");
         if (string.IsNullOrWhiteSpace(q))
         {
+            log.LogWarning("SearchPatients: missing query parameter");
             return Results.BadRequest(new { Message = "Search query 'q' is required" });
         }
 
         var patients = await dbContext.Patients
-            .Where(p => 
+            .Where(p =>
                 p.FirstName.Contains(q) ||
                 p.LastName.Contains(q) ||
                 p.MRN.Contains(q) ||
@@ -253,6 +308,13 @@ public static class PatientEndpoints
             .Take(limit)
             .ToListAsync();
 
+        log.LogInformation("SearchPatients: term length {TermLength} limit {Limit} results {Count}", q.Length, limit, patients.Count);
+        await EndpointAuditHelper.AuditAsync(
+            audit,
+            http,
+            "patient_search",
+            "patient",
+            new { termLength = q.Length, limit, resultCount = patients.Count });
         return Results.Ok(patients);
     }
 
@@ -268,7 +330,6 @@ public static class PatientEndpoints
 
     private static bool IsValidUpdateRequest(UpdatePatientRequest request)
     {
-        // For updates, we only validate that if fields are provided, they're valid
         if (request.Sex != null && !new[] { "M", "F", "O" }.Contains(request.Sex.ToUpper()))
         {
             return false;
@@ -283,16 +344,16 @@ public static class PatientEndpoints
 
         if (string.IsNullOrWhiteSpace(request.MRN))
             errors.Add("MRN is required");
-        
+
         if (string.IsNullOrWhiteSpace(request.FirstName))
             errors.Add("First name is required");
-        
+
         if (string.IsNullOrWhiteSpace(request.LastName))
             errors.Add("Last name is required");
-        
+
         if (request.DateOfBirth == default)
             errors.Add("Date of birth is required");
-        
+
         if (string.IsNullOrWhiteSpace(request.Sex))
             errors.Add("Sex is required");
         else if (!new[] { "M", "F", "O" }.Contains(request.Sex.ToUpper()))

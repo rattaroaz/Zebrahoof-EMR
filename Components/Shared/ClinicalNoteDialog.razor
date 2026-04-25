@@ -1,5 +1,6 @@
 @inject MockClinicalDataService ClinicalDataService
 @inject AuthStateService AuthState
+@inject ILogger<ClinicalNoteDialog> Logger
 
 <MudDialog>
     <TitleContent>
@@ -147,11 +148,11 @@
 
     protected override void OnInitialized()
     {
-        Console.WriteLine($"ClinicalNoteDialog initialized - IsViewOnly: {IsViewOnly}, IsEdit: {IsEdit}, Note ID: {Note?.Id}");
-        
+        Logger.LogDebug("ClinicalNoteDialog init: viewOnly {ViewOnly} edit {Edit} noteId {NoteId}", IsViewOnly, IsEdit, Note?.Id);
+
         if ((IsEdit || IsViewOnly) && Note != null)
         {
-            Console.WriteLine($"Loading existing note - ID: {Note.Id}, Chief Complaint: {Note.ChiefComplaint}");
+            Logger.LogDebug("Loading note {NoteId} for display/edit", Note.Id);
             note = new ClinicalNote
             {
                 Id = Note.Id,
@@ -171,7 +172,7 @@
         }
         else
         {
-            Console.WriteLine($"Creating new note - PatientId: {PatientId}");
+            Logger.LogDebug("New note for patient {PatientId}", PatientId);
             note = new ClinicalNote
             {
                 PatientId = PatientId,
@@ -189,8 +190,8 @@
         {
             signNote = true;
         }
-        
-        Console.WriteLine($"Dialog initialization complete - Chief Complaint: {note.ChiefComplaint}, HPI: {note.HistoryOfPresentIllness?.Substring(0, Math.Min(50, note.HistoryOfPresentIllness?.Length ?? 0))}...");
+
+        Logger.LogDebug("ClinicalNoteDialog ready. NoteId {NoteId} status {Status}", note.Id, note.Status);
     }
 
     private async Task SaveNote()

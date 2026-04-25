@@ -3,6 +3,7 @@
 @inject IJSRuntime JS
 @inject PatientStickyNoteService NoteService
 @inject AuthStateService AuthState
+@inject ILogger<PatientStickyNoteCard> Logger
 @implements IDisposable
 
 
@@ -159,32 +160,30 @@
             {
                 _userId = "default";
             }
-            Console.WriteLine($"CreateOrShowNote - UserId: {_userId}, PatientId: {PatientId}");
-            
-            
+            Logger.LogDebug("CreateOrShowNote: patient {PatientId} user resolved", PatientId);
+
             _note = await NoteService.GetNoteAsync(_userId, PatientId);
-            Console.WriteLine($"GetNoteAsync returned: {(_note != null ? "note exists" : "null")}");
-            
+            Logger.LogDebug("GetNote: exists {Exists}", _note != null);
+
             if (_note == null)
             {
                 _note = await NoteService.CreateOrUpdateNoteAsync(_userId, PatientId, "");
                 _content = "";
-                Console.WriteLine($"Created new note. IsVisible: {_note?.IsVisible}");
+                Logger.LogDebug("Created sticky. Visible {Visible}", _note?.IsVisible);
             }
             else
             {
                 _note = await NoteService.ShowNoteAsync(_userId, PatientId);
                 _content = _note?.Content ?? "";
-                Console.WriteLine($"Showed existing note. IsVisible: {_note?.IsVisible}");
+                Logger.LogDebug("Showed sticky. Visible {Visible}", _note?.IsVisible);
             }
-            
-            Console.WriteLine($"Final state - Note: {(_note != null ? "exists" : "null")}, IsVisible: {_note?.IsVisible}");
+
+            Logger.LogDebug("CreateOrShowNote done. Note exists {HasNote} visible {Visible}", _note != null, _note?.IsVisible);
             StateHasChanged();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"ERROR in CreateOrShowNote: {ex.Message}");
-            Console.WriteLine($"Stack trace: {ex.StackTrace}");
+            Logger.LogError(ex, "CreateOrShowNote failed for patient {PatientId}", PatientId);
         }
     }
 

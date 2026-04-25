@@ -2,6 +2,7 @@
 @inject AuthStateService AuthState
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
+@inject ILogger<PatientNotesTreeView> Logger
 
 <PageTitle>Clinical Notes Tree View - Zebrahoof EMR</PageTitle>
 
@@ -99,8 +100,8 @@
 
     private async Task ViewNote(ClinicalNote note)
     {
-        Console.WriteLine($"ViewNote called for note ID: {note.Id}, Chief Complaint: {note.ChiefComplaint}");
-        
+        Logger.LogDebug("ViewNote: id {NoteId} patient {PatientId}", note.Id, PatientId);
+
         var parameters = new DialogParameters
         {
             ["Note"] = note,
@@ -114,9 +115,7 @@
             CloseOnEscapeKey = true
         };
 
-        Console.WriteLine("About to show dialog...");
         await DialogService.ShowAsync<ClinicalNoteDialog>("Clinical Note", parameters, options);
-        Console.WriteLine("Dialog shown successfully");
     }
 
     private async Task EditNote(ClinicalNote note)

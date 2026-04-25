@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Zebrahoof_EMR.Data;
+using Zebrahoof_EMR.Logging;
 using Zebrahoof_EMR.Models;
 
 namespace Zebrahoof_EMR.Services;
@@ -60,7 +61,8 @@ public class PatientRecordUpdateService
 
         if (!TryParse(rawResponse, out var parsed, out var parseError))
         {
-            _logger.LogWarning("Failed to parse Grok response: {Error}\n{Raw}", parseError, rawResponse);
+            _logger.LogWarning("Failed to parse Grok response: {Error}. Raw (truncated): {RawPrefix}", parseError,
+                SafeLogContent.Truncate(rawResponse, SafeLogContent.DefaultMaxLength));
             return UpdateRecordsResult.Failure($"Could not parse Grok response: {parseError}");
         }
 

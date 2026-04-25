@@ -46,14 +46,22 @@ jobs:
         cache: 'npm'
 
     - name: Install .NET dependencies
-      run: dotnet restore
+      run: |
+        dotnet restore "Zebrahoof EMR.csproj"
+        dotnet restore "tests/Zebrahoof.EMR.UnitTests/Zebrahoof.EMR.UnitTests.csproj"
+        dotnet restore "tests/Zebrahoof.EMR.IntegrationTests/Zebrahoof.EMR.IntegrationTests.csproj"
+        dotnet restore "tests/Zebrahoof.EMR.UiSmokeTests/Zebrahoof.EMR.UiSmokeTests.csproj"
 
     - name: Install Node dependencies
       run: npm ci
       working-directory: .
 
     - name: Build application
-      run: dotnet build --no-restore --configuration Release
+      run: |
+        dotnet build "Zebrahoof EMR.csproj" --no-restore --configuration Release
+        dotnet build "tests/Zebrahoof.EMR.UnitTests/Zebrahoof.EMR.UnitTests.csproj" --no-restore --configuration Release
+        dotnet build "tests/Zebrahoof.EMR.IntegrationTests/Zebrahoof.EMR.IntegrationTests.csproj" --no-restore --configuration Release
+        dotnet build "tests/Zebrahoof.EMR.UiSmokeTests/Zebrahoof.EMR.UiSmokeTests.csproj" --no-restore --configuration Release
 
     - name: Run unit tests with coverage
       run: |

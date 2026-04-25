@@ -9,3 +9,25 @@ example:  Admin@zebrahoof.com Password: password
 
  
  
+Logging Production Readiness Checklist (Strict)
+Score: 13/13 PASS
+
+[PASS] 1) Structured logging format in all environments (Serilog configured in appsettings and host).
+[PASS] 2) Correlation ID propagation present (request-level correlation middleware and log enrichment).
+[PASS] 3) API request logging with timing/status and sampling controls (`Serilog:RequestLogSamplingRate`, `Serilog:SlowRequestWarningMs`).
+[PASS] 4) Sensitive auth logging avoids secrets (login outcomes logged without password capture).
+[PASS] 5) Sensitive business operations audited (patient/document create/read/update/delete style coverage via `IAuditLogger`).
+[PASS] 6) Environment-specific log policy exists (base + Staging + Production settings).
+[PASS] 7) OTLP trace support is implemented and configurable (`OpenTelemetry:*` keys + extension wiring).
+[PASS] 8) OTLP log export support is implemented and configurable (`Serilog:OtlpLogs:Endpoint` or OTEL env vars).
+[PASS] 9) Forwarded header trust is explicitly controlled (`ForwardedHeaders:TrustAllProxies` defaults false).
+[PASS] 10) Logging runbook exists (`docs/LOGGING.md` with operations guidance).
+
+[PASS] 11) Alerting rules defined and versioned (`docs/ALERTING.md` with thresholds, severities, owners, and escalation).
+[PASS] 12) Centralized log retention + access review policy documented (`docs/LOG_RETENTION_ACCESS.md`).
+[PASS] 13) End-to-end production observability verification procedure documented (`docs/OBSERVABILITY_VERIFICATION.md` checklist).
+
+Recommended next actions:
+- Execute the verification checklist in staging and store evidence in the release/change ticket.
+- Wire alert queries into your monitoring platform and validate routing to on-call.
+- Review retention settings in the centralized backend to enforce this policy.

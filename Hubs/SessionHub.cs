@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
 using Zebrahoof_EMR.Services;
 
 namespace Zebrahoof_EMR.Hubs;
@@ -8,10 +9,12 @@ namespace Zebrahoof_EMR.Hubs;
 public class SessionHub : Hub
 {
     private readonly SessionService _sessionService;
+    private readonly ILogger<SessionHub> _logger;
 
-    public SessionHub(SessionService sessionService)
+    public SessionHub(SessionService sessionService, ILogger<SessionHub> logger)
     {
         _sessionService = sessionService;
+        _logger = logger;
     }
 
     public override async Task OnConnectedAsync()
@@ -19,11 +22,14 @@ public class SessionHub : Hub
         var sessionId = GetSessionId();
         if (sessionId == Guid.Empty)
         {
+            _logger.LogWarning("SignalR connection aborted: missing or invalid sessionId. Connection {ConnectionId}",
+                Context.ConnectionId);
             Context.Abort();
             return;
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, sessionId.ToString());
+        _logger.LogDebug("SignalR connected: session {SessionId} connection {ConnectionId}", sessionId, Context.ConnectionId);
         await base.OnConnectedAsync();
     }
 
@@ -33,6 +39,16 @@ public class SessionHub : Hub
         if (sessionId != Guid.Empty)
         {
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, sessionId.ToString());
+        }
+
+        if (exception != null)
+        {
+            _logger.LogWarning(exception, "SignalR disconnected with exception. Session {SessionId} connection {ConnectionId}",
+                sessionId, Context.ConnectionId);
+        }
+        else
+        {
+            _logger.LogDebug("SignalR disconnected. Session {SessionId} connection {ConnectionId}", sessionId, Context.ConnectionId);
         }
 
         await base.OnDisconnectedAsync(exception);

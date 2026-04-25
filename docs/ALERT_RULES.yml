@@ -1,0 +1,64 @@
+# Vendor-neutral alert rule catalog for Zebrahoof EMR.
+# Map these rules into Datadog, Grafana/Loki, Azure Monitor, Splunk, or another backend.
+#
+# Labels:
+#   severity: P1 pages immediately; P2 pages during active incident windows; P3 creates ticket/chat.
+#   owner: operational owner for first response.
+
+service: Zebrahoof.EMR
+version: 1
+
+rules:
+  - id: auth-failure-spike
+    name: Authentication failure spike
+    severity: P2
+    owner: on-call-engineer
+    source: logs
+    query_hint: 'SourceContext = "Zebrahoof_EMR.Auth.Account" AND message CONTAINS "Login failed"'
+    threshold: "count >= 25 over 5m OR count >= 3x baseline over 15m"
+    runbook: docs/ALERTING.md#alert-rules
+
+  - id: account-lockout-spike
+    name: Account lockout spike
+    severity: P2
+    owner: on-call-engineer
+    source: logs
+    query_hint: 'message CONTAINS "account locked"'
+    threshold: "count >= 10 over 10m"
+    runbook: docs/ALERTING.md#alert-rules
+
+  - id: api-error-rate
+    name: API 5xx error rate
+    severity: P1
+    owner: on-call-engineer
+    source: logs_or_traces
+    query_hint: 'SourceContext = "Zebrahoof_EMR.Http.Api" AND StatusCode >= 500'
+    threshold: "5xx_ratio > 5% over 5m AND request_count >= 100"
+    runbook: docs/ALERTING.md#alert-rules
+
+  - id: slow-api-latency
+    name: Slow API latency
+    severity: P2
+    owner: on-call-engineer
+    source: logs_or_traces
+    query_hint: 'SourceContext = "Zebrahoof_EMR.Http.Api" aggregate p95(ElapsedMs)'
+    threshold: "p95 > 2000ms over 10m"
+    runbook: docs/ALERTING.md#alert-rules
+
+  - id: audit-pipeline-interruption
+    name: Audit pipeline interruption
+    severity: P1
+    owner: platform-lead
+    source: audit_logs
+    query_hint: 'action MATCHES "patient_*" OR action MATCHES "document_*"'
+    threshold: "count == 0 over 15m during expected traffic"
+    runbook: docs/ALERTING.md#alert-rules
+
+  - id: otlp-exporter-health
+    name: OTLP exporter health degradation
+    severity: P2
+    owner: platform-lead
+    source: selflog_or_collector_metrics
+    query_hint: 'Serilog SelfLog errors OR collector dropped/exporter error metrics'
+    threshold: "sustained exporter error > 5m"
+    runbook: docs/ALERTING.md#alert-rules

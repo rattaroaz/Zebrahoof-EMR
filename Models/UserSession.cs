@@ -1,5 +1,4 @@
 using System;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Zebrahoof_EMR.Models;
 
@@ -17,6 +16,5 @@ public class UserSession
     public bool IsRevoked { get; set; }
     public int IdleTimeoutMinutes { get; set; } = 15;
 
-    [ForeignKey(nameof(UserId))]
     public ApplicationUser? User { get; set; }
 }

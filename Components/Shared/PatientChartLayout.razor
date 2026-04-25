@@ -8,6 +8,7 @@
 @inject GrokSessionStateService GrokSession
 @inject ApplicationDbContext Db
 @inject IJSRuntime JS
+@inject ILogger<PatientChartLayout> Logger
 
 <MudStack Spacing="0">
     @* Patient Header Banner *@
@@ -429,14 +430,14 @@
 
     private async Task TogglePatientNote()
     {
-        Console.WriteLine($"TogglePatientNote called. _patientNoteCard is {(_patientNoteCard != null ? "not null" : "null")}");
+        Logger.LogDebug("TogglePatientNote: child card {HasRef}", _patientNoteCard != null);
         if (_patientNoteCard != null)
         {
             await _patientNoteCard.CreateOrShowNote();
         }
         else
         {
-            Console.WriteLine("ERROR: _patientNoteCard reference is null!");
+            Logger.LogWarning("TogglePatientNote: _patientNoteCard reference is null");
         }
     }
 }
