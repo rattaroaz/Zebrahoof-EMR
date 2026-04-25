@@ -11,6 +11,7 @@
 @inject GrokSessionStateService GrokSession
 @inject IDialogService DialogService
 @inject ApplicationDbContext Db
+@inject ILogger<PatientDemographics> Logger
 
 <MudGrid>
     <MudItem xs="12" md="8">
@@ -581,6 +582,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Document processing (AI analysis) failed for patient {PatientId}", Patient?.Id);
             _docAnalysisResult = $"Error: {ex.Message}";
             NotificationService.ShowError("Failed to process document");
         }
@@ -632,6 +634,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Document rename failed for document {DocumentId} patient {PatientId}", _renameTarget?.Id, Patient?.Id);
             NotificationService.ShowError($"Failed to rename: {ex.Message}");
         }
         finally
@@ -678,6 +681,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "AI record update failed for patient {PatientId}", Patient?.Id);
             NotificationService.ShowError($"Update failed: {ex.Message}");
         }
         finally

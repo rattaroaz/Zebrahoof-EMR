@@ -7,6 +7,7 @@
 @inject IHttpContextAccessor HttpContextAccessor
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
+@inject ILogger<PatientEncounter> Logger
 
 <MudPaper Elevation="0" Class="pa-4 d-flex flex-column" Style="height: calc(100vh - 250px); max-height: 800px; overflow-y: auto;">
     <MudStack Spacing="4">
@@ -137,6 +138,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to load previous discussion history for patient {PatientId}", PatientId);
             Snackbar.Add($"Failed to load previous discussion: {ex.Message}", Severity.Error);
         }
         finally
@@ -207,11 +209,13 @@
             }
             catch (Exception persistEx)
             {
+                Logger.LogWarning(persistEx, "Saved Grok response but failed to persist to history for patient {PatientId}", PatientId);
                 Snackbar.Add($"Saved response but failed to write to history: {persistEx.Message}", Severity.Warning);
             }
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Grok chat failed for patient {PatientId} (includeHistory: {IncludeHistory})", PatientId, includeHistoryForThisTurn);
             interaction.GrokResponse = $"Error communicating with Grok: {ex.Message}";
             Snackbar.Add($"Error communicating with Grok: {ex.Message}", Severity.Error);
         }
@@ -235,6 +239,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to clear discussion history for patient {PatientId}", PatientId);
             Snackbar.Add($"Failed to clear history: {ex.Message}", Severity.Error);
         }
     }

@@ -233,10 +233,11 @@
 
             MudDialog.Close(DialogResult.Ok(note));
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Handle error
-            // Could show a snackbar or alert
+            Logger.LogError(ex, "Failed to save clinical note for patient {PatientId} (edit: {IsEdit}, noteId: {NoteId})",
+                PatientId, IsEdit, note?.Id);
+            // TODO: Show user-friendly snackbar via injected NotificationService (add @inject if needed)
         }
     }
 

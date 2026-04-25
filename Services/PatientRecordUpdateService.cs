@@ -250,7 +250,10 @@ public class PatientRecordUpdateService
         catch (Exception ex)
         {
             error = ex.Message;
+            _logger.LogDebug("Grok response parse failed (non-fatal for caller): {Error}. Raw prefix: {RawPrefix}", 
+                ex.Message, SafeLogContent.Truncate(raw, SafeLogContent.ShortMaxLength));
             return false;
+        }
         }
     }
 

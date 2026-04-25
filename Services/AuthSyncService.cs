@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using Zebrahoof_EMR.Models;
 
 namespace Zebrahoof_EMR.Services;
@@ -8,15 +9,18 @@ public class AuthSyncService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly UserMappingService _userMappingService;
     private readonly AuthStateService _authStateService;
+    private readonly ILogger<AuthSyncService> _logger;
 
     public AuthSyncService(
         UserManager<ApplicationUser> userManager,
         UserMappingService userMappingService,
-        AuthStateService authStateService)
+        AuthStateService authStateService,
+        ILogger<AuthSyncService> logger)
     {
         _userManager = userManager;
         _userMappingService = userMappingService;
         _authStateService = authStateService;
+        _logger = logger;
     }
 
     public async Task<bool> SyncUserAuthenticationAsync(string username)
@@ -43,9 +47,9 @@ public class AuthSyncService
             _authStateService.Login(mappedUser);
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            // Log error here in production
+            _logger.LogError(ex, "Auth sync failed for username {Username}", username);
             return false;
         }
     }

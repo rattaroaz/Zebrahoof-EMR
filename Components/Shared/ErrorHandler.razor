@@ -1,0 +1,43 @@
+@inject ILogger<ErrorHandler> Logger
+@inject NotificationService NotificationService
+@using System.Diagnostics
+@using Zebrahoof_EMR.Components.Shared
+
+<CascadingValue Value="this">
+    <ErrorBoundary>
+        <ChildContent>
+            @ChildContent
+        </ChildContent>
+        <ErrorContent>
+            @{
+                var ex = context;
+                Logger.LogError(ex, "Unhandled error in component (PatientId: {PatientId})", 
+                    (ex.Data["PatientId"] as int?) ?? 0);
+                
+                NotificationService.ShowError($"An unexpected error occurred. Details have been logged. Correlation ID: {System.Diagnostics.Activity.Current?.Id ?? "unknown"}");
+            }
+            <MudAlert Severity="Severity.Error" Class="my-4">
+                An error occurred. Check the logs for details (Correlation ID above).
+                <MudButton OnClick="Recover" Color="Color.Primary" Variant="Variant.Filled" Class="ml-4">Retry</MudButton>
+            </MudAlert>
+        </ErrorContent>
+    </ErrorBoundary>
+</CascadingValue>
+
+@code {
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private void Recover()
+    {
+        // Trigger recovery - ErrorBoundary will re-render children
+        StateHasChanged();
+    }
+
+    // Helper for components to attach context
+    public static void AddPatientContext(Exception ex, int? patientId)
+    {
+        if (patientId.HasValue)
+            ex.Data["PatientId"] = patientId.Value;
+    }
+}

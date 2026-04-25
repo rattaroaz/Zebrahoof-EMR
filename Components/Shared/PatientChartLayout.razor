@@ -222,7 +222,10 @@
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to load saved tab order from localStorage (PatientId: {PatientId}). Using defaults.", Patient?.Id);
+        }
     }
 
     private async Task SaveTabOrderAsync()
@@ -233,7 +236,10 @@
             var json = System.Text.Json.JsonSerializer.Serialize(tabKeys);
             await JS.InvokeVoidAsync("localStorage.setItem", TabOrderStorageKey, json);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to save tab order to localStorage (PatientId: {PatientId})", Patient?.Id);
+        }
     }
 
     private void HandleDragStart(string tabKey)

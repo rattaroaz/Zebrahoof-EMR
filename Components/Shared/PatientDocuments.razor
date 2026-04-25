@@ -6,6 +6,7 @@
 
 @inject ApplicationDbContext Db
 @inject NotificationService NotificationService
+@inject ILogger<PatientDocuments> Logger
 
 @* Patient Documents - Scanned documents, forms, etc. *@
 
@@ -303,6 +304,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to read uploaded file for patient {PatientId}", PatientId);
             NotificationService.ShowError($"Failed to read file: {ex.Message}");
             _uploadFileBytes = null;
             _uploadFileName = string.Empty;
@@ -362,6 +364,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to save uploaded document for patient {PatientId}", PatientId);
             NotificationService.ShowError($"Failed to upload document: {ex.Message}");
         }
         finally
@@ -472,6 +475,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to update document {DocumentId} for patient {PatientId}", _editingDocument?.Id, PatientId);
             NotificationService.ShowError($"Failed to save changes: {ex.Message}");
             return;
         }
@@ -501,6 +505,7 @@
         }
         catch (Exception ex)
         {
+            Logger.LogError(ex, "Failed to delete document {DocumentId} for patient {PatientId}", document.Id, PatientId);
             NotificationService.ShowError($"Failed to delete document: {ex.Message}");
         }
     }
