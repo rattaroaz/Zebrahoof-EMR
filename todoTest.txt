@@ -1,10 +1,63 @@
+Zebrahoof EMR — Skipped tests: reasons × feature backlog (2026-04-26)
+Source: xUnit [Fact(Skip = "...")] in tests/ (plus one footnote for runtime UI skips).
 
-Logging.
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| #  | Skip reason (verbatim)                   | Feature / backlog (what to deliver)    | Where                     |n |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 1  | Feature not fully implemented            | DB migrations: create, seed, reset,     | IntegrationTests/         |6 |
+|    |                                          | concurrent ops, txn rollback/commit     | DatabaseMigrationTests.cs |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 2  | Feature not fully implemented            | Data integrity: concurrency, audit      | IntegrationTests/         |6 |
+|    |                                          | completeness, backup/restore, GDPR,     | DataIntegrityTests.cs     |  |
+|    |                                          | txn integrity, cross-op consistency       |                           |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 3  | Feature not fully implemented            | DR / compliance: failover, restart,     | IntegrationTests/         |6 |
+|    |                                          | cache invalidation, external failures,  | DisasterRecoveryTests.cs  |  |
+|    |                                          | HIPAA features, encryption checks       |                           |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 4  | FK constraint issue - requires user     | Refactor unit DB seeding so User FK      | UnitTests/                |3 |
+|    | seeding refactor                         | exists for revoke+notify, active list,  | SessionServiceTests.cs    |  |
+|    |                                          | active count tests                       |                           |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 5  | Audit logging for failed login not fully | Persist failed-login audit events; wire  | IntegrationTests/         |1 |
+|    | implemented                              | test assertions                          | SecurityTests.cs          |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 6  | Admin endpoint authorization not yet     | Role-based protection on admin routes    | IntegrationTests/         |1 |
+|    | implemented                              |                                          | SecurityTests.cs          |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 7  | Session hijacking detection not yet      | Fingerprint / token binding enforcement  | IntegrationTests/         |1 |
+|    | implemented                              |                                          | SecurityTests.cs          |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 8  | Input sanitization not fully implemented | Sanitize or reject malicious inputs      | IntegrationTests/         |1 |
+|    |                                          |                                          | SecurityTests.cs          |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 9  | HTTPS enforcement not configured in test | HTTPS redirect or TestServer HTTPS in    | IntegrationTests/         |1 |
+|    | environment                              | Testing environment                      | SecurityTests.cs          |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 10 | Rate limiting not yet implemented        | Rate-limit middleware + test hooks       | IntegrationTests/         |1 |
+|    |                                          |                                          | SecurityTests.cs          |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 11 | Session endpoint has issues with        | Fix DateTimeOffset handling on session  | IntegrationTests/         |2 |
+|    | DateTimeOffset translation               | list/count endpoints                     | SessionManagementTests.cs |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 12 | Session revocation endpoint has issues   | Fix revoke API; align with tests         | IntegrationTests/         |1 |
+|    |                                          |                                          | SessionManagementTests.cs |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 13 | Session validation endpoint not fully    | Finish validation endpoint (valid/404)  | IntegrationTests/         |2 |
+|    | implemented                              |                                          | SessionManagementTests.cs |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 14 | Session info endpoint not fully          | Implement session info / remaining time  | IntegrationTests/         |1 |
+|    | implemented                              |                                          | SessionManagementTests.cs |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 15 | Requires baseline data setup             | Perf baseline store + regression gate    | PerformanceTests/         |1 |
+|    |                                          |                                          | PerformanceMonitoring.cs  |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+| 16 | Requires historical data setup           | Perf history for trend analysis          | PerformanceTests/         |1 |
+|    |                                          |                                          | PerformanceMonitoring.cs  |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
++----+------------------------------------------+------------------------------------------+---------------------------+--+
+|    | Runtime (SkippableFact), not attribute   | Install Playwright browsers; reachable   | UiSmokeTests (*.cs)       |— |
+|    |                                          | base URL for local/CI UI runs            |                           |  |
++----+------------------------------------------+------------------------------------------+---------------------------+--+
 
-
-Testing
-Summary: The Zebrahoof EMR testing suite has a solid foundation with good unit and integration test coverage, but critical gaps exist in API testing, performance validation, and security scanning. The extensive UI test mocking reduces reliability for catching real integration issues.
-
-Key Improvements Needed:
-
- 
+Skipped Fact count (rows 1–16): 35 total (18 generic placeholder + 6 security + 6 session mgmt + 3 unit FK + 2 perf).

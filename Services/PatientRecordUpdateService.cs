@@ -61,8 +61,8 @@ public class PatientRecordUpdateService
 
         if (!TryParse(rawResponse, out var parsed, out var parseError))
         {
-            _logger.LogWarning("Failed to parse Grok response: {Error}. Raw (truncated): {RawPrefix}", parseError,
-                SafeLogContent.Truncate(rawResponse, SafeLogContent.DefaultMaxLength));
+            _logger.LogWarning("Failed to parse Grok response: {ParseError}. {BodySummary}", parseError,
+                SafeLogContent.DescribeWithoutRawContent(rawResponse));
             return UpdateRecordsResult.Failure($"Could not parse Grok response: {parseError}");
         }
 
@@ -250,10 +250,7 @@ public class PatientRecordUpdateService
         catch (Exception ex)
         {
             error = ex.Message;
-            _logger.LogDebug("Grok response parse failed (non-fatal for caller): {Error}. Raw prefix: {RawPrefix}", 
-                ex.Message, SafeLogContent.Truncate(raw, SafeLogContent.ShortMaxLength));
             return false;
-        }
         }
     }
 

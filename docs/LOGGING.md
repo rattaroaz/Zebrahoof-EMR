@@ -45,6 +45,8 @@ Empty config values are ignored when resolving OTLP endpoints, so environment va
 ## Operational notes
 
 - **Passwords** are never written to logs. Login outcomes use user identifiers suitable for security monitoring (e.g. user id on failed password), not raw credentials.
+- **Auth audit** (`login_failed`, `login_success`, `login_mfa_required`, `logout`) is persisted via `IAuditLogger` from `AccountEndpoints`; failed attempts include a `reason` in metadata (`unknown_account`, `invalid_credentials`, etc.) without logging usernames.
+- **API access logs** from `ApiRequestLoggingMiddleware` include `UserId` when the caller is authenticated.
 - **Patient search** audit metadata records term length and counts, not the query text.
 - **Grok** and long clinical payloads are truncated/redacted where implemented; treat any new logging as PHI-sensitive by default.
 - **`/health`** and other excluded paths are tuned down in Serilog request completion to reduce noise (`Logging/RequestLoggingExclusions.cs`); `/api` lines are owned by `ApiRequestLoggingMiddleware` to avoid duplicate completion events.

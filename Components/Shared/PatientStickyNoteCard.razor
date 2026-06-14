@@ -54,44 +54,27 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _userId = AuthState.CurrentUser?.Username;
+        AuthState.OnAuthStateChanged += OnAuthStateChanged;
         _objRef = DotNetObjectReference.Create(this);
-        
-        if (!string.IsNullOrEmpty(_userId))
-        {
-            _note = await NoteService.GetNoteAsync(_userId, PatientId);
-            if (_note != null)
-            {
-                _content = _note.Content;
-            }
-        }
-        
         NoteService.OnNoteChanged += OnNoteChanged;
+        await TryLoadNoteForCurrentUserAsync();
     }
 
     protected override async Task OnParametersSetAsync()
     {
-        if (!string.IsNullOrEmpty(_userId))
-        {
-            _note = await NoteService.GetNoteAsync(_userId, PatientId);
-            if (_note != null)
-            {
-                _content = _note.Content;
-            }
-        }
+        await TryLoadNoteForCurrentUserAsync();
+    }
+
+    private async void OnAuthStateChanged()
+    {
+        await TryLoadNoteForCurrentUserAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private async void OnNoteChanged()
     {
-        if (!string.IsNullOrEmpty(_userId))
-        {
-            _note = await NoteService.GetNoteAsync(_userId, PatientId);
-            if (_note != null)
-            {
-                _content = _note.Content;
-            }
-            await InvokeAsync(StateHasChanged);
-        }
+        await TryLoadNoteForCurrentUserAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     private string GetColorClass() => _note != null ? $"sticky-{_note.Color.ToString().ToLower()}" : "sticky-pink";
@@ -123,17 +106,19 @@
         }
     }
 
-    private async Task Hide()
+    /// <summary>Flush textarea to the DB, then mark hidden — use instead of only HideNote so text is not lost on close.</summary>
+    private async Task CloseNoteWithPersistedContentAsync()
     {
-        if (!string.IsNullOrEmpty(_userId))
+        if (string.IsNullOrEmpty(_userId))
         {
-            await NoteService.HideNoteAsync(_userId, PatientId);
-            if (_note != null)
-            {
-                _note.IsVisible = false;
-            }
+            return;
         }
+        await SaveContent();
+        await NoteService.HideNoteAsync(_userId, PatientId);
+        _note = await NoteService.GetNoteAsync(_userId, PatientId);
     }
+
+    private async Task Hide() => await CloseNoteWithPersistedContentAsync();
 
     private async Task ChangeColor(NoteColor color)
     {
@@ -144,46 +129,87 @@
         }
     }
 
+    /// <summary>Creates a new patient note, or toggles open/closed while preserving last saved visibility across sessions.</summary>
     public async Task CreateOrShowNote()
     {
         try
         {
-            var user = AuthState.CurrentUser;
-            
-            // Try Username first, then Id, then fallback to "default"
-            _userId = user?.Username;
+            _userId = ResolveUserId();
             if (string.IsNullOrEmpty(_userId))
             {
-                _userId = user?.Id > 0 ? user.Id.ToString() : null;
+                Logger.LogWarning("Cannot toggle patient sticky note for patient {PatientId}: user not authenticated yet.", PatientId);
+                return;
             }
-            if (string.IsNullOrEmpty(_userId))
-            {
-                _userId = "default";
-            }
-            Logger.LogDebug("CreateOrShowNote: patient {PatientId} user resolved", PatientId);
+
+            Logger.LogDebug("TogglePatientNote: patient {PatientId} user {UserId}", PatientId, _userId);
 
             _note = await NoteService.GetNoteAsync(_userId, PatientId);
-            Logger.LogDebug("GetNote: exists {Exists}", _note != null);
-
             if (_note == null)
             {
                 _note = await NoteService.CreateOrUpdateNoteAsync(_userId, PatientId, "");
                 _content = "";
-                Logger.LogDebug("Created sticky. Visible {Visible}", _note?.IsVisible);
+            }
+            else if (_note.IsVisible)
+            {
+                await CloseNoteWithPersistedContentAsync();
             }
             else
             {
                 _note = await NoteService.ShowNoteAsync(_userId, PatientId);
                 _content = _note?.Content ?? "";
-                Logger.LogDebug("Showed sticky. Visible {Visible}", _note?.IsVisible);
             }
 
-            Logger.LogDebug("CreateOrShowNote done. Note exists {HasNote} visible {Visible}", _note != null, _note?.IsVisible);
-            StateHasChanged();
+            Logger.LogDebug("TogglePatientNote done. Note exists {HasNote} visible {Visible}", _note != null, _note?.IsVisible);
+            await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "CreateOrShowNote failed for patient {PatientId}", PatientId);
+        }
+    }
+
+    private string? ResolveUserId()
+    {
+        var user = AuthState.CurrentUser;
+        if (!string.IsNullOrEmpty(user?.Username))
+        {
+            return user.Username;
+        }
+
+        if (user?.Id > 0)
+        {
+            return user.Id.ToString();
+        }
+
+        return null;
+    }
+
+    private async Task TryLoadNoteForCurrentUserAsync()
+    {
+        var id = ResolveUserId();
+        if (string.IsNullOrEmpty(id))
+        {
+            return;
+        }
+
+        if (id != _userId)
+        {
+            _userId = id;
+        }
+
+        await ReloadNoteFromDbAsync();
+    }
+
+    private async Task ReloadNoteFromDbAsync()
+    {
+        if (string.IsNullOrEmpty(_userId))
+        {
+            return;
+        }
+        _note = await NoteService.GetNoteAsync(_userId, PatientId);
+        if (_note != null)
+        {
+            _content = _note.Content;
         }
     }
 
@@ -192,6 +218,7 @@
 
     public void Dispose()
     {
+        AuthState.OnAuthStateChanged -= OnAuthStateChanged;
         NoteService.OnNoteChanged -= OnNoteChanged;
         _objRef?.Dispose();
     }

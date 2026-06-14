@@ -107,17 +107,9 @@
 
     private async Task AddStickyNote()
     {
-        var allNotes = StickyNotes.GetAllNotesIncludingHidden();
-        var hiddenNotes = allNotes.Where(n => !n.IsVisible).ToList();
-        
-        if (hiddenNotes.Any())
-        {
-            foreach (var note in hiddenNotes)
-            {
-                await StickyNotes.ShowNoteAsync(note.Id);
-            }
-        }
-        else if (StickyNotes.CanAddNote)
+        // Do not re-open hidden notes here — closed state is persisted; users restore visibility
+        // from the per-note items in the menu. Only add a new note when under the cap.
+        if (StickyNotes.CanAddNote)
         {
             await StickyNotes.AddNoteAsync();
         }

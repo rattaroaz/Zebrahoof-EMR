@@ -85,9 +85,9 @@ public class PatientEndpointsTests : IClassFixture<ApiTestFactory>, IAsyncLifeti
         
         var content = await response.Content.ReadFromJsonAsync<PatientListResponse>();
         content.Should().NotBeNull();
-        content!.Patients.Should().All(p => 
-            p.FirstName.Contains("API") || 
-            p.LastName.Contains("API") || 
+        content!.Patients.Should().OnlyContain(p =>
+            p.FirstName.Contains("API") ||
+            p.LastName.Contains("API") ||
             p.MRN.Contains("API"));
     }
 

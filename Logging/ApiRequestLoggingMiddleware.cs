@@ -42,6 +42,7 @@ public sealed class ApiRequestLoggingMiddleware
                 var op = context.GetEndpoint()?.DisplayName ?? context.Request.Path.Value;
                 context.Items.TryGetValue(CorrelationIdMiddleware.ItemKey, out var cid);
                 var correlationId = cid as string;
+                var userId = EndpointAuditHelper.ResolveUserId(context);
 
                 var level = status >= 500
                     ? LogLevel.Error
@@ -53,14 +54,15 @@ public sealed class ApiRequestLoggingMiddleware
 
                 logger.Log(
                     level,
-                    "Api {Method} {Path} -> {StatusCode} in {ElapsedMs}ms Operation={Operation} CorrelationId={CorrelationId} RequestId={RequestId}",
+                    "Api {Method} {Path} -> {StatusCode} in {ElapsedMs}ms Operation={Operation} CorrelationId={CorrelationId} RequestId={RequestId} UserId={UserId}",
                     context.Request.Method,
                     context.Request.Path.Value,
                     status,
                     sw.ElapsedMilliseconds,
                     op,
                     correlationId,
-                    context.TraceIdentifier);
+                    context.TraceIdentifier,
+                    userId);
             }
         }
     }

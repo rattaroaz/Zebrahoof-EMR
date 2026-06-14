@@ -77,7 +77,7 @@ public class MutationTrendAnalysis : IClassFixture<WebApplicationFactory<Program
             var safetyScore = healthcareStandards.Average(s => Math.Min(s.Current / s.Threshold, 1.0) * 100);
             _output.WriteLine($"🏥 Healthcare Mutation Safety Score: {safetyScore:F1}%");
 
-            safetyScore.Should().BeGreaterOrEqual(90.0,
+            safetyScore.Should().BeGreaterThanOrEqualTo(90.0,
                 "Healthcare mutation safety score must be at least 90% for patient safety");
 
         }
@@ -103,7 +103,7 @@ public class MutationTrendAnalysis : IClassFixture<WebApplicationFactory<Program
         _output.WriteLine($"   Survived Mutants: {effectivenessMetrics.SurvivedMutants}");
         _output.WriteLine($"   No Coverage Mutants: {effectivenessMetrics.NoCoverageMutants}");
 
-        effectivenessMetrics.TestStrength.Should().BeGreaterOrEqual(85.0,
+        effectivenessMetrics.TestStrength.Should().BeGreaterThanOrEqualTo(85.0,
             "Test strength must be at least 85% for healthcare applications");
 
         // Critical Path Analysis
@@ -179,7 +179,7 @@ public class MutationTrendAnalysis : IClassFixture<WebApplicationFactory<Program
 
         _output.WriteLine($"📊 Benchmark Compliance Score: {benchmarkComplianceScore:F1}% ({compliantMetrics}/{benchmarkResults.Count} metrics meet industry standards)");
 
-        benchmarkComplianceScore.Should().BeGreaterOrEqual(80.0,
+        benchmarkComplianceScore.Should().BeGreaterThanOrEqualTo(80.0,
             "At least 80% of mutation metrics should meet or be near industry benchmarks");
 
         // Healthcare regulatory compliance
@@ -240,7 +240,7 @@ public class MutationTrendAnalysis : IClassFixture<WebApplicationFactory<Program
         _output.WriteLine($"   Compliance Violations Avoided: {mutationBenefits.ComplianceViolationsAvoided}");
         _output.WriteLine($"   PHI Breaches Prevented: {mutationBenefits.PHIBreachesPrevented}");
 
-        roi.ROIPercentage.Should().BeGreaterOrEqual(200.0,
+        roi.ROIPercentage.Should().BeGreaterThanOrEqualTo(200.0,
             "Mutation testing should provide at least 200% ROI for healthcare applications");
 
         _output.WriteLine($"💡 Mutation Testing Verdict: {(roi.ROIPercentage >= 200 ? "HIGHLY COST-EFFECTIVE" : "NEEDS OPTIMIZATION")}");
@@ -279,18 +279,18 @@ public class MutationTrendAnalysis : IClassFixture<WebApplicationFactory<Program
         return reports;
     }
 
-    private MutationTrendAnalysis AnalyzeMutationTrends(List<MutationReport> reports)
+    private MutationTrendSnapshot AnalyzeMutationTrends(List<MutationReport> reports)
     {
         if (reports.Count < 2)
         {
-            return new MutationTrendAnalysis { HasData = false };
+            return new MutationTrendSnapshot { HasData = false };
         }
 
         var currentReport = reports.First();
         var recentReports = reports.Take(5).ToList();
         var olderReports = reports.Skip(5).Take(5).ToList();
 
-        var trendAnalysis = new MutationTrendAnalysis
+        var trendAnalysis = new MutationTrendSnapshot
         {
             HasData = true,
             CurrentMutationScore = currentReport.MutationScore,
@@ -445,7 +445,7 @@ public class MutationReport
     public Dictionary<string, double> CriticalAreas { get; set; } = new();
 }
 
-public class MutationTrendAnalysis
+public class MutationTrendSnapshot
 {
     public bool HasData { get; set; }
     public double CurrentMutationScore { get; set; }

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Zebrahoof_EMR.Helpers;
+using Zebrahoof_EMR.Logging;
 using Zebrahoof_EMR.Models;
 using Zebrahoof_EMR.Services;
 
@@ -23,6 +24,7 @@ public static class AccountEndpoints
         UserManager<ApplicationUser> userManager,
         SessionService sessionService,
         AuthSyncService authSyncService,
+        IAuditLogger audit,
         ILoggerFactory loggerFactory)
     {
         var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Auth.Account");
@@ -47,12 +49,16 @@ public static class AccountEndpoints
         if (user == null)
         {
             log.LogWarning("Login failed: no matching account");
+            await EndpointAuditHelper.AuditAsync(audit, context, "login_failed", "auth:login",
+                new { reason = "unknown_account" });
             return Results.Redirect($"/login?error=invalid&returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
         if (!user.IsActive)
         {
             log.LogWarning("Login rejected: inactive account for user id {UserId}", user.Id);
+            await EndpointAuditHelper.AuditAsync(audit, context, "login_failed", "auth:login",
+                new { reason = "inactive" }, actorUserId: user.Id);
             return Results.Redirect($"/login?error=inactive&returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
@@ -60,11 +66,12 @@ public static class AccountEndpoints
         if (result.Succeeded)
         {
             log.LogInformation("Login succeeded for user id {UserId}", user.Id);
+            await EndpointAuditHelper.AuditAsync(audit, context, "login_success", "auth:login",
+                actorUserId: user.Id);
             var roles = await userManager.GetRolesAsync(user);
             var idleWindow = ResolveIdleWindow(roles);
             await IssueSessionAsync(context, user, sessionService, idleWindow);
 
-            // Sync user authentication state with actual roles
             await authSyncService.SyncUserAuthenticationAsync(user.UserName!);
 
             return Results.Redirect(returnUrl);
@@ -73,16 +80,22 @@ public static class AccountEndpoints
         if (result.RequiresTwoFactor)
         {
             log.LogInformation("Login requires two-factor for user id {UserId}", user.Id);
+            await EndpointAuditHelper.AuditAsync(audit, context, "login_mfa_required", "auth:login",
+                actorUserId: user.Id);
             return Results.Redirect($"/mfa-challenge?returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
         if (result.IsLockedOut)
         {
             log.LogWarning("Login failed: account locked for user id {UserId}", user.Id);
+            await EndpointAuditHelper.AuditAsync(audit, context, "login_failed", "auth:login",
+                new { reason = "locked_out" }, actorUserId: user.Id);
             return Results.Redirect($"/login?error=locked&returnUrl={Uri.EscapeDataString(returnUrl)}");
         }
 
         log.LogWarning("Login failed: invalid credentials for user id {UserId}", user.Id);
+        await EndpointAuditHelper.AuditAsync(audit, context, "login_failed", "auth:login",
+            new { reason = "invalid_credentials" }, actorUserId: user.Id);
         return Results.Redirect($"/login?error=invalid&returnUrl={Uri.EscapeDataString(returnUrl)}");
     }
 
@@ -91,17 +104,19 @@ public static class AccountEndpoints
         SignInManager<ApplicationUser> signInManager,
         SessionService sessionService,
         AuthSyncService authSyncService,
+        IAuditLogger audit,
         ILoggerFactory loggerFactory)
     {
         var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Auth.Account");
-        log.LogInformation("User logout (session cookies cleared)");
+        var userId = EndpointAuditHelper.ResolveUserId(context);
+        log.LogInformation("User logout for user id {UserId} (session cookies cleared)", userId ?? "(anonymous)");
+        await EndpointAuditHelper.AuditAsync(audit, context, "logout", "auth:login");
         await signInManager.SignOutAsync();
         await RevokeSessionAsync(context, sessionService, "logout");
         ClearSessionCookies(context);
-        
-        // Clear auth state
+
         authSyncService.LogoutUser();
-        
+
         return Results.Redirect("/login?logout=success");
     }
 
@@ -134,7 +149,7 @@ public static class AccountEndpoints
             return Results.Unauthorized();
         }
 
-        log.LogDebug("Session refresh succeeded");
+        log.LogDebug("Session refresh succeeded for user id {UserId}", session.UserId);
         WriteSessionCookies(context, sessionId, newToken);
         return Results.Ok();
     }

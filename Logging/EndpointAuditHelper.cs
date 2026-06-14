@@ -26,9 +26,11 @@ public static class EndpointAuditHelper
         string action,
         string scope,
         object? metadata = null,
+        string? actorUserId = null,
         CancellationToken cancellationToken = default)
     {
         var json = metadata == null ? null : JsonSerializer.Serialize(metadata, JsonOptions);
-        return audit.LogAsync(action, scope, json, ResolveUserId(http), cancellationToken);
+        var userId = actorUserId ?? ResolveUserId(http);
+        return audit.LogAsync(action, scope, json, userId, cancellationToken);
     }
 }

@@ -5,7 +5,8 @@
 <div class="sticky-notes-container">
     @foreach (var note in StickyNotes.Notes)
     {
-        <StickyNoteCard Note="note"
+        <StickyNoteCard @key="note.Id"
+                    Note="note"
                     OnHide="HandleHide"
                     OnContentChanged="HandleContentChanged"
                     OnPositionChanged="HandlePositionChanged"

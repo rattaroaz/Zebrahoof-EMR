@@ -503,8 +503,4 @@ public sealed class UiSmokeTests : IAsyncLifetime
 
         _serverVerified = true;
     }
-
-    private static string BuildSkipMessage(string details) =>
-        $"UI smoke tests require the Zebrahoof EMR app to be running. Start the app (e.g. `dotnet run --launch-profile https`) " +
-        $"and optionally set UI_SMOKE_BASEURL. Details: {details}";
 }

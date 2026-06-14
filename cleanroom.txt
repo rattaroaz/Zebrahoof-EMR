@@ -1,0 +1,1509 @@
+================================================================================
+ZEBRAHOOF EMR — CLEANROOM RECREATION SPECIFICATION
+================================================================================
+
+Purpose
+-------
+This document describes every user-facing feature, data structure, business rule,
+API contract, and visual design token in the Zebrahoof EMR application so that
+another implementation (any platform, any language) can achieve:
+
+  • 100% functional recreation of described behavior
+  • ≥90% visual reproduction of the described UI
+
+Explicitly EXCLUDED from this spec:
+  • Test projects, test harnesses, CI configuration
+  • Logging frameworks (Serilog, OpenTelemetry, audit log infrastructure)
+  • Build scripts and developer tooling except where they affect runtime behavior
+
+The reference implementation is ASP.NET Core 10 Blazor Server + MudBlazor + EF
+Core + SQLite/PostgreSQL + xAI Grok. Recreate the BEHAVIOR and UI described
+here; do not need to copy the stack.
+
+
+================================================================================
+1. APPLICATION OVERVIEW
+================================================================================
+
+Product name: Zebrahoof EMR
+Tagline in app bar: "Zebrahoof EMR"
+Logo: SVG at images/logo.svg (zebra/hoof branding), height 32px in app bar
+
+Domain: Electronic Medical Record (EMR) for outpatient/clinic use.
+
+Architecture pattern (reference):
+  • Server-rendered SPA with real-time circuit (Blazor Server equivalent)
+  • Single-page shell with client-side navigation between routes
+  • Hybrid persistence:
+      - In-memory singleton services hold clinical chart data (problems, meds,
+        encounters, inbox, tasks, admin catalogs) synced to database on startup
+        and on mutations
+      - Direct database persistence for: Identity users, documents (binary),
+        encounter Grok messages, sticky notes, patient sticky notes, audit logs,
+        user sessions
+  • Dual auth state: server cookie session + in-app user context object for UI
+    role display and location switching
+
+Default dev URL: http://localhost:5222
+Optional HTTPS: https://localhost:7177
+
+Database file (dev): App_Data/zebrahoof.db (SQLite)
+Production option: PostgreSQL when connection string configured
+
+
+================================================================================
+2. VISUAL DESIGN SYSTEM (≥90% REPRODUCTION TARGET)
+================================================================================
+
+2.1 Component Library Equivalent
+--------------------------------
+Reference uses MudBlazor (Material Design). Recreate with any Material Design
+3–compatible component library. Key primitives used throughout:
+
+  MudLayout, MudAppBar, MudDrawer, MudMainContent, MudContainer
+  MudCard, MudGrid, MudStack, MudPaper
+  MudButton, MudIconButton, MudFab, MudButtonGroup, MudToggleIconButton
+  MudTextField, MudSelect, MudDatePicker, MudAutocomplete
+  MudTable, MudDataGrid, MudList, MudTabs, MudTabPanel
+  MudChip, MudBadge, MudAvatar, MudTooltip, MudMenu, MudMenuItem
+  MudDialog, MudDrawer (side panel), MudSnackbar
+  MudProgressLinear, MudProgressCircular
+  MudAlert, MudIcon (Material Icons Filled set)
+  MudThemeProvider with light/dark toggle
+
+2.2 Typography
+----------------
+Primary font: Inter (Google Fonts), fallback stack:
+  -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial
+
+Typography scale (MudBlazor Typo equivalents):
+  h6 — app bar title
+  h5/h6 — page titles
+  subtitle1/subtitle2 — section headers, card titles
+  body1/body2 — table cells, list items
+  caption — secondary metadata (MRN, dates)
+
+Default border radius: 8px
+
+2.3 Color Palette — Light Mode
+-------------------------------
+Primary:           #1976D2  (blue — active tabs, links, primary buttons)
+Secondary:         #00796B  (teal)
+Background:        #F5F5F5  (page background)
+Surface:           #FFFFFF  (cards, app bar, drawer)
+App bar bg/text:   #FFFFFF / #424242
+Drawer bg/text:    #FFFFFF / #424242
+Success:           #4CAF50
+Warning:           #FF9800
+Error:             #F44336
+Info:              #2196F3
+
+CSS custom properties (mirror in global CSS):
+  --primary-color: #1976D2
+  --secondary-color: #00796B
+  --success-color: #4CAF50
+  --warning-color: #FF9800
+  --error-color: #F44336
+  --info-color: #2196F3
+
+2.4 Color Palette — Dark Mode
+------------------------------
+Primary:           #90CAF9
+Secondary:         #80CBC4
+Background:        #121212
+Surface:           #1E1E1E
+App bar/drawer:    #1E1E1E / #FFFFFF text
+Success:           #81C784
+Warning:           #FFB74D
+Error:             #E57373
+Info:              #64B5F6
+
+Dark mode toggled via icon button in app bar (sun/moon icons).
+
+2.5 Layout Structure
+--------------------
+┌─────────────────────────────────────────────────────────────────┐
+│ APP BAR (dense, elevation 1, surface color)                     │
+│ [≡] [Logo] Zebrahoof EMR  [GlobalSearch........]  [Loc][🔔][☀][👤]│
+├──────────┬──────────────────────────────────────────────────────┤
+│ DRAWER   │ MAIN CONTENT (padding 16px, full width container)    │
+│ (mini,   │ [Breadcrumbs]                                        │
+│  hover   │ @page body                                           │
+│  expand) │                                                      │
+│          │                                                      │
+│ NavMenu  │                                                      │
+└──────────┴──────────────────────────────────────────────────────┘
+Fixed overlays: SessionMonitor (invisible), ToastContainer, StickyNoteContainer
+Patient chart: pink FAB sticky note fixed top-right (top: 80px, right: 20px)
+
+Drawer: Mini variant, opens on hover, clip mode always, elevation 2.
+Main content top padding: pt-16 (clears dense app bar).
+
+2.6 Common UI Patterns
+----------------------
+• Content panels: MudCard elevation 1–2, pa-2 to pa-4
+• Lists: dense tables with hover + striped rows
+• Status display: colored MudChip (size Small)
+• Filters: MudSelect + MudTextField in horizontal MudStack
+• Create/edit flows: modal dialogs (MudDialog)
+• Detail views: right-side drawers (appointment, task)
+• Page headers: MudText Typo.h5 + action buttons right-aligned
+• Loading: MudProgressLinear indeterminate at page top
+• Errors: MudAlert Severity.Error
+• Empty states: centered MudText secondary color
+• Form validation: red outline on invalid fields (#e50000)
+• Valid modified fields: green outline (#26b050)
+
+2.7 Patient Chart Tab Bar
+-------------------------
+Horizontal wrapping flex row (.chart-nav-tabs, gap 4px).
+Each tab is a draggable button:
+  • Active tab: Variant.Filled, Color.Primary
+  • Inactive: Variant.Text, Color.Default
+  • Drag-over highlight: rgba(25,118,210,0.1) bg, 2px inset #1976D2 border
+  • Dragging: opacity 0.5, scale 0.95
+Tab order persisted in browser localStorage key "zebrahoof-chart-tab-order"
+(JSON array of tab slug strings).
+
+2.8 Schedule Page Specifics
+---------------------------
+Day view: hourly grid 8:00 AM – 5:00 PM
+Week view: 7-column compact appointment chips
+Appointment status border colors via CSS classes per status
+Date picker width: 180px; calendar popover min-width 330px
+
+2.9 Patient Sticky Note
+-----------------------
+Pink FAB: background #f8bbd9, text #000, icon StickyNote2
+Draggable card overlay (z-index 9999)
+
+2.10 Blazor Error UI Strip
+--------------------------
+Bottom fixed strip: "An unhandled error has occurred." + Reload link + dismiss
+
+
+================================================================================
+3. NAVIGATION
+================================================================================
+
+3.1 Side Nav (NavMenu) — Three Sections
+-----------------------------------------
+
+CLINICAL
+  Dashboard      → /dashboard          icon: Dashboard
+  Patients       → /patients           icon: People
+  Schedule       → /schedule           icon: CalendarMonth
+  Tasks          → /tasks              icon: Task
+  Orders         → /orders             icon: Assignment
+
+COMMUNICATION
+  Inbox          → /inbox              icon: Inbox
+                   Shows unread count chip (red) when > 0
+
+ADMINISTRATION
+  Settings       → /admin/settings     icon: Settings
+  Templates      → /admin/templates    icon: Description
+  Sticky Notes   → (action, not route) icon: StickyNote2
+                   Submenu: Add Note, Show/Hide All, count chip "n/5"
+  Patient Messages → /patient-messages icon: Message
+  Users          → /admin/users        icon: ManageAccounts
+                   Visible ONLY when user role is Admin
+
+NOT in nav (reachable by URL):
+  /admin/sessions   (Admin role required)
+  /admin/audit-log  (Admin role required)
+  /admin            (admin hub landing)
+
+3.2 App Bar Actions
+-------------------
+• Global patient search (autocomplete, min 2 chars, max 10 results)
+• Location chip menu: Main Clinic | South Branch | West Branch
+• Inbox notification badge (red when unread > 0) → /inbox
+• Dark/light mode toggle
+• Profile menu → Profile, Preferences, role chip, Logout
+
+3.3 Complete Route Table (33 routes)
+------------------------------------
+
+CLINICAL / WORKFLOW
+  /                          → Dashboard (same as /dashboard)
+  /dashboard                 → Dashboard
+  /patients                  → Patient list
+  /patients/{patientId}      → Patient chart, default tab encounter
+  /patients/{patientId}/{tab}→ Patient chart tab (see §5.2)
+  /patients/{patientId}/notes/tree → Clinical notes tree view
+  /schedule                  → Appointment calendar
+  /tasks                     → Clinical task management
+  /orders                    → CPOE placeholder page
+  /inbox                     → Staff messaging inbox
+  /patient-messages          → Demo patient portal message sender
+  /encounter/{encounterId}   → Standalone encounter workspace
+
+ACCOUNT (AuthLayout — centered card, no main nav)
+  /login                     → Sign in
+  /logout                    → Auto sign-out → redirect /login
+  /forgot-password           → Request password reset
+  /reset-password?token&username → Set new password
+  /register-patient          → Patient portal self-registration
+  /mfa-challenge             → TOTP/recovery code at login
+  /access-denied             → Permission denied message
+
+ACCOUNT (MainLayout)
+  /mfa-setup                 → Enable/disable MFA, view recovery codes
+  /profile                   → User profile
+  /preferences               → UI preferences (local state only)
+
+ADMIN
+  /admin                     → Admin hub with navigation cards
+  /admin/users               → User management grid
+  /admin/locations           → Locations + departments
+  /admin/templates           → Note templates, smart phrases, order sets
+  /admin/settings            → Global system settings
+  /admin/sessions            → Active session monitor [Admin only]
+  /admin/audit-log           → Audit log viewer [Admin only]
+
+SYSTEM
+  /Error                     → Unhandled exception page
+  /not-found                 → 404 page
+
+DEV/DEBUG (optional in recreation)
+  /auth-debug                → Shows auth state mapping
+  /role-test                 → Role mapping test instructions
+
+3.4 Breadcrumbs
+-----------------
+Auto-generated from URL path segments. When on a patient route, inject patient
+full name as segment after "patients/{id}".
+
+
+================================================================================
+4. AUTHENTICATION & SESSION
+================================================================================
+
+4.1 Identity System
+-------------------
+ASP.NET Identity equivalent with these roles:
+  Admin, Physician, Nurse, MA (Medical Assistant), Billing, Scheduler, Lab, Patient
+
+Seed users (password for all: "password"):
+
+  admin@zebrahoof.com        → Admin
+  physician@zebrahoof.com    → Physician
+  nurse@zebrahoof.com        → Nurse
+  ma@zebrahoof.com           → MA
+  billing@zebrahoof.com      → Billing
+  scheduler@zebrahoof.com    → Scheduler
+  lab@zebrahoof.com          → Lab
+  patient@zebrahoof.com      → Patient
+
+Password policy (intentionally minimal for demo):
+  Minimum length 1, no digit/lowercase/uppercase/symbol requirements.
+
+Lockout: 5 failed attempts → 15 minute lockout.
+
+4.2 Login Flow (/login)
+-----------------------
+Form POST to /account/login (application/x-www-form-urlencoded):
+  Username  — accepts username OR email
+  Password
+  RememberMe — checkbox ("on" or "true")
+  ReturnUrl — hidden, default "/"
+
+Error query params on redirect back to /login:
+  ?error=invalid     — unknown account or bad password
+  ?error=inactive    — account deactivated
+  ?error=locked      — lockout active
+  ?error=...         — display generic "Invalid username or password"
+
+On success: redirect to ReturnUrl (default /).
+On MFA required: redirect /mfa-challenge?returnUrl=...
+Logout success: /login?logout=success
+
+Login page links: Forgot Password, Register as Patient.
+
+4.3 Cookie Configuration
+------------------------
+Auth cookie name: zebrahoof.auth
+  HttpOnly: true
+  Secure: true (in production)
+  SameSite: Strict
+  Absolute expiration: 12 hours
+  Sliding expiration: DISABLED
+
+ASP.NET session cookie: zebrahoof.session, 30 min idle.
+
+Refresh token cookie: zebrahoof.refresh
+  Value: base64("{sessionId}:{refreshToken}")
+  HttpOnly: true
+
+Session ID cookie: zebrahoof.session.id
+  Value: session Guid string
+  HttpOnly: false (needed for SignalR query param)
+
+4.4 Idle Timeout Rules
+----------------------
+Non-admin users: 15 minute idle timeout
+Admin / "System Administrator" role: 30 minute idle timeout
+
+Idle measured via:
+  • Cookie validation on each request (updates last activity claim)
+  • SignalR SessionHub Heartbeat() every ~30 seconds from client JS
+  • SessionService tracks LastSeenAt on UserSession entity
+
+When idle expires:
+  • SignalR sends ForceLogout("Session expired") to client
+  • Session revoked with reason "idle_timeout"
+  • User redirected to /login
+
+When ≤2 minutes idle remaining: IdleWarning toast/message.
+
+4.5 MFA
+-------
+TOTP authenticator app (Otp.NET equivalent).
+Recovery codes supported.
+Pages: /mfa-challenge (anonymous, during login), /mfa-setup (authenticated).
+ApplicationUser.MfaSecret stored encrypted at rest.
+SystemSettings.RequireTwoFactor exists in admin UI but is NOT wired to enforce
+org-wide MFA (per-user TwoFactorEnabled only).
+
+4.6 Authorization
+-----------------
+Global: all pages require authentication except explicitly anonymous routes.
+Admin-only pages: /admin/sessions, /admin/audit-log ([Authorize Roles=Admin]).
+
+Defined policies (exist but mostly unused in UI):
+  ChartEditorPolicy  → Physician OR Nurse
+  PrescriberPolicy   → Physician only
+  BillingPolicy      → claim CanViewBilling=true (Billing + Admin roles)
+
+Patient REST API:
+  POST/PUT patients → Physician OR Admin
+  DELETE patients   → Admin only
+  GET               → any authenticated user
+
+4.7 Blazor Auth Bridge
+----------------------
+After cookie login, map Identity user → in-app User object:
+  Id, Username, FullName, Email, Role (UserRole enum), Department
+
+AuthStateService (singleton):
+  CurrentUser, IsAuthenticated, CurrentLocation (default "Main Clinic")
+  AvailableLocations: ["Main Clinic", "South Branch", "West Branch"]
+  Events: OnAuthStateChanged
+  Methods: Login, Logout, SwitchRole (demo), SetLocation
+
+4.8 Account Endpoints
+---------------------
+POST /account/login     — form login (see §4.2)
+POST|GET /account/logout — sign out, revoke session, clear cookies → /login?logout=success
+POST /account/refresh   — rotate refresh token; 200 OK or 401
+
+4.9 Session REST (anonymous — demo/admin tooling)
+-------------------------------------------------
+GET /api/sessions/active  → { sessions: UserSession[] }
+GET /api/sessions/count   → { count: number }
+
+4.10 SignalR Session Hub
+------------------------
+Path: /hubs/session
+Auth: required; connect with ?sessionId={guid} query param
+
+Server methods:
+  Heartbeat() — updates last seen, sends IdleTimeUpdated(idleSec, absoluteSec),
+                IdleWarning if ≤2 min, ForceLogout + revoke if expired
+
+Client must connect after login using session ID from cookie.
+
+
+================================================================================
+5. PATIENT CHART (CORE FEATURE)
+================================================================================
+
+5.1 Patient List (/patients)
+----------------------------
+Header: "Patients" + "New Patient" button (opens dialog).
+
+Search bar: debounced text search across name, MRN, DOB, phone.
+
+Advanced filters (collapsible panel):
+  Provider (select), Status (select), Last Seen (select), Sex (select)
+  Apply / Clear buttons
+
+Table (server-side pagination):
+  Page sizes: 5, 10, 25, 50
+  Columns: Name (avatar + link to chart), MRN, DOB, Age, Sex, Phone,
+            Provider, Last Visit, Allergy chips, Alert chips, Actions
+  Sortable: Name, DOB, Last Visit
+  Row actions: View chart, Edit demographics, Schedule appointment
+
+New Patient Dialog fields:
+  First Name*, Last Name*, DOB*, Sex* (M/F/O), Phone, Email,
+  Address, City, State, Zip, Primary Provider, Insurance Name, Insurance ID
+  Creates patient with auto-generated MRN if not provided.
+
+5.2 Patient Chart Shell (/patients/{id}/{tab})
+----------------------------------------------
+Layout components (top to bottom):
+
+A) PatientHeader banner:
+   Back arrow → /patients
+   Avatar (initials), Full Name, MRN, DOB, Age, Sex, Primary Provider
+   Allergy chips (red/error color), Alert chips (warning color)
+   Quick actions: New Note, Appointments dialog, More menu (Edit Demographics,
+   Schedule, Print Summary — some may be stubs)
+
+B) PatientChartMessages panel:
+   Per-patient inbox messages list + detail + reply composer
+   Opens specific message when ?message={id} query param present
+
+C) "Send to Grok" button (right-aligned):
+   Green filled button with Send icon when not sent
+   Disabled + "Documents Received" + check icon after sent once per session
+   Resets when new documents uploaded (document count increases)
+   See §11.2 for payload
+
+D) Patient sticky note FAB (fixed top-right, pink)
+
+E) Draggable tab bar (14 tabs, order persisted in localStorage)
+
+F) Tab content area
+
+5.3 Chart Tab Slugs and Content
+-------------------------------
+
+| Slug           | Label         | Component Behavior                          |
+|----------------|---------------|---------------------------------------------|
+| encounter      | Encounter     | Grok AI chat (default tab)                  |
+| chart/summary  | Summary       | Chart summary dashboard + risk scores       |
+| problems       | Problems      | Filterable problem list table               |
+| medications    | Medications   | Med list with high-risk flags               |
+| allergies      | Allergies     | Allergy table                               |
+| history        | History       | PMH, surgical, social, family sections      |
+| labs           | Labs          | Lab results, abnormal highlighting          |
+| imaging        | Imaging       | Imaging studies list                        |
+| vitals         | Vitals        | Vitals history / latest                     |
+| immunizations  | Immunizations | Vaccine record table                        |
+| documents      | Documents     | Upload/view/download/delete PDFs            |
+| notes          | Notes         | Clinical notes CRUD + link to tree view     |
+| careteam       | Care Team     | Care team member cards                      |
+| demographics   | Demographics  | Contact edit, insurance, emergency contacts,|
+|                |               | document upload, "Update Records from Grok" |
+
+Default tab when slug omitted or unknown: encounter
+
+5.4 Patient Chart Tab — Encounter (Grok Chat)
+---------------------------------------------
+Chat UI: scrollable message list + text input + Send button
+Enter key sends (Shift+Enter for newline if supported)
+Shows user messages and Grok responses with timestamps
+Loading spinner while Grok processing
+"Clear History" button removes all persisted messages for patient
+
+System prompts sent to Grok:
+  First message: "You are a helpful clinical assistant for the Zebrahoof EMR.
+    You are answering a question about patient ID {patientId}."
+  Follow-ups: "...continuing an ongoing discussion about patient ID {patientId}.
+    Use the prior turns to answer the new question."
+
+History: all prior turns with non-empty GrokResponse included as ChatTurn pairs.
+Persist each turn to EncounterMessage table:
+  PatientId, UserId, UserInput, GrokResponse, IncludedHistory (bool), CreatedAt
+
+5.5 Patient Chart Tab — Summary
+-------------------------------
+Multi-column card layout showing:
+  Active problems count/list, current medications, recent vitals,
+  recent lab highlights, upcoming appointments, recent encounters,
+  clinical alerts, RiskScorePanel (risk score entries per patient)
+
+5.6 Patient Chart Tab — Problems
+--------------------------------
+Filter tabs: Active | Resolved | All
+Table columns: Name, ICD Code, Onset, Status, Severity, Notes
+Status chips color-coded
+
+5.7 Patient Chart Tab — Medications
+-----------------------------------
+Table: Name, Dose, Route, Frequency, Start, Status, Prescriber
+High-risk medications flagged (icon/chip)
+Long-term vs short-term distinction in data model
+
+5.8 Patient Chart Tab — Allergies
+---------------------------------
+Table: Allergen, Reaction, Severity, Status, Onset
+Severity color coding (Severe/LifeThreatening = error color)
+
+5.9 Patient Chart Tab — History
+-------------------------------
+Sections (each as card or expandable):
+  Past Medical History (problem list prose)
+  Surgical History
+  Social History (smoking, alcohol, etc.)
+  Family History
+
+5.10 Patient Chart Tab — Labs
+-----------------------------
+Table: Test Name, Value, Units, Reference Range, Status, Collected Date
+Abnormal values highlighted (warning/error)
+Critical results flagged
+
+5.11 Patient Chart Tab — Imaging
+--------------------------------
+Table: Study name, Modality, Body Part, Date, Status, Ordering Provider
+
+5.12 Patient Chart Tab — Vitals
+-----------------------------
+Latest vitals card + history table
+Fields: Temp, BP (sys/dia), HR, RR, SpO2, Weight, Height, BMI, RecordedAt
+
+5.13 Patient Chart Tab — Immunizations
+--------------------------------------
+Table: Vaccine, Date Administered, Dose, Site, Lot, Status
+
+5.14 Patient Chart Tab — Documents
+----------------------------------
+Upload: accept PDF, images, text files
+On upload: store binary in DB, extract text from PDF (PdfPig equivalent)
+Table: Name, Category, Type, Date, Uploaded By, Actions
+Actions: View (inline via /api/documents/{id}), Download, Rename, Delete
+Categories: configurable text field on upload
+
+5.15 Patient Chart Tab — Notes
+------------------------------
+List of clinical notes with: Author, Date, Status (Draft/Signed), Type
+Actions: New Note (dialog), Edit, View, Delete
+Link: "Tree View" → /patients/{id}/notes/tree
+
+5.16 Patient Chart Tab — Care Team
+----------------------------------
+Cards per member: Name, Role, Phone, Email, Is Primary flag
+
+5.17 Patient Chart Tab — Demographics
+-------------------------------------
+Editable: Phone, Email, Address, City, State, Zip
+Read-only: Name, MRN, DOB, Sex, Primary Provider
+Insurance table (multiple plans, primary flag)
+Emergency contacts table
+Document upload section (same as Documents tab)
+"Update Records from Grok" button — see §11.3
+Resets when new documents uploaded (same session state as Send to Grok)
+
+5.18 Notes Tree View (/patients/{id}/notes/tree)
+------------------------------------------------
+Breadcrumbs + PatientHeader + PatientNotesTreeView
+Hierarchical tree of notes grouped by date and note type
+Click node → opens ClinicalNoteDialog (view mode)
+
+
+================================================================================
+6. ENCOUNTER WORKSPACE (/encounter/{id})
+================================================================================
+
+Full-page 3-column layout:
+
+TOP: EncounterBanner
+  Shows encounter status, patient name, date, provider
+  Actions: Save Draft, Sign Note, Add Addendum
+  Status transitions: InProgress → Signed → Addended/Cosigned
+
+LEFT COLUMN (lg=3): Patient context cards
+  • Patient info (avatar, name, age, sex, MRN)
+  • Active Problems (top 5)
+  • Current Medications (top 5)
+  • Allergies (chips, or "NKA" green chip if none)
+
+CENTER COLUMN (lg=6): NoteEditor (SOAP note)
+  See §7.1
+
+RIGHT COLUMN (lg=3): Quick orders panel
+  Tabs or sections for: Medications, Labs, Imaging, Referrals
+  Order catalog lookups from MockClinicalDataService
+  Order warnings displayed (drug interactions, allergy conflicts)
+  "Order Cart" concept (OrderCartItem list)
+
+NoteEditor read-only when encounter status != InProgress.
+
+
+================================================================================
+7. CLINICAL DOCUMENTATION
+================================================================================
+
+7.1 NoteEditor (SOAP Structure)
+-------------------------------
+Fields (all multiline text unless noted):
+  Chief Complaint
+  History of Present Illness (HPI)
+  Review of Systems (ROS) — text OR structured checklist (toggle)
+  Physical Examination — text OR structured checklist (toggle)
+  Assessment
+  Plan
+
+ROS toggle: checklist mode uses RosChecklist component; text mode has
+  "All Negative" button inserting smart phrase abbreviation ".negros"
+
+Physical Exam toggle: checklist mode uses PhysicalExamChecklist; text mode has
+  "Normal Exam" button inserting ".npe"
+
+Smart Phrases menu (header action):
+  List of SmartPhrase objects with Name, Abbreviation, Category, Content
+  Insert appends Content to field based on Category:
+    HPI, Review of Systems, Physical Exam, Assessment, Plan
+
+HPI toolbar icons (non-functional stubs): Bold, Italic, Bulleted List
+
+7.2 RosChecklist
+----------------
+Sections: RosChecklistSection[] each with Name and Items[]
+Each item: Label, IsPositive (nullable bool), Notes
+Generates text summary → Note.ReviewOfSystems on change
+
+7.3 PhysicalExamChecklist
+-------------------------
+Sections: PhysicalExamSection[] with Name and Findings[]
+Each finding: Label, IsNormal (nullable bool), Notes
+Generates text summary → Note.PhysicalExam on change
+
+7.4 ClinicalNote Entity
+-----------------------
+Fields: Id, EncounterId, PatientId, AuthorName, CreatedAt, SignedAt?,
+  Status (Draft/InProgress/Signed/Addended), ChiefComplaint,
+  HistoryOfPresentIllness, ReviewOfSystems, PhysicalExam, Assessment, Plan
+
+7.5 ClinicalNoteDialog
+----------------------
+Modal wrapper for NoteEditor in create/edit/view modes
+View mode: all fields read-only (IsReadOnly=true)
+
+
+================================================================================
+8. DASHBOARD (/dashboard)
+================================================================================
+
+Welcome header: "Welcome, {CurrentUser.FullName}"
+
+Six summary cards in responsive grid:
+
+1. Today's Appointments
+   Top 5 appointments for today
+   Each row: time, patient name (link to chart), visit type, status chip
+   Footer link → /schedule
+
+2. Pending Tasks
+   Count + top items with priority chips
+   Footer link → /tasks
+
+3. Unread Messages
+   Count from inbox
+   Footer link → /inbox
+
+4. Recent Patient Interactions
+   Last 5 interactions: patient, type, summary, datetime
+
+5. Clinical Alerts
+   Unacknowledged alerts with severity chips
+   Click alert → /patients/{id}/chart
+
+6. Quick Actions
+   Button group: New Patient, Schedule, New Task, Inbox
+
+Card colors: primary/info/warning/error based on content severity.
+
+
+================================================================================
+9. SCHEDULE (/schedule)
+================================================================================
+
+Header: "Schedule" + "New Appointment" button
+
+Controls row:
+  Previous / Today / Next navigation buttons
+  Date picker (MudDatePicker)
+  Provider filter (select, all providers option)
+  Day / Week view toggle (MudButtonGroup)
+
+Day View:
+  Hourly rows 8:00–17:00
+  Click empty slot → NewAppointmentDialog with pre-filled date/time/provider
+  Click appointment card → AppointmentDetailDrawer
+
+Week View:
+  7 columns (Sun–Sat or Mon–Sun per locale)
+  Compact chips per appointment
+
+AppointmentDetailDrawer:
+  Patient, DateTime, Duration, Visit Type, Provider, Location, Status, Notes
+  Status transitions: Scheduled → CheckedIn → InProgress → Completed/Cancelled/NoShow
+  Edit and Delete actions
+
+NewAppointmentDialog fields:
+  Patient (autocomplete), Date, Time, Duration (minutes), Visit Type,
+  Provider, Location, Notes
+
+Status legend: colored chips for each AppointmentStatus
+
+AppointmentStatus enum:
+  Scheduled, CheckedIn, InProgress, Completed, Cancelled, NoShow
+
+
+================================================================================
+10. TASKS (/tasks)
+================================================================================
+
+Summary stat cards (clickable filters):
+  Pending | Overdue | Due Today | Completed Today
+
+Filter bar:
+  Status: All/Pending/Overdue/Completed
+  Type: select from ClinicalTaskType enum
+  Assignee: select from system users
+
+View toggle: Card view (default) | Compact table
+
+Card view: each task card shows title, description, type chip, priority chip,
+  patient link, assignee, due date, Complete button
+
+Row/card click → TaskDetailDrawer
+
+NewTaskDialog fields:
+  Title*, Description, Type*, Priority*, Patient (optional autocomplete),
+  Assignee*, Due Date
+
+TaskDetailDrawer: full task detail, status change dropdown, complete action
+
+ClinicalTaskType: FollowUp, LabReview, Referral, MedicationRenewal, Documentation,
+  PriorAuth, Callback, Other
+
+ClinicalTaskPriority: Low, Normal, High, Urgent
+
+ClinicalTaskStatus: Pending, InProgress, Completed, Cancelled
+
+
+================================================================================
+11. AI / GROK INTEGRATION
+================================================================================
+
+11.1 API Client Configuration
+------------------------------
+Provider: xAI (https://api.x.ai/v1/)
+Endpoint: POST /v1/responses (Responses API, NOT Chat Completions)
+Auth: Bearer token from GROK_API_KEY env var
+Default model: grok-4.20-multi-agent
+Timeout: 30 minutes
+
+Optional env/config:
+  GROK_MODEL           — override model id
+  GROK_STORE           — bool, persist on xAI servers (default false)
+  GROK_REASONING_EFFORT — low|medium|high|xhigh (multi-agent models only)
+  GROK_SERVER_TOOLS    — comma-separated, default from config: web_search, x_search
+
+Request body (JSON, camelCase):
+  {
+    "model": "...",
+    "input": [ { "role": "system|user|assistant", "content": "..." } ],
+    "store": false,
+    "reasoning": { "effort": "low" },      // multi-agent only
+    "tools": [ { "type": "web_search" } ]  // multi-agent only
+  }
+
+Response parsing: extract output[].type=="message".content[].type=="output_text".text
+Concatenate all output_text parts.
+
+If API key missing: return user-visible error string (do not crash app).
+
+11.2 Send to Grok (Patient Chart Button)
+----------------------------------------
+Precondition: at least one of: documents with ExtractedText, problems, meds, allergies
+Disabled after first successful send per patient per session.
+Resets when document count for patient increases.
+
+Builds plaintext payload:
+  === PATIENT === (name, MRN, DOB, sex)
+  === CURRENT LOCAL RECORDS ===
+    Problems, Medications, Allergies (formatted lists)
+    Latest Vitals (if any)
+    Recent Lab Results (last 10)
+    Immunizations
+  === UPLOADED DOCUMENTS === (full ExtractedText per document)
+
+Prompt: "You are reviewing a patient chart... Acknowledge receipt, then provide
+  a brief (3-5 sentence) summary noting discrepancies between uploaded documents
+  and current local records."
+
+Shows success snackbar with counts. Marks GrokSession.documentsSent[patientId]=true.
+
+11.3 Update Records from Grok (Demographics Tab)
+-------------------------------------------------
+Gathers: problems, medications, allergies, all documents for patient
+Sends prompt requesting JSON-only response (no markdown fences):
+
+Schema:
+{
+  "summary": string,
+  "problems": [{ name, icdCode, onsetDate, resolvedDate, status, severity, notes }],
+  "medications": [{ name, dose, route, frequency, startDate, endDate, prescriber,
+                    status, isHighRisk, isLongTerm, instructions, refillsRemaining,
+                    daysSupply, pharmacy }],
+  "allergies": [{ allergen, reaction, severity, status, onsetDate }]
+}
+
+Rules in prompt:
+  • Return COMPLETE chart (full replacement, not diff)
+  • Preserve existing unless documents contradict
+  • Add only with explicit document evidence
+  • Never invent ICD codes
+  • ISO date strings YYYY-MM-DD
+
+On success:
+  • Replace in-memory clinical data for patient
+  • Persist to DB (delete all existing problems/meds/allergies for patient, insert new)
+  • Fire PatientDataChanged event for UI refresh
+  • Show summary snackbar with before/after counts
+
+Limits: max 18,000 chars per document, 60,000 total doc chars in prompt.
+
+11.4 Encounter Chat (§5.4)
+----------------------------
+Uses ChatAsync with multi-turn history. Persisted to EncounterMessage table.
+
+11.5 GrokSessionStateService (per browser circuit/session)
+----------------------------------------------------------
+Tracks per patientId:
+  documentsSent (bool)
+  recordsUpdated (bool)
+  lastDocumentCount (int)
+Methods: HaveDocumentsBeenSent, MarkDocumentsSent, ResetDocumentsSent,
+  UpdateDocumentCount (returns true if count grew), ResetRecordsUpdated
+
+
+================================================================================
+12. INBOX & MESSAGING
+================================================================================
+
+12.1 Staff Inbox (/inbox)
+-------------------------
+Split pane layout:
+
+Left panel:
+  MudTabs: All | Messages | Results | Refills | Admin
+  Chip filters: Unread | Flagged
+  Message list: subject, sender, date, unread indicator, flag icon
+
+Right panel (message detail):
+  Header: subject, from, to, date
+  Actions: Flag, Archive, Delete icons
+  Body text
+  Reply / Forward buttons (Reply opens composer)
+
+Compose dialog: To (select user), Subject, Body
+
+Message types (MessageType): Message, LabResult, RefillRequest, AdminNotice
+
+Patient-linked messages: "View in Chart" navigates to
+  /patients/{patientId}/chart?message={messageId}
+
+12.2 Patient Chart Messages (PatientChartMessages)
+--------------------------------------------------
+Embedded in patient chart above tabs.
+Same list/detail/reply pattern scoped to current patient's messages.
+
+12.3 Patient Messages Demo (/patient-messages)
+----------------------------------------------
+Form simulating patient portal:
+  Select patient (dropdown), Subject, Body → creates inbox message
+  assigned to staff inbox as from patient.
+
+
+================================================================================
+13. ORDERS PAGE (/orders)
+================================================================================
+
+Placeholder page only. Displays planned CPOE features list:
+  • Medication ordering
+  • Lab orders
+  • Imaging orders
+  • Referrals
+  • Order cart / signing workflow
+
+No functional ordering from this page (ordering exists within EncounterWorkspace
+right panel via MockClinicalDataService order methods).
+
+
+================================================================================
+14. ADMIN MODULE
+================================================================================
+
+14.1 Admin Hub (/admin)
+-----------------------
+4 navigation cards → Users, Locations, Templates, Settings
+Quick stats row (user count, location count, etc.)
+System info table from SystemSettings object
+
+14.2 Users (/admin/users)
+-------------------------
+MudDataGrid: searchable, sortable
+Columns: Name, Username, Email, Role, Department, Status, Actions
+
+Add/Edit User Dialog:
+  First Name, Last Name, Username, Email, Phone, Role (select),
+  Specialty + NPI (shown when role=Physician), Location, Active toggle
+
+Actions per row: Edit, Reset Password (shows snackbar only, no email sent)
+
+14.3 Locations (/admin/locations)
+---------------------------------
+Two tabs:
+
+Locations tab — grid: Name, Type, Address, Phone, Active
+  Add/Edit dialog: Name, Type (Clinic/Hospital/UrgentCare/etc.), Address,
+  City, State, Zip, Phone, Fax, Active
+
+Departments tab — grid: Name, Location, Phone
+  Add/Edit dialog: Name, Location (select), Phone, Description
+
+14.4 Templates (/admin/templates)
+---------------------------------
+Three tabs:
+
+Note Templates: CRUD grid (Name, Type, Author, Last Modified)
+  View dialog shows template body text
+
+Smart Phrases: grid (Name, Abbreviation, Category)
+  Used by NoteEditor smart phrase menu
+
+Order Sets: grid (Name, Description, Item Count)
+  View Items dialog lists OrderSetItem entries
+
+14.5 Settings (/admin/settings)
+-------------------------------
+Cards/sections:
+
+Organization: Org Name, Address, Phone, Fax, Website
+Date/Time: Timezone select, Date Format, Time Format
+Security: Session Timeout (display minutes), Require 2FA toggle (UI only)
+UX: Default Landing Page select (Dashboard/Patients/Schedule/Inbox)
+Feature Toggles:
+  Enable Patient Portal (bool)
+  Enable Electronic Prescribing (bool)
+  Lab Integration (read-only/disabled display)
+
+Save button updates in-memory SystemSettings (not persisted to DB).
+
+14.6 Sessions (/admin/sessions) [Admin role]
+--------------------------------------------
+Stats cards: Active Sessions count
+Table: User, Device, IP, Created, Last Seen, Expires, Actions
+Revoke button per session → SessionService.RevokeSessionAsync
+
+14.7 Audit Log (/admin/audit-log) [Admin role]
+-----------------------------------------------
+Filters: Date From, Date To, User (select), Action (text)
+Refresh / Clear filter buttons
+Table: Timestamp, User, Action, Scope, Metadata (truncated)
+
+
+================================================================================
+15. USER ACCOUNT PAGES
+================================================================================
+
+15.1 Profile (/profile)
+-----------------------
+Avatar card with initials
+Read-only: Username, Email, Role, Department, Member Since
+Editable sections (local component state only, NOT persisted):
+  Professional Info: Title, Specialty, NPI, License Number
+  Contact: Phone, Mobile, Address
+  Security: 2FA status toggle (links to /mfa-setup), Session Timeout display
+  Clinical Settings (Physician/Nurse only): Default Note Template, Signature Line
+  Compliance: HIPAA Training Date, License Expiration (date pickers)
+Buttons: Edit Profile, Change Password (stubs — show snackbar or no-op)
+
+15.2 Preferences (/preferences)
+---------------------------------
+Cards (all local state, Save/Reset do not persist to server):
+
+Appearance: Theme (Light/Dark/System), Density (Comfortable/Compact),
+  Language (English), Timezone
+
+Default Views: Landing Page, Default Patient Chart Tab, Default Schedule View
+
+Notifications: Email notifications toggle, Inbox alerts, Task reminders,
+  Critical result alerts (each bool)
+
+Accessibility: High contrast, Reduce motion, Large text (each bool)
+
+Data & Privacy: Auto-logout timeout slider, Show patient photos toggle
+
+15.3 Forgot / Reset Password
+----------------------------
+Forgot: email/username field → generates Identity reset token
+  Shows "check your email" message; in demo, token preview via NotificationService
+
+Reset: New Password + Confirm Password fields, hidden token + username from query
+
+15.4 Register Patient (/register-patient)
+-----------------------------------------
+Fields: First Name, Last Name, Email, Username, Password, Confirm Password, DOB
+Creates Identity user with Patient role → redirect to login
+
+15.5 MFA Setup (/mfa-setup)
+---------------------------
+Enable: show QR code for authenticator app (TOTP secret)
+Verify: enter 6-digit code to confirm
+Disable: requires current TOTP code
+Recovery codes: generate and display 10 one-time codes
+
+
+================================================================================
+16. STICKY NOTES
+================================================================================
+
+16.1 User Sticky Notes (global, max 5 per user)
+-------------------------------------------------
+Accessible from NavMenu → Sticky Notes action
+Add Note creates new note at default position
+Each note (StickyNoteCard):
+  Draggable (JS interop for position)
+  Fields: Content (textarea), Color (enum: Yellow/Pink/Blue/Green/Purple),
+         ReminderDate (optional), IsVisible toggle
+  Position: X, Y pixel coordinates persisted to DB
+  Delete button
+
+StickyNoteContainer renders all visible notes for current user overlaid on app.
+
+NavMenu shows count chip "n/5" for visible notes.
+
+16.2 Patient Sticky Notes (one per user per patient)
+----------------------------------------------------
+Pink FAB on patient chart opens PatientStickyNoteCard
+Same drag/content/color behavior
+Unique constraint: (UserId, PatientId)
+Stored in PatientStickyNotes table
+
+
+================================================================================
+17. REST API REFERENCE
+================================================================================
+
+Base: all /api/* routes require authentication unless noted.
+
+17.1 Patients — /api/patients
+-----------------------------
+GET /api/patients/
+  Query: page (default 1), pageSize (default 10), search (optional)
+  Response: { patients: Patient[], totalCount: int, page: int, pageSize: int }
+
+GET /api/patients/{id}
+  Response: Patient or 404
+
+POST /api/patients/
+  Auth: Physician or Admin
+  Body: CreatePatientRequest { firstName, lastName, dateOfBirth, sex, phone?,
+         email?, address?, city?, state?, zipCode?, primaryProvider?,
+         insuranceName?, insuranceId?, mrn? }
+  Validation: sex must be M, F, or O; MRN must be unique
+  Response: 201 + Patient
+
+PUT /api/patients/{id}
+  Auth: Physician or Admin
+  Body: UpdatePatientRequest (all fields optional, partial update)
+  Response: updated Patient or 404
+
+DELETE /api/patients/{id}
+  Auth: Admin only
+  Response: 204 or 404
+
+GET /api/patients/{id}/appointments
+  Query: fromDate?, toDate?
+  Response: Appointment[]
+
+GET /api/patients/search
+  Query: q (required), limit (default 10)
+  Response: Patient[]
+
+17.2 Documents — /api/documents
+-------------------------------
+GET /api/documents/{id}
+  Response: inline file stream (Content bytes or ExtractedText as text/plain)
+
+GET /api/documents/{id}/download
+  Response: attachment download
+
+PUT /api/documents/{id}/rename
+  Body: { name: string } max 200 chars
+  Response: 200 or 404
+
+17.3 Health
+-----------
+GET /health → 200 OK (health check endpoint)
+
+
+================================================================================
+18. DATA MODEL — COMPLETE SCHEMA
+================================================================================
+
+18.1 Patient
+-----------
+Id (int PK), MRN (string unique), FirstName, LastName, DateOfBirth (date),
+Sex (string M/F/O), Phone?, Email?, Address?, City?, State?, ZipCode?,
+PrimaryProvider?, InsuranceName?, InsuranceId?,
+Allergies (string[] JSON), Alerts (string[] JSON), LastVisit? (datetime)
+Computed: FullName = FirstName + " " + LastName, Age from DOB
+
+18.2 Persisted Clinical Entities (indexed by PatientId, no FK constraint)
+-------------------------------------------------------------------------
+See §7.4 for ClinicalNote. Additional entities:
+
+Encounter — Id, PatientId, PatientName, DateTime, VisitType, Provider,
+  Location, Status (EncounterStatus), ChiefComplaint?, Assessment?, Plan?
+
+Problem — Id, PatientId, Name, IcdCode?, OnsetDate, ResolvedDate?,
+  Status (Active|Resolved|Inactive), Severity?, Notes?
+
+Medication — Id, PatientId, Name, Dose, Route, Frequency, StartDate, EndDate?,
+  Prescriber?, Status (Active|Discontinued|OnHold|Completed),
+  IsHighRisk (bool), IsLongTerm (bool default true), Instructions?,
+  RefillsRemaining?, DaysSupply?, Pharmacy?
+
+Allergy — Id, PatientId, Allergen, Reaction?, Severity (Mild|Moderate|Severe|
+  LifeThreatening), Status (Active|Inactive|Resolved), OnsetDate?
+
+VitalSigns — Id, PatientId, EncounterId?, RecordedAt, RecordedBy?,
+  Temperature?, SystolicBP?, DiastolicBP?, HeartRate?, RespiratoryRate?,
+  OxygenSaturation?, Weight?, Height?, BMI?
+
+LabResult — Id, PatientId, TestName, PanelName?, Value, Units?,
+  ReferenceRange?, Status (Pending|Preliminary|Final|Corrected),
+  CollectedAt, ResultedAt?, IsAbnormal, IsCritical
+
+ImagingStudy — Id, PatientId, StudyName, Modality, BodyPart, StudyDate,
+  Status, OrderingProvider?, ReportSummary?
+
+Immunization — Id, PatientId, VaccineName, AdministeredDate, Dose?, Site?,
+  LotNumber?, Manufacturer?, Status, Notes?
+
+CareTeamMember — Id, PatientId, Name, Role, Phone?, Email?, IsPrimary, StartDate?
+
+EmergencyContact — Id, PatientId, Name, Relationship, Phone?, Email?, IsPrimary
+
+Insurance — Id, PatientId, PayerName, PlanName, MemberId, GroupNumber?,
+  Type (Primary|Secondary|Tertiary), EffectiveDate?, TerminationDate?, IsPrimary
+
+ClinicalAlert — Id, PatientId?, PatientName?, Title, Description,
+  Type (CriticalResult|DrugInteraction|AllergyWarning|OverdueCare|
+  MedicationRenewal|AppointmentReminder|DocumentReview),
+  Severity (Low|Medium|High|Critical), CreatedAt, AcknowledgedAt?, IsAcknowledged
+
+PatientInteraction — Id, PatientId, PatientName, DateTime,
+  Type (OfficeVisit|PhoneCall|Message|LabReview|Prescription|Referral),
+  Summary, Provider?
+
+Prescription — Id, PatientId, MedicationId?, MedicationName, Dose, Route,
+  Frequency, DaysSupply?, Quantity?, Refills?, Instructions?, Prescriber?,
+  PrescribedDate, Type (ShortTerm|LongTerm), Status, Pharmacy?, IsRefill,
+  DiscontinuedReason?
+
+LabOrder — Id, PatientId, EncounterId?, TestName, PanelName?, Priority,
+  OrderedAt, Status, IsFasting, Instructions?
+
+ImagingOrder — Id, PatientId, EncounterId?, Modality, BodyPart, Reason?,
+  Contrast?, ScheduledAt?, Status, Instructions?
+
+ReferralOrder — Id, PatientId, EncounterId?, Specialty, ProviderName?, Reason?,
+  Status, Urgency?, Notes?
+
+18.3 Scheduling & Tasks
+---------------------
+Appointment — Id, PatientId, PatientName, DateTime, DurationMinutes,
+  VisitType, Provider, Location, Status, Notes?
+
+ClinicalTask — see §10
+
+Message — Id, Subject, Body, From, To, PatientId?, PatientName?,
+  Type, SentAt, IsRead, IsFlagged, ParentMessageId?
+
+18.4 Documents & AI
+-------------------
+Document — Id, PatientId, Name, Category, Type, Date, UploadedBy,
+  FileName?, Content (byte[]), ExtractedText?
+
+EncounterMessage — Id (Guid), PatientId, UserId, UserInput, GrokResponse,
+  IncludedHistory (bool), CreatedAt
+
+18.5 Sticky Notes
+-----------------
+StickyNote — Id (Guid), UserId, NoteNumber (1-5), Content, X, Y,
+  IsVisible, ReminderDate?, CreatedAt, UpdatedAt, Color (Yellow|Pink|Blue|Green|Purple)
+
+PatientStickyNote — Id (Guid), UserId, PatientId, Content, X, Y,
+  IsVisible, Color, CreatedAt, UpdatedAt
+Unique: (UserId, PatientId)
+
+18.6 Identity & Session
+---------------------
+ApplicationUser — extends base IdentityUser:
+  FirstName, LastName, DisplayName, Department, DateOfBirth, CreatedAt,
+  IsActive (bool), MfaSecret? (encrypted), PasswordSalt? (encrypted)
+
+UserProfile — UserId (PK FK), DisplayName, Department
+
+UserSession — Id (Guid PK), UserId (FK), RefreshToken (encrypted),
+  CreatedAt, LastSeenAt, ExpiresAt, DeviceFingerprint, DeviceName?,
+  IpAddress?, IsRevoked, IdleTimeoutMinutes
+
+AuditLog — Id (Guid), UserId? (FK), Action, Scope, Timestamp, Metadata (encrypted)
+
+18.7 In-Memory Catalog Models (not separate DB tables)
+------------------------------------------------------
+MedicationCatalog, LabPanel, ImagingCatalog, SmartPhrase, RosChecklistSection,
+PhysicalExamSection, RiskScoreEntry, OrderCartItem, OrderWarning, InboxMessage,
+SystemUser, Location, Department, NoteTemplate, OrderSet/OrderSetItem,
+SystemSettings
+
+18.8 Seed Patients (in-memory + DB on first run)
+------------------------------------------------
+ID 1: John Doe, MRN001, DOB 1985-03-15, M, Springfield IL, allergies: Penicillin
+ID 2: Jane Smith, MRN002, DOB 1972-08-22, F
+ID 3: Robert Johnson, MRN003, DOB 1990-11-05, M
+ID 4: Maria Garcia, MRN004, DOB 1968-01-30, F
+ID 5: William Brown, MRN005, DOB 1955-07-12, M
+
+Each has generated mock clinical data (problems, meds, labs, encounters, etc.)
+via MockClinicalDataService generators, persisted on first startup.
+
+
+================================================================================
+19. SERVICE LAYER BEHAVIOR
+================================================================================
+
+19.1 MockClinicalDataService (Singleton)
+------------------------------------------
+Central in-memory store for all clinical data. On startup:
+  1. Run EF migrations
+  2. For each entity type: if DB has rows → hydrate memory from DB;
+     else → seed DB from in-memory generators
+
+Key query methods (all async, filter by PatientId):
+  GetEncountersByPatientAsync, GetProblemsByPatientAsync,
+  GetMedicationsByPatientAsync, GetAllergiesByPatientAsync,
+  GetVitalsByPatientAsync, GetLatestVitalsByPatientAsync,
+  GetLabResultsByPatientAsync, GetRecentLabResultsByPatientAsync(count),
+  GetImagingByPatientAsync, GetImmunizationsByPatientAsync,
+  GetNotesByPatientAsync, GetCareTeamByPatientAsync,
+  GetEmergencyContactsByPatientAsync, GetInsurancesByPatientAsync,
+  GetAlertsByPatientAsync, GetInteractionsByPatientAsync,
+  GetRosChecklistByPatientAsync, GetPhysicalExamByPatientAsync,
+  GetRiskScoresByPatientAsync, GetSmartPhrasesAsync,
+  GetMedicationCatalogAsync, GetLabPanelsAsync, GetImagingCatalogAsync,
+  GetInboxMessagesAsync, GetSystemSettingsAsync, GetSystemUsersAsync,
+  GetLocationsAsync, GetDepartmentsAsync, GetNoteTemplatesAsync, GetOrderSetsAsync
+
+Mutation methods:
+  ReplaceProblemsForPatient(id, list) — also persists to DB
+  ReplaceMedicationsForPatient(id, list)
+  ReplaceAllergiesForPatient(id, list)
+  PrescribeMedicationAsync, CreateLabOrderAsync, CreateImagingOrderAsync,
+  CreateReferralOrderAsync, CheckOrderWarnings(patientId, medName)
+  AddInboxMessage, MarkMessageRead, FlagMessage, etc.
+
+Events:
+  PatientDataChanged(int patientId) — UI subscribes to refresh chart tabs
+  InboxChanged() — refresh inbox badge count
+
+19.2 MockPatientService (Singleton)
+------------------------------------
+5 seed patients + DB hydration via raw SQL for AddPatientAsync
+GetAllPatientsAsync, SearchPatientsAsync, GetPatientByIdAsync, AddPatientAsync
+
+19.3 MockAppointmentService / MockTaskService / MockMessageService
+-------------------------------------------------------------------
+Separate in-memory singletons for scheduling, tasks, legacy dashboard messages.
+
+19.4 EncounterMessageService (Scoped)
+-------------------------------------
+AddMessageAsync(patientId, userId, userInput, grokResponse, includedHistory)
+GetMessagesByPatientAsync(patientId) — ordered by CreatedAt
+ClearMessagesAsync(patientId)
+
+19.5 StickyNoteService / PatientStickyNoteService (Scoped)
+-----------------------------------------------------------
+CRUD + position updates. StickyNoteService enforces max 5 notes per user.
+
+19.6 SessionService (Scoped)
+----------------------------
+CreateSessionAsync(user, idleMinutes, deviceInfo) → UserSession + cookies
+ValidateRefreshTokenAsync, RotateRefreshTokenAsync
+UpdateLastSeenAsync, IsIdleExpiredAsync, GetRemainingTimesAsync
+RevokeSessionAsync(sessionId, reason)
+GetActiveSessionsAsync, GetActiveSessionCountAsync
+
+19.7 PatientRecordUpdateService (Scoped)
+----------------------------------------
+UpdateAsync(patient) → UpdateRecordsResult — see §11.3
+
+19.8 GrokApiService (HttpClient Scoped)
+---------------------------------------
+ChatAsync(systemPrompt, history, userMessage) → string
+ProcessDocumentAsync(documentContent, prompt) → string
+
+19.9 AuthSyncService (Scoped)
+-----------------------------
+SyncUserAuthenticationAsync(username) — maps Identity → AuthStateService.User
+SyncLogoutAsync() — clears AuthStateService
+
+19.10 NotificationService (Singleton)
+-------------------------------------
+Event-based toast system consumed by ToastContainer → snackbar display.
+Methods: ShowSuccess, ShowError, ShowWarning, ShowInfo(message)
+
+19.11 AppStateService (Singleton)
+---------------------------------
+SelectedPatientId, SelectedEncounterId, Breadcrumb overrides for UI context.
+
+
+================================================================================
+20. CLIENT-SIDE JAVASCRIPT
+================================================================================
+
+20.1 sticky-notes.js
+--------------------
+Functions for drag-and-drop positioning of sticky note cards.
+Called via JS interop: getNotePosition, setNotePosition, initDrag
+
+20.2 sessionMonitor.js
+----------------------
+Connects to SignalR /hubs/session?sessionId={id}
+Calls Heartbeat() on interval (~30s)
+Handles IdleTimeUpdated, IdleWarning, ForceLogout events
+On ForceLogout: redirect to /login
+Tracks user activity events (mousemove, keydown) to reset idle timer display
+
+
+================================================================================
+21. CONFIGURATION (NON-LOGGING)
+================================================================================
+
+Environment variables:
+  ASPNETCORE_ENVIRONMENT — Development|Production|Staging
+  GROK_API_KEY           — required for AI features
+  GROK_MODEL, GROK_STORE, GROK_REASONING_EFFORT, GROK_SERVER_TOOLS
+
+appsettings.json keys:
+  ConnectionStrings:DefaultConnection  — SQLite path
+  ConnectionStrings:PostgresConnection   — optional production DB
+  Grok:Model, Grok:Store, Grok:ReasoningEffort, Grok:ServerTools[]
+  ForwardedHeaders:TrustAllProxies
+  PlaywrightTestUser:* (optional test user seeding — skip in cleanroom)
+  AllowedHosts: *
+
+Production DB rule: use PostgreSQL when Environment=Production AND
+PostgresConnection is non-empty; otherwise SQLite with warning in production.
+
+
+================================================================================
+22. GLOBAL SEARCH
+================================================================================
+
+Component in app bar. MudAutocomplete on Patient search.
+Minimum 2 characters before search.
+Calls GET /api/patients/search?q={term}&limit=10
+Display: FullName + MRN in dropdown
+On select: navigate to /patients/{id}
+
+
+================================================================================
+23. ERROR HANDLING
+================================================================================
+
+Global ErrorBoundary wrapper (ErrorHandler component):
+  On unhandled render error: show friendly message + Retry button
+  Display correlation/request ID if available
+
+/not-found page for 404
+/Error page for unhandled server exceptions (non-development)
+
+Port bind failure: show message suggesting another instance may be running
+
+
+================================================================================
+24. KNOWN STUBS & NON-FUNCTIONAL UI
+================================================================================
+
+Recreate these as stubs OR implement fully — behavior must match:
+
+• Orders page (/orders) — placeholder text only
+• Profile "Edit Profile" / "Change Password" buttons — no backend action
+• Preferences Save/Reset — local state only, not persisted
+• Admin Settings Save — in-memory only
+• Admin Reset Password — snackbar confirmation only
+• NoteEditor Bold/Italic/List toolbar buttons — visual only
+• SystemSettings.RequireTwoFactor — toggle visible but not enforced globally
+• SystemSettings.EnableElectronicPrescribing — flag only, no e-prescribe integration
+• Lab Integration setting — disabled/read-only display
+• HPI smart phrase insert — appends to field end (no cursor position tracking)
+• RoleClaimTransformation policies defined but not applied to most pages
+• AuthStateService.SwitchRole — demo method, not exposed in normal UI
+• HTTPS redirect middleware may warn "Failed to determine https port" in http-only dev
+
+
+================================================================================
+25. RECREATION CHECKLIST
+================================================================================
+
+To achieve 100% functional + 90% visual recreation, implement in this order:
+
+PHASE 1 — Shell & Auth
+  [ ] MainLayout with app bar, mini drawer, theme light/dark
+  [ ] AuthLayout for login pages
+  [ ] Identity auth with 8 seed roles/users
+  [ ] Cookie + session + refresh token flow
+  [ ] SignalR session heartbeat + idle logout
+  [ ] All 33 routes with correct layout assignment
+
+PHASE 2 — Data Layer
+  [ ] All entities in §18 with correct fields and enums
+  [ ] Hybrid persistence pattern (§19.1 hydrate-or-seed)
+  [ ] 5 seed patients with mock clinical data generators
+  [ ] Document binary storage + PDF text extraction
+
+PHASE 3 — Core Clinical UI
+  [ ] Dashboard with 6 summary cards
+  [ ] Patient list with search, filters, pagination, new patient dialog
+  [ ] Patient chart with 14 draggable tabs + localStorage order
+  [ ] All 14 tab components with correct data bindings
+  [ ] Encounter workspace 3-column layout + NoteEditor SOAP
+  [ ] Schedule day/week views + appointment dialogs
+  [ ] Tasks card/table views + task dialogs
+  [ ] Inbox split pane + compose
+
+PHASE 4 — AI Integration
+  [ ] Grok API client (Responses API format)
+  [ ] Encounter chat with history persistence
+  [ ] Send to Grok button with session state
+  [ ] Update Records from Grok with JSON parsing + chart replace
+
+PHASE 5 — Admin & Account
+  [ ] Admin hub + users/locations/templates/settings pages
+  [ ] Admin sessions + audit log (Admin role gated)
+  [ ] Profile, preferences, MFA setup/challenge, password reset, patient registration
+
+PHASE 6 — Polish
+  [ ] Sticky notes (global max 5 + per-patient)
+  [ ] Global search autocomplete
+  [ ] Breadcrumbs with patient name injection
+  [ ] Toast notifications
+  [ ] Blazor reconnect / error UI equivalent
+  [ ] All color tokens and typography from §2
+  [ ] Material Icons throughout nav and actions
+
+PHASE 7 — REST API
+  [ ] All endpoints in §17
+  [ ] Health check at /health
+
+
+================================================================================
+END OF SPECIFICATION
+================================================================================
+Version: derived from Zebrahoof EMR source as of 2026-05-18
+Reference stack: .NET 10 / Blazor Server / MudBlazor 8.2 / EF Core 8 / SQLite
+For questions about ambiguous behavior, prefer matching the reference app's
+observable UI behavior over inferring unimplemented backend features.

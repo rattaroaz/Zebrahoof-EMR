@@ -83,11 +83,20 @@
     private DateTime? _selectedDate;
     private string _elementId = $"sticky-{Guid.NewGuid():N}";
     private DotNetObjectReference<StickyNoteCard>? _objRef;
+    private Guid _lastBoundNoteId;
 
     protected override void OnInitialized()
     {
-        Content = Note.Content;
         _objRef = DotNetObjectReference.Create(this);
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Note.Id != _lastBoundNoteId)
+        {
+            _lastBoundNoteId = Note.Id;
+            Content = Note.Content;
+        }
     }
 
     private string GetColorClass() => $"sticky-{Note.Color.ToString().ToLower()}";
@@ -116,11 +125,8 @@
 
     private async Task Hide()
     {
-        // Save content before hiding
-        if (Content != Note.Content)
-        {
-            await OnContentChanged.InvokeAsync((Note.Id, Content));
-        }
+        // Always flush — close is not guaranteed to fire @onblur before the click.
+        await OnContentChanged.InvokeAsync((Note.Id, Content));
         await OnHide.InvokeAsync(Note.Id);
     }
 

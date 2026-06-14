@@ -73,7 +73,7 @@ public class CoverageReporting : IClassFixture<WebApplicationFactory<Program>>
         {
             var actualCoverage = coverageResults.GetValueOrDefault(path, 0.0);
 
-            actualCoverage.Should().BeGreaterOrEqual(requiredCoverage,
+            actualCoverage.Should().BeGreaterThanOrEqualTo(requiredCoverage,
                 $"Critical healthcare path '{path}' must have at least {requiredCoverage}% coverage. Current: {actualCoverage}%");
 
             if (actualCoverage >= requiredCoverage)
@@ -90,7 +90,7 @@ public class CoverageReporting : IClassFixture<WebApplicationFactory<Program>>
         var healthcareSafetyScore = CalculateHealthcareSafetyScore(coverageResults, criticalPaths);
         _output.WriteLine($"🏥 Healthcare Safety Coverage Score: {healthcareSafetyScore:F1}%");
 
-        healthcareSafetyScore.Should().BeGreaterOrEqual(95.0,
+        healthcareSafetyScore.Should().BeGreaterThanOrEqualTo(95.0,
             "Healthcare safety coverage score must be at least 95% for patient safety");
     }
 
@@ -131,10 +131,10 @@ public class CoverageReporting : IClassFixture<WebApplicationFactory<Program>>
             var recentReports = historicalReports.TakeLast(3).ToList();
             foreach (var report in recentReports)
             {
-                report.OverallCoverage.Should().BeGreaterOrEqual(90.0,
+                report.OverallCoverage.Should().BeGreaterThanOrEqualTo(90.0,
                     $"Recent coverage must not drop below 90%. Date: {report.Timestamp:yyyy-MM-dd}");
 
-                report.HealthcareSafetyScore.Should().BeGreaterOrEqual(95.0,
+                report.HealthcareSafetyScore.Should().BeGreaterThanOrEqualTo(95.0,
                     $"Healthcare safety score must not drop below 95%. Date: {report.Timestamp:yyyy-MM-dd}");
             }
         }
@@ -183,17 +183,17 @@ public class CoverageReporting : IClassFixture<WebApplicationFactory<Program>>
         _output.WriteLine($"🔍 Quality Gate Check for {currentEnvironment}:");
 
         // Overall coverage check
-        currentCoverage.OverallCoverage.Should().BeGreaterOrEqual(currentThresholds.OverallCoverage,
+        currentCoverage.OverallCoverage.Should().BeGreaterThanOrEqualTo(currentThresholds.OverallCoverage,
             $"{currentEnvironment} requires {currentThresholds.OverallCoverage}% overall coverage");
         _output.WriteLine($"   Overall Coverage: {currentCoverage.OverallCoverage:F1}% (≥ {currentThresholds.OverallCoverage}%) - {(currentCoverage.OverallCoverage >= currentThresholds.OverallCoverage ? "✅ PASS" : "❌ FAIL")}");
 
         // Critical path coverage check
-        currentCoverage.CriticalPathCoverage.Should().BeGreaterOrEqual(currentThresholds.CriticalPathCoverage,
+        currentCoverage.CriticalPathCoverage.Should().BeGreaterThanOrEqualTo(currentThresholds.CriticalPathCoverage,
             $"{currentEnvironment} requires {currentThresholds.CriticalPathCoverage}% critical path coverage");
         _output.WriteLine($"   Critical Paths: {currentCoverage.CriticalPathCoverage:F1}% (≥ {currentThresholds.CriticalPathCoverage}%) - {(currentCoverage.CriticalPathCoverage >= currentThresholds.CriticalPathCoverage ? "✅ PASS" : "❌ FAIL")}");
 
         // Healthcare safety score check
-        currentCoverage.HealthcareSafetyScore.Should().BeGreaterOrEqual(currentThresholds.HealthcareSafetyScore,
+        currentCoverage.HealthcareSafetyScore.Should().BeGreaterThanOrEqualTo(currentThresholds.HealthcareSafetyScore,
             $"{currentEnvironment} requires {currentThresholds.HealthcareSafetyScore}% healthcare safety score");
         _output.WriteLine($"   Healthcare Safety: {currentCoverage.HealthcareSafetyScore:F1}% (≥ {currentThresholds.HealthcareSafetyScore}%) - {(currentCoverage.HealthcareSafetyScore >= currentThresholds.HealthcareSafetyScore ? "✅ PASS" : "❌ FAIL")}");
 
@@ -203,12 +203,12 @@ public class CoverageReporting : IClassFixture<WebApplicationFactory<Program>>
             var baselineCoverage = await GetBaselineCoverageMetrics();
             var regressionThreshold = 2.0; // 2% regression tolerance
 
-            if (baselineCoverage.HasValue)
+            if (baselineCoverage != null)
             {
-                var overallRegression = currentCoverage.OverallCoverage - baselineCoverage.Value.OverallCoverage;
+                var overallRegression = currentCoverage.OverallCoverage - baselineCoverage.OverallCoverage;
                 if (overallRegression < -regressionThreshold)
                 {
-                    Assert.Fail($"Coverage regression detected: {overallRegression:F1}% drop from baseline. Current: {currentCoverage.OverallCoverage:F1}%, Baseline: {baselineCoverage.Value.OverallCoverage:F1}%");
+                    Assert.Fail($"Coverage regression detected: {overallRegression:F1}% drop from baseline. Current: {currentCoverage.OverallCoverage:F1}%, Baseline: {baselineCoverage.OverallCoverage:F1}%");
                 }
                 else
                 {
@@ -238,16 +238,16 @@ public class CoverageReporting : IClassFixture<WebApplicationFactory<Program>>
         // Assert
         _output.WriteLine($"🔍 Coverage Gap Analysis:");
 
-        foreach (var gap in coverageGaps.OrderByDescending(g => g.CoverageGap))
+        foreach (var gap in coverageGaps.OrderByDescending(g => g.GapPercent))
         {
-            if (gap.CoverageGap > 20.0) // Significant gaps
+            if (gap.GapPercent > 20.0) // Significant gaps
             {
-                _output.WriteLine($"🚨 CRITICAL GAP: {gap.FileName} - {gap.CoverageGap:F1}% uncovered");
+                _output.WriteLine($"🚨 CRITICAL GAP: {gap.FileName} - {gap.GapPercent:F1}% uncovered");
                 _output.WriteLine($"   Lines to test: {string.Join(", ", gap.UncoveredLines.Take(5))}...");
             }
-            else if (gap.CoverageGap > 10.0) // Moderate gaps
+            else if (gap.GapPercent > 10.0) // Moderate gaps
             {
-                _output.WriteLine($"⚠️  MODERATE GAP: {gap.FileName} - {gap.CoverageGap:F1}% uncovered");
+                _output.WriteLine($"⚠️  MODERATE GAP: {gap.FileName} - {gap.GapPercent:F1}% uncovered");
             }
         }
 
@@ -256,9 +256,9 @@ public class CoverageReporting : IClassFixture<WebApplicationFactory<Program>>
         if (healthcareGaps.Any())
         {
             _output.WriteLine($"🏥 Healthcare Critical Files with Coverage Gaps:");
-            foreach (var gap in healthcareGaps.Where(g => g.CoverageGap > 5.0))
+            foreach (var gap in healthcareGaps.Where(g => g.GapPercent > 5.0))
             {
-                _output.WriteLine($"   {gap.FileName}: {gap.CoverageGap:F1}% gap");
+                _output.WriteLine($"   {gap.FileName}: {gap.GapPercent:F1}% gap");
             }
         }
 
@@ -320,7 +320,7 @@ public class CoverageReporting : IClassFixture<WebApplicationFactory<Program>>
 
         _output.WriteLine($"📊 Benchmark Compliance Score: {benchmarkComplianceScore:F1}% ({compliantMetrics}/{benchmarkResults.Count} metrics meet industry standards)");
 
-        benchmarkComplianceScore.Should().BeGreaterOrEqual(70.0,
+        benchmarkComplianceScore.Should().BeGreaterThanOrEqualTo(70.0,
             "At least 70% of metrics should meet or exceed industry benchmarks");
 
         // Healthcare regulatory requirements
@@ -505,10 +505,10 @@ public class CoverageReporting : IClassFixture<WebApplicationFactory<Program>>
         // Simulate coverage gap analysis
         return new List<CoverageGap>
         {
-            new CoverageGap { FileName = "Services/PatientService.cs", CoverageGap = 15.2, UncoveredLines = new[] { 45, 67, 89, 123 } },
-            new CoverageGap { FileName = "Services/MedicationService.cs", CoverageGap = 8.7, UncoveredLines = new[] { 34, 78 } },
-            new CoverageGap { FileName = "Controllers/PatientController.cs", CoverageGap = 22.1, UncoveredLines = new[] { 12, 45, 67, 89, 145 } },
-            new CoverageGap { FileName = "Validation/PatientValidator.cs", CoverageGap = 5.3, UncoveredLines = new[] { 23 } }
+            new CoverageGap { FileName = "Services/PatientService.cs", GapPercent = 15.2, UncoveredLines = new[] { 45, 67, 89, 123 } },
+            new CoverageGap { FileName = "Services/MedicationService.cs", GapPercent = 8.7, UncoveredLines = new[] { 34, 78 } },
+            new CoverageGap { FileName = "Controllers/PatientController.cs", GapPercent = 22.1, UncoveredLines = new[] { 12, 45, 67, 89, 145 } },
+            new CoverageGap { FileName = "Validation/PatientValidator.cs", GapPercent = 5.3, UncoveredLines = new[] { 23 } }
         };
     }
 
@@ -524,9 +524,9 @@ public class CoverageReporting : IClassFixture<WebApplicationFactory<Program>>
     {
         var recommendations = new List<string>();
 
-        foreach (var gap in gaps.Where(g => g.CoverageGap > 10))
+        foreach (var gap in gaps.Where(g => g.GapPercent > 10))
         {
-            recommendations.Add($"Add unit tests for {gap.FileName} - {gap.CoverageGap:F1}% coverage gap");
+            recommendations.Add($"Add unit tests for {gap.FileName} - {gap.GapPercent:F1}% coverage gap");
         }
 
         recommendations.Add("Implement integration tests for API endpoints with < 90% coverage");
@@ -591,7 +591,7 @@ public class CoverageTrendAnalysis
 public class CoverageGap
 {
     public string FileName { get; set; } = string.Empty;
-    public double CoverageGap { get; set; }
+    public double GapPercent { get; set; }
     public int[] UncoveredLines { get; set; } = Array.Empty<int>();
 }
 

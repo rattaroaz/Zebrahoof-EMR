@@ -4,10 +4,7 @@ namespace Zebrahoof_EMR.Services;
 
 public class NotificationService
 {
-    private readonly List<Notification> _notifications = new();
-    
     public event Action<Notification>? OnNotification;
-    public event Action? OnNotificationDismissed;
 
     public void ShowSuccess(string message, string? title = null)
     {
@@ -51,17 +48,8 @@ public class NotificationService
 
     private void Show(Notification notification)
     {
-        _notifications.Add(notification);
         OnNotification?.Invoke(notification);
     }
-
-    public void Dismiss(Guid id)
-    {
-        _notifications.RemoveAll(n => n.Id == id);
-        OnNotificationDismissed?.Invoke();
-    }
-
-    public IReadOnlyList<Notification> GetActive() => _notifications.AsReadOnly();
 
     public string BuildTemplate(string templateName, IReadOnlyDictionary<string, string> tokens)
     {

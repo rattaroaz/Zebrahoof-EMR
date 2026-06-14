@@ -171,8 +171,8 @@ public class GrokApiService
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Grok API Error: {StatusCode} - {ErrorContentPrefix}", response.StatusCode,
-                    SafeLogContent.Truncate(responseBody, SafeLogContent.DefaultMaxLength));
+                _logger.LogError("Grok API Error: {StatusCode} — {BodySummary}", response.StatusCode,
+                    SafeLogContent.DescribeWithoutRawContent(responseBody));
                 return $"Error from Grok API: {response.StatusCode}. Please check logs for details.";
             }
 
@@ -184,8 +184,8 @@ public class GrokApiService
                 return text;
             }
 
-            _logger.LogWarning("Grok response had no assistant text. Body prefix: {Prefix}",
-                SafeLogContent.Truncate(responseBody, SafeLogContent.ShortMaxLength));
+            _logger.LogWarning("Grok response had no assistant text. {BodySummary}",
+                SafeLogContent.DescribeWithoutRawContent(responseBody));
             return "No content returned from Grok.";
         }
         catch (Exception ex)

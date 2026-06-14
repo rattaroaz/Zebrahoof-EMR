@@ -58,22 +58,25 @@ public static class PatientEndpoints
     }
 
     private static async Task<IResult> GetPatients(
+        HttpContext http,
         [FromServices] ApplicationDbContext dbContext,
+        [FromServices] IAuditLogger audit,
         [FromServices] ILoggerFactory loggerFactory,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         [FromQuery] string? search = null)
     {
         var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Api.Patients");
+        var hasSearch = !string.IsNullOrWhiteSpace(search);
         var query = dbContext.Patients.AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(search))
+        if (hasSearch)
         {
             query = query.Where(p =>
-                p.FirstName.Contains(search) ||
-                p.LastName.Contains(search) ||
-                p.MRN.Contains(search) ||
-                (p.Email != null && p.Email.Contains(search)));
+                p.FirstName.Contains(search!) ||
+                p.LastName.Contains(search!) ||
+                p.MRN.Contains(search!) ||
+                (p.Email != null && p.Email.Contains(search!)));
         }
 
         var totalCount = await query.CountAsync();
@@ -89,7 +92,22 @@ public static class PatientEndpoints
             page,
             pageSize,
             totalCount,
-            !string.IsNullOrWhiteSpace(search));
+            hasSearch);
+
+        if (hasSearch)
+        {
+            log.LogInformation(
+                "ListPatients search: term length {TermLength} page {Page} results {Count}",
+                search!.Length,
+                page,
+                patients.Count);
+            await EndpointAuditHelper.AuditAsync(
+                audit,
+                http,
+                "patient_search",
+                "patient",
+                new { termLength = search.Length, page, pageSize, resultCount = patients.Count, totalCount });
+        }
 
         return Results.Ok(new PatientListResponse
         {

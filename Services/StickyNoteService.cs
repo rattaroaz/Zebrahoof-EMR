@@ -81,18 +81,6 @@ public class StickyNoteService
         }
     }
 
-    public async Task ShowNoteAsync(Guid id)
-    {
-        var note = _cachedNotes.FirstOrDefault(n => n.Id == id);
-        if (note != null)
-        {
-            note.IsVisible = true;
-            note.UpdatedAt = DateTime.UtcNow;
-            await _context.SaveChangesAsync();
-            OnNotesChanged?.Invoke();
-        }
-    }
-
     public async Task HideNoteAsync(Guid id)
     {
         var note = _cachedNotes.FirstOrDefault(n => n.Id == id);

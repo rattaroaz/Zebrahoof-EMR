@@ -4,6 +4,8 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -91,8 +93,8 @@ builder.Services.ConfigureApplicationCookie(options =>
             var authLog = context.HttpContext.RequestServices.GetService<ILoggerFactory>()
                 ?.CreateLogger("Zebrahoof_EMR.Auth.Cookie");
             authLog?.LogInformation(
-                "Cookie sign-in starting for {User}",
-                context.Principal?.Identity?.Name ?? context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
+                "Cookie sign-in starting for user id {UserId}",
+                context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
 
             var nowTicks = DateTimeOffset.UtcNow.Ticks.ToString();
             context.Properties.Items[LastActivityKey] = nowTicks;
@@ -113,8 +115,8 @@ builder.Services.ConfigureApplicationCookie(options =>
                 if (now - absoluteIssued > TimeSpan.FromHours(12))
                 {
                     authLog?.LogWarning(
-                        "Cookie principal rejected: absolute session maximum (12h) exceeded for {User}",
-                        context.Principal?.Identity?.Name ?? context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
+                        "Cookie principal rejected: absolute session maximum (12h) exceeded for user id {UserId}",
+                        context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
                     context.RejectPrincipal();
                     await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
                     return;
@@ -129,9 +131,9 @@ builder.Services.ConfigureApplicationCookie(options =>
                 if (now - lastActivity > idleWindow)
                 {
                     authLog?.LogWarning(
-                        "Cookie principal rejected: idle timeout ({IdleMinutes}m) exceeded for {User}",
+                        "Cookie principal rejected: idle timeout ({IdleMinutes}m) exceeded for user id {UserId}",
                         idleWindow.TotalMinutes,
-                        context.Principal?.Identity?.Name ?? context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
+                        context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
                     context.RejectPrincipal();
                     await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
                     return;
@@ -325,9 +327,34 @@ if (!usePostgres && app.Environment.IsProduction())
     app.Logger.LogWarning("Postgres connection string missing in production; the app is running against SQLite. Verify configuration.");
 }
 
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    var server = app.Services.GetRequiredService<IServer>();
+    var addresses = server.Features.Get<IServerAddressesFeature>()?.Addresses;
+    if (addresses is { Count: > 0 })
+    {
+        foreach (var address in addresses)
+        {
+            Log.Information("Zebrahoof EMR is running at {Url}", address);
+        }
+
+        return;
+    }
+
+    Log.Information("Zebrahoof EMR started.");
+});
+
 try
 {
     app.Run();
+}
+catch (IOException ex) when (ex.Message.Contains("address already in use", StringComparison.OrdinalIgnoreCase))
+{
+    Log.Fatal(
+        ex,
+        "Cannot bind to the configured URL. Another Zebrahoof EMR instance may still be running. " +
+        "Stop it or run .\\scripts\\dev-run.ps1 to free port 5222.");
+    throw;
 }
 finally
 {

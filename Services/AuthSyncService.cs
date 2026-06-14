@@ -25,10 +25,11 @@ public class AuthSyncService
 
     public async Task<bool> SyncUserAuthenticationAsync(string username)
     {
+        ApplicationUser? applicationUser = null;
         try
         {
-            var applicationUser = await _userManager.FindByNameAsync(username);
-            if (applicationUser == null && username.Contains('@'))
+            applicationUser = await _userManager.FindByNameAsync(username);
+            if (applicationUser == null && username.Contains('@', StringComparison.Ordinal))
             {
                 applicationUser = await _userManager.FindByEmailAsync(username);
             }
@@ -49,7 +50,7 @@ public class AuthSyncService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Auth sync failed for username {Username}", username);
+            _logger.LogError(ex, "Auth sync failed for user id {UserId}", applicationUser?.Id ?? "(unknown)");
             return false;
         }
     }

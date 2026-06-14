@@ -4,19 +4,5 @@ This document represents the UI of the program.
 Login:  Userprofile@zebrahoof.com Password: password
 example:  Admin@zebrahoof.com Password: password
 
-=== Logging Improvements (Completed Apr 2026) ===
-- All silent/bare catch blocks in clinical flows (ClinicalNoteDialog, PatientEncounter, PatientChartLayout, PatientDocuments, PatientDemographics) now log structured errors with PatientId/context.
-- AuthSyncService TODO implemented with ILogger.
-- Centralized ErrorHandler.razor + ErrorBoundary wrapper around routes for unhandled component errors.
-- Enhanced parse/debug logging in PatientRecordUpdateService (Debug on parse failure with truncated raw).
-- Individual component catches standardized with Logger.LogError/Warning + UI notifications preserved.
-- Bug detection effectiveness now excellent (correlation IDs, context, no swallowed exceptions in core paths).
 
-Remaining / Future:
-- Add DestructuringPolicy for automatic PHI redaction in Serilog (HIPAA).
-- Background queue for AuditLogger.
-- Propagate CorrelationId to HttpClient (Grok).
-- More OpenTelemetry instrumentation.
-- Expand log assertion tests.
 
-Current status: Production-ready for observability and bug detection.
