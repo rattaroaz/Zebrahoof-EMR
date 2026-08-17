@@ -117,21 +117,13 @@ jobs:
 
     - name: Install global tools
       run: |
-        dotnet tool install --global dotnet-coverage
         dotnet tool install --global dotnet-reportgenerator-globaltool
-
-    - name: Merge coverage reports
-      run: |
-        dotnet coverage merge \
-          tests/Zebrahoof.EMR.UnitTests/TestResults/*/coverage.cobertura.xml \
-          tests/Zebrahoof.EMR.IntegrationTests/TestResults/*/coverage.cobertura.xml \
-          --output-file coverage/merged.coverage.xml \
-          --output-format cobertura
 
     - name: Generate coverage report
       run: |
+        mkdir -p coverage/report
         reportgenerator \
-          -reports:coverage/merged.coverage.xml \
+          -reports:test-results/**/coverage.cobertura.xml \
           -targetdir:coverage/report \
           -reporttypes:Html;HtmlSummary;Cobertura
 
@@ -145,15 +137,15 @@ jobs:
     - name: Publish coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
-        file: coverage/merged.coverage.xml
+        files: test-results/**/coverage.cobertura.xml
         flags: unittests
         name: zebrahoof-emr-coverage
 
     - name: Check coverage thresholds
       run: |
-        # Extract coverage values from XML
-        COVERAGE_LINE=$(grep 'line-rate=' coverage/merged.coverage.xml | sed 's/.*line-rate="\([0-9.]*\)".*/\1/')
-        COVERAGE_BRANCH=$(grep 'branch-rate=' coverage/merged.coverage.xml | sed 's/.*branch-rate="\([0-9.]*\)".*/\1/')
+        # Extract coverage values from generated Cobertura report
+        COVERAGE_LINE=$(grep 'line-rate=' coverage/report/Cobertura.xml | head -1 | sed 's/.*line-rate="\([0-9.]*\)".*/\1/')
+        COVERAGE_BRANCH=$(grep 'branch-rate=' coverage/report/Cobertura.xml | head -1 | sed 's/.*branch-rate="\([0-9.]*\)".*/\1/')
         
         # Convert to percentage
         LINE_PERCENTAGE=$(echo "$COVERAGE_LINE * 100" | bc -l)
@@ -174,6 +166,21 @@ jobs:
         fi
         
         echo "✅ Coverage thresholds met!"
+
+    - name: Calculate coverage percentage
+      id: coverage
+      if: github.ref == 'refs/heads/main'
+      run: |
+        COVERAGE_LINE=$(grep 'line-rate=' coverage/report/Cobertura.xml | head -1 | sed 's/.*line-rate="\([0-9.]*\)".*/\1/')
+        PERCENTAGE=$(echo "scale=1; $COVERAGE_LINE * 100" | bc -l)
+        echo "percentage=$PERCENTAGE" >> $GITHUB_OUTPUT
+        if (( $(echo "$PERCENTAGE >= 80" | bc -l) )); then
+          echo "color=brightgreen" >> $GITHUB_OUTPUT
+        elif (( $(echo "$PERCENTAGE >= 60" | bc -l) )); then
+          echo "color=yellow" >> $GITHUB_OUTPUT
+        else
+          echo "color=red" >> $GITHUB_OUTPUT
+        fi
 
     - name: Create coverage badge
       uses: schneegans/dynamic-badges-action@v1.7.0
