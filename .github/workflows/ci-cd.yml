@@ -219,8 +219,8 @@ jobs:
           }
           
           // Add coverage info
-          if (fs.existsSync('./coverage/merged.coverage.xml')) {
-            const coverage = fs.readFileSync('./coverage/merged.coverage.xml', 'utf8');
+          if (fs.existsSync('./coverage/report/Cobertura.xml')) {
+            const coverage = fs.readFileSync('./coverage/report/Cobertura.xml', 'utf8');
             const lineRate = coverage.match(/line-rate="([0-9.]+)"/)?.[1];
             const branchRate = coverage.match(/branch-rate="([0-9.]+)"/)?.[1];
             
