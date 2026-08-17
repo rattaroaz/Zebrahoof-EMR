@@ -73,8 +73,7 @@ jobs:
           --collect:"XPlat Code Coverage"
 
     - name: Install Playwright browsers
-      run: npx playwright install --with-deps
-      working-directory: tests/Zebrahoof.EMR.UiSmokeTests
+      run: pwsh tests/Zebrahoof.EMR.UiSmokeTests/bin/Release/net10.0/playwright.ps1 install --with-deps
 
     - name: Start application for UI tests
       run: |
