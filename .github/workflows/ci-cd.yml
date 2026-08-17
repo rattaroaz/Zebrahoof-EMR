@@ -75,17 +75,6 @@ jobs:
     - name: Install Playwright browsers
       run: pwsh tests/Zebrahoof.EMR.UiSmokeTests/bin/Release/net10.0/playwright.ps1 install --with-deps
 
-    - name: Start application for UI tests
-      run: |
-        dotnet run --configuration Release --no-build &
-        sleep 30
-      env:
-        ASPNETCORE_ENVIRONMENT: Testing
-        ConnectionStrings__DefaultConnection: "Host=localhost;Database=zebrahoof_emr_test;Username=postgres;Password=postgres"
-        UI_SMOKE_BASEURL: "http://localhost:5000"
-        PLAYWRIGHT_USERNAME: "testuser"
-        PLAYWRIGHT_PASSWORD: "TestPassword123!"
-
     - name: Run UI smoke tests
       run: |
         dotnet test tests/Zebrahoof.EMR.UiSmokeTests/Zebrahoof.EMR.UiSmokeTests.csproj \
@@ -93,6 +82,8 @@ jobs:
           --logger:"junit;LogFilePath=../test-results/ui-tests.xml" \
           --results-directory ./test-results
       env:
+        ASPNETCORE_ENVIRONMENT: Testing
+        ConnectionStrings__DefaultConnection: "Host=localhost;Database=zebrahoof_emr_test;Username=postgres;Password=postgres"
         UI_SMOKE_BASEURL: "http://localhost:5000"
         PLAYWRIGHT_USERNAME: "testuser"
         PLAYWRIGHT_PASSWORD: "TestPassword123!"
