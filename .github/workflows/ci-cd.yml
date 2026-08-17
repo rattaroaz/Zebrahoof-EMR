@@ -240,11 +240,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
     - name: Run security scan
       run: |
-        dotnet tool install --global dotnet-dev-certs
-        dotnet dev-certs https
-        dotnet list package --vulnerable --outdated
+        dotnet list package --vulnerable --include-transitive
 
     - name: Run code analysis
       uses: github/super-linter@v5
