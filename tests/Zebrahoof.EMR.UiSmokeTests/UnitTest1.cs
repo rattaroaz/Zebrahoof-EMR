@@ -288,7 +288,13 @@ public sealed class UiSmokeTests : IAsyncLifetime
         await page.FillAsync("input[name=Username]", _playwrightCreds.UserName);
         await page.FillAsync("input[name=Password]", _playwrightCreds.Password);
         await page.ClickAsync("button[type=submit]");
-        await page.WaitForURLAsync(new Regex(".*(?<!login)$"), new PageWaitForURLOptions { Timeout = 10000 });
+        
+        // Wait for post-login element (profile menu avatar) instead of navigation event
+        // This works better with Blazor SPAs where navigation events may not fire reliably
+        await page.WaitForSelectorAsync(".mud-avatar", new PageWaitForSelectorOptions { Timeout = 30000, State = WaitForSelectorState.Visible });
+        
+        // Also ensure we've navigated away from login page
+        await page.WaitForURLAsync(new Regex(".*(?<!login)$"), new PageWaitForURLOptions { Timeout = 30000 });
         
         // Set session cookies for authenticated state
         var host = _baseUri.Host;

@@ -267,7 +267,9 @@ public sealed class PerformanceTests : IAsyncLifetime
         await page.FillAsync("input[name=Username]", _playwrightCreds.UserName);
         await page.FillAsync("input[name=Password]", _playwrightCreds.Password);
         await page.ClickAsync("button[type=submit]");
-        await page.WaitForURLAsync(new System.Text.RegularExpressions.Regex(".*(?<!login)$"), new PageWaitForURLOptions { Timeout = 10000 });
+        // Wait for post-login element (profile menu avatar) instead of navigation event
+        await page.WaitForSelectorAsync(".mud-avatar", new PageWaitForSelectorOptions { Timeout = 30000, State = WaitForSelectorState.Visible });
+        await page.WaitForURLAsync(new System.Text.RegularExpressions.Regex(".*(?<!login)$"), new PageWaitForURLOptions { Timeout = 30000 });
     }
 
     private async Task RunScenarioAsync(
