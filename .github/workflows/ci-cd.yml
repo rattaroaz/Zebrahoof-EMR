@@ -13,6 +13,7 @@ env:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     
     services:
       postgres:
@@ -73,9 +74,11 @@ jobs:
           --collect:"XPlat Code Coverage"
 
     - name: Install Playwright browsers
-      run: pwsh tests/Zebrahoof.EMR.UiSmokeTests/bin/Release/net10.0/playwright.ps1 install --with-deps
+      timeout-minutes: 12
+      run: pwsh tests/Zebrahoof.EMR.UiSmokeTests/bin/Release/net10.0/playwright.ps1 install chromium --with-deps
 
     - name: Run UI smoke tests
+      timeout-minutes: 15
       run: |
         dotnet test tests/Zebrahoof.EMR.UiSmokeTests/Zebrahoof.EMR.UiSmokeTests.csproj \
           --no-build --configuration Release \
