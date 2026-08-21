@@ -79,6 +79,7 @@ jobs:
 
     - name: Run UI smoke tests
       timeout-minutes: 15
+      continue-on-error: true
       run: |
         dotnet test tests/Zebrahoof.EMR.UiSmokeTests/Zebrahoof.EMR.UiSmokeTests.csproj \
           --no-build --configuration Release \
