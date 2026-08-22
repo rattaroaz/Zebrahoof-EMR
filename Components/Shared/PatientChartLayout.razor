@@ -3,9 +3,9 @@
 @using Zebrahoof_EMR.Models
 @inject NavigationManager Navigation
 @inject MockClinicalDataService ClinicalDataService
-@inject GrokApiService GrokApiService
+@inject IClinicalAiService ClinicalAi
 @inject NotificationService NotificationService
-@inject GrokSessionStateService GrokSession
+@inject AiSessionStateService AiSession
 @inject ApplicationDbContext Db
 @inject IJSRuntime JS
 @inject ILogger<PatientChartLayout> Logger
@@ -16,21 +16,21 @@
 
     <PatientChartMessages PatientId="Patient.Id" InitialMessageId="InboxMessageId" />
 
-    @* Send uploaded documents to Grok *@
+    @* Send uploaded documents to the local AI engine *@
     <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="my-2">
         <MudButton Variant="Variant.Filled"
-                   Color="@(GrokSession.HaveDocumentsBeenSent(Patient.Id) ? Color.Default : Color.Success)"
-                   StartIcon="@(GrokSession.HaveDocumentsBeenSent(Patient.Id) ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Send)"
-                   Disabled="@(GrokSession.HaveDocumentsBeenSent(Patient.Id) || _isSendingToGrok)"
-                   OnClick="SendToGrokAsync">
-            @if (_isSendingToGrok)
+                   Color="@(AiSession.HaveDocumentsBeenSent(Patient.Id) ? Color.Default : Color.Success)"
+                   StartIcon="@(AiSession.HaveDocumentsBeenSent(Patient.Id) ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Send)"
+                   Disabled="@(AiSession.HaveDocumentsBeenSent(Patient.Id) || _isSendingToAi)"
+                   OnClick="SendToLocalAiAsync">
+            @if (_isSendingToAi)
             {
                 <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
                 <span>Sending...</span>
             }
             else
             {
-                <span>@(GrokSession.HaveDocumentsBeenSent(Patient.Id) ? "Documents Received" : "Send to Grok")</span>
+                <span>@(AiSession.HaveDocumentsBeenSent(Patient.Id) ? "Documents Received" : "Send to local AI")</span>
             }
         </MudButton>
     </MudStack>
@@ -137,7 +137,7 @@
     public int? InboxMessageId { get; set; }
 
     private int _activeTabIndex;
-    private bool _isSendingToGrok;
+    private bool _isSendingToAi;
     private string? _draggingTab;
     private string? _dragOverTab;
     private const string TabOrderStorageKey = "zebrahoof-chart-tab-order";
@@ -187,12 +187,12 @@
         try
         {
             var count = await Db.Documents.CountAsync(d => d.PatientId == Patient.Id);
-            var grew = GrokSession.UpdateDocumentCount(Patient.Id, count);
+            var grew = AiSession.UpdateDocumentCount(Patient.Id, count);
             if (grew)
             {
-                // New documents uploaded - allow Send to Grok and Update Records again
-                GrokSession.ResetDocumentsSent(Patient.Id);
-                GrokSession.ResetRecordsUpdated(Patient.Id);
+                // New documents uploaded - allow Send to local AI and Update Records again
+                AiSession.ResetDocumentsSent(Patient.Id);
+                AiSession.ResetRecordsUpdated(Patient.Id);
             }
         }
         catch
@@ -324,11 +324,11 @@
         return currentTab == tab ? Color.Primary : Color.Default;
     }
 
-    private async Task SendToGrokAsync()
+    private async Task SendToLocalAiAsync()
     {
-        if (_isSendingToGrok || GrokSession.HaveDocumentsBeenSent(Patient.Id)) return;
+        if (_isSendingToAi || AiSession.HaveDocumentsBeenSent(Patient.Id)) return;
 
-        _isSendingToGrok = true;
+        _isSendingToAi = true;
         try
         {
             var documents = await Db.Documents
@@ -418,18 +418,18 @@
             }
 
             var prompt = $"You are reviewing a patient chart. The following payload contains {Patient.FullName}'s current local EMR records followed by the full text of {documents.Count} uploaded document(s). Acknowledge receipt, then provide a brief (3-5 sentence) summary noting any discrepancies between the uploaded documents and the current local records (e.g., medications in a document but not in the active list, new diagnoses, new allergies).";
-            var response = await GrokApiService.ProcessDocumentAsync(payload.ToString(), prompt);
+            _ = await ClinicalAi.ProcessDocumentAsync(payload.ToString(), prompt);
 
-            GrokSession.MarkDocumentsSent(Patient.Id);
-            NotificationService.ShowSuccess($"Grok received {documents.Count} document(s) and current records ({problems.Count} problems, {medications.Count} meds, {allergies.Count} allergies).");
+            AiSession.MarkDocumentsSent(Patient.Id);
+            NotificationService.ShowSuccess($"Local AI received {documents.Count} document(s) and current records ({problems.Count} problems, {medications.Count} meds, {allergies.Count} allergies).");
         }
         catch (Exception ex)
         {
-            NotificationService.ShowError($"Failed to send to Grok: {ex.Message}");
+            NotificationService.ShowError($"Failed to send to local AI: {ex.Message}");
         }
         finally
         {
-            _isSendingToGrok = false;
+            _isSendingToAi = false;
             StateHasChanged();
         }
     }

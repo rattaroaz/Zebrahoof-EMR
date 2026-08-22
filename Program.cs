@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Npgsql.EntityFrameworkCore.PostgreSQL;
 using MudBlazor.Services;
 using Serilog;
@@ -208,14 +209,33 @@ builder.Services.AddHostedService<ClinicalDataPersistenceInitializer>();
 // Add user mapping and auth sync services
 builder.Services.AddScoped<UserMappingService>();
 builder.Services.AddScoped<AuthSyncService>();
-builder.Services.AddHttpClient<GrokApiService>(client =>
+builder.Services.Configure<LocalAiOptions>(builder.Configuration.GetSection(LocalAiOptions.SectionName));
+builder.Services.AddHttpClient(LocalAiEngineService.HttpClientName, client =>
 {
-    // Multi-agent / reasoning runs can take many minutes; xAI docs suggest up to 3600s.
-    client.Timeout = TimeSpan.FromMinutes(30);
+    client.Timeout = TimeSpan.FromHours(2);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Zebrahoof-EMR-LocalAI");
 });
+builder.Services.AddHttpClient<IClinicalAiService, LocalAiService>((sp, client) =>
+{
+    var opts = sp.GetRequiredService<IOptions<LocalAiOptions>>().Value;
+    var baseUrl = string.IsNullOrWhiteSpace(opts.BaseUrl)
+        ? LocalAiOptions.DefaultBaseUrl
+        : opts.BaseUrl.Trim().TrimEnd('/');
+    if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri) ||
+        uri.Host is not ("127.0.0.1" or "localhost" or "::1"))
+    {
+        uri = new Uri(LocalAiOptions.DefaultBaseUrl + "/");
+    }
+
+    client.BaseAddress = uri.AbsoluteUri.EndsWith('/') ? uri : new Uri(uri.AbsoluteUri + "/");
+    var timeoutMinutes = opts.RequestTimeoutMinutes > 0 ? opts.RequestTimeoutMinutes : 15;
+    client.Timeout = TimeSpan.FromMinutes(timeoutMinutes);
+});
+builder.Services.AddSingleton<LocalAiEngineService>();
+builder.Services.AddHostedService<LocalAiStartupHostedService>();
 builder.Services.AddScoped<PatientRecordUpdateService>();
 builder.Services.AddScoped<EncounterMessageService>();
-builder.Services.AddScoped<GrokSessionStateService>();
+builder.Services.AddScoped<AiSessionStateService>();
 
 var slowRequestWarningMs = builder.Configuration.GetValue("Serilog:SlowRequestWarningMs", 2000);
 
@@ -321,6 +341,7 @@ app.MapAccountEndpoints();
 app.MapPatientEndpoints();
 app.MapSessionEndpoints();
 app.MapDocumentEndpoints();
+app.MapLocalAiEndpoints();
 
 if (!usePostgres && app.Environment.IsProduction())
 {

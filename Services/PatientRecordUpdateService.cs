@@ -13,7 +13,7 @@ namespace Zebrahoof_EMR.Services;
 /// Orchestrates the "Update Records" workflow:
 ///   1) Gather the current chart (problems, medications, allergies) and any uploaded
 ///      documents for a patient.
-///   2) Ask Grok to reconcile them and return an updated chart as JSON.
+///   2) Ask the local AI engine to reconcile them and return an updated chart as JSON.
 ///   3) Replace in-memory mock state so tabs refresh and persist the new chart +
 ///      documents to the local SQLite database.
 /// </summary>
@@ -23,18 +23,18 @@ public class PatientRecordUpdateService
     private const int MaxTotalDocChars = 60_000;
 
     private readonly MockClinicalDataService _clinical;
-    private readonly GrokApiService _grok;
+    private readonly IClinicalAiService _ai;
     private readonly ApplicationDbContext _db;
     private readonly ILogger<PatientRecordUpdateService> _logger;
 
     public PatientRecordUpdateService(
         MockClinicalDataService clinical,
-        GrokApiService grok,
+        IClinicalAiService ai,
         ApplicationDbContext db,
         ILogger<PatientRecordUpdateService> logger)
     {
         _clinical = clinical;
-        _grok = grok;
+        _ai = ai;
         _db = db;
         _logger = logger;
     }
@@ -51,19 +51,19 @@ public class PatientRecordUpdateService
             .ToListAsync();
 
         var prompt = BuildPrompt(patient, problems, medications, allergies, documents);
-        var rawResponse = await _grok.ProcessDocumentAsync(string.Empty, prompt);
+        var rawResponse = await _ai.ProcessDocumentAsync(string.Empty, prompt);
 
         if (string.IsNullOrWhiteSpace(rawResponse) ||
             rawResponse.StartsWith("Error", StringComparison.OrdinalIgnoreCase))
         {
-            return UpdateRecordsResult.Failure(rawResponse ?? "No response from Grok.");
+            return UpdateRecordsResult.Failure(rawResponse ?? "No response from the local AI engine.");
         }
 
         if (!TryParse(rawResponse, out var parsed, out var parseError))
         {
-            _logger.LogWarning("Failed to parse Grok response: {ParseError}. {BodySummary}", parseError,
+            _logger.LogWarning("Failed to parse local AI response: {ParseError}. {BodySummary}", parseError,
                 SafeLogContent.DescribeWithoutRawContent(rawResponse));
-            return UpdateRecordsResult.Failure($"Could not parse Grok response: {parseError}");
+            return UpdateRecordsResult.Failure($"Could not parse local AI response: {parseError}");
         }
 
         var newProblems = parsed!.Problems.Select(p => p.ToDomain()).ToList();
@@ -228,14 +228,14 @@ public class PatientRecordUpdateService
         return sb.ToString();
     }
 
-    private static bool TryParse(string raw, out GrokChartResponse? parsed, out string error)
+    private static bool TryParse(string raw, out ChartUpdateResponse? parsed, out string error)
     {
         parsed = null;
         error = string.Empty;
         try
         {
             var json = ExtractJson(raw);
-            parsed = JsonSerializer.Deserialize<GrokChartResponse>(json, new JsonSerializerOptions
+            parsed = JsonSerializer.Deserialize<ChartUpdateResponse>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
                 Converters = { new JsonStringEnumConverter(allowIntegerValues: true) }
@@ -281,15 +281,15 @@ public class PatientRecordUpdateService
         return trimmed;
     }
 
-    private sealed class GrokChartResponse
+    private sealed class ChartUpdateResponse
     {
         public string Summary { get; set; } = string.Empty;
-        public List<GrokProblem> Problems { get; set; } = new();
-        public List<GrokMedication> Medications { get; set; } = new();
-        public List<GrokAllergy> Allergies { get; set; } = new();
+        public List<AiProblem> Problems { get; set; } = new();
+        public List<AiMedication> Medications { get; set; } = new();
+        public List<AiAllergy> Allergies { get; set; } = new();
     }
 
-    private sealed class GrokProblem
+    private sealed class AiProblem
     {
         public string Name { get; set; } = string.Empty;
         public string? IcdCode { get; set; }
@@ -311,7 +311,7 @@ public class PatientRecordUpdateService
         };
     }
 
-    private sealed class GrokMedication
+    private sealed class AiMedication
     {
         public string Name { get; set; } = string.Empty;
         public string? Dose { get; set; }
@@ -347,7 +347,7 @@ public class PatientRecordUpdateService
         };
     }
 
-    private sealed class GrokAllergy
+    private sealed class AiAllergy
     {
         public string Allergen { get; set; } = string.Empty;
         public string? Reaction { get; set; }

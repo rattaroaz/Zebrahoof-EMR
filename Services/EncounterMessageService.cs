@@ -5,9 +5,9 @@ using Zebrahoof_EMR.Models;
 namespace Zebrahoof_EMR.Services;
 
 /// <summary>
-/// Stores and retrieves the per-patient Grok conversation that powers the
+/// Stores and retrieves the per-patient local-AI conversation that powers the
 /// Encounter tab. Backed by the local database so the discussion survives
-/// page reloads and can be replayed back to Grok as context on follow-ups.
+/// page reloads and can be replayed as context on follow-ups.
 /// </summary>
 public class EncounterMessageService
 {

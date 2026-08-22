@@ -62,6 +62,9 @@ App_Data/*.db
 App_Data/*.db-shm
 App_Data/*.db-wal
 
+# Local AI engine binaries and pulled models
+App_Data/ai-engine/
+
 # Windows
 Thumbs.db
 ehthumbs.db

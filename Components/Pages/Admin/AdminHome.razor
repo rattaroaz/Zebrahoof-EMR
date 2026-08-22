@@ -54,6 +54,20 @@
     </MudItem>
 
     <MudItem xs="12" md="6" lg="3">
+        <MudCard Elevation="2" Class="cursor-pointer" @onclick="@(() => Navigation.NavigateTo("/admin/local-ai"))">
+            <MudCardContent>
+                <MudStack AlignItems="AlignItems.Center" Spacing="2">
+                    <MudIcon Icon="@Icons.Material.Filled.SmartToy" Size="Size.Large" Color="Color.Tertiary" />
+                    <MudText Typo="Typo.h6">Local AI</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                        Install a local engine, pick Qwen / DeepSeek / Kimi, and stop downloads if needed
+                    </MudText>
+                </MudStack>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6" lg="3">
         <MudCard Elevation="2" Class="cursor-pointer" @onclick="@(() => Navigation.NavigateTo("/admin/settings"))">
             <MudCardContent>
                 <MudStack AlignItems="AlignItems.Center" Spacing="2">

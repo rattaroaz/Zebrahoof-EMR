@@ -1,0 +1,588 @@
+@using Zebrahoof_EMR.Services
+@inject LocalAiEngineService Engine
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@implements IAsyncDisposable
+
+<MudCard Elevation="2">
+    <MudCardHeader>
+        <CardHeaderAvatar>
+            <MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Primary" />
+        </CardHeaderAvatar>
+        <CardHeaderContent>
+            <MudText Typo="Typo.h6">Local AI engine</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Ollama on this machine · Qwen, DeepSeek, Kimi, and others</MudText>
+        </CardHeaderContent>
+        <CardHeaderActions>
+            <MudChip T="string" Color="@StatusColor" Variant="Variant.Filled" Class="mt-2 mr-2">@_status.Phase</MudChip>
+        </CardHeaderActions>
+    </MudCardHeader>
+    <MudCardContent>
+        <MudStack Spacing="3">
+            <MudAlert Severity="@StatusSeverity" Variant="Variant.Outlined" Dense="true">
+                @_status.Message
+            </MudAlert>
+
+            @if (_hardware != null)
+            {
+                <MudPaper Outlined="true" Class="pa-3">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">This PC</MudText>
+                    <MudText Typo="Typo.body2">@_hardware.Summary</MudText>
+                    @if (string.IsNullOrWhiteSpace(_hardware.GpuName))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Warning">
+                            No dedicated GPU found. Prefer 7B or smaller models; 14B+ will be slow or unusable.
+                        </MudText>
+                    }
+                </MudPaper>
+            }
+
+            @if (_status.IsBusy)
+            {
+                <MudProgressLinear Color="Color.Primary"
+                                   Value="@(_status.ProgressPercent ?? 0)"
+                                   Indeterminate="@(!_status.ProgressPercent.HasValue)"
+                                   Striped="true" />
+                @if (!string.IsNullOrWhiteSpace(_status.ProgressDetail))
+                {
+                    <MudText Typo="Typo.caption">@_status.ProgressDetail</MudText>
+                }
+            }
+
+            @if (!string.IsNullOrWhiteSpace(_status.Error))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_status.Error</MudAlert>
+            }
+
+            @if (_selectedFit != null && _selectedFit.Kind is LocalAiFitKind.Slow or LocalAiFitKind.TooLarge)
+            {
+                <MudAlert Severity="@(_selectedFit.Kind == LocalAiFitKind.TooLarge ? Severity.Error : Severity.Warning)"
+                          Dense="true" Variant="Variant.Filled">
+                    <strong>@_selectedFit.Title.</strong> @_selectedFit.Detail
+                </MudAlert>
+            }
+
+            <MudSimpleTable Dense="true" Hover="false" Bordered="false" Striped="false">
+                <tbody>
+                    <tr>
+                        <td><strong>Engine runtime</strong></td>
+                        <td>@(_status.EngineInstalled ? (_status.EngineVersion ?? "Ollama installed") : "Not installed")</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Running</strong></td>
+                        <td>@(_status.EngineRunning ? "Yes — " + _status.Host : "No")</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Selected model</strong></td>
+                        <td>@_selectedModel @(_status.ModelReady && string.Equals(_status.Model, _selectedModel, StringComparison.OrdinalIgnoreCase) ? "(downloaded)" : "")</td>
+                    </tr>
+                </tbody>
+            </MudSimpleTable>
+
+            <MudGrid>
+                <MudItem xs="12" md="4">
+                    <MudSelect T="string"
+                               Label="Model family"
+                               Variant="Variant.Outlined"
+                               AnchorOrigin="Origin.BottomCenter"
+                               Value="_familyFilter"
+                               ValueChanged="OnFamilyChanged"
+                               Disabled="@_busy">
+                        <MudSelectItem Value="@("All")">All families</MudSelectItem>
+                        @foreach (var family in LocalAiModels.Families)
+                        {
+                            <MudSelectItem Value="@family">@family (@FamilyCount(family))</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="8">
+                    <MudAutocomplete T="string"
+                                     Label="AI engine / model"
+                                     Variant="Variant.Outlined"
+                                     Value="_selectedModel"
+                                     ValueChanged="SelectModel"
+                                     SearchFunc="SearchModelsAsync"
+                                     ToStringFunc="FormatSelectedId"
+                                     MaxItems="200"
+                                     MaxHeight="480"
+                                     OpenOnFocus="true"
+                                     ResetValueOnEmptyText="false"
+                                     CoerceText="false"
+                                     CoerceValue="false"
+                                     Disabled="@_busy"
+                                     HelperText="@($"{DropdownModels.Count()} models — type deepseek, kimi, llama, gemma, qwen3…")" />
+                </MudItem>
+            </MudGrid>
+
+            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                @if (_status.CanCancel || _busy)
+                {
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Stop"
+                               OnClick="StopAsync">
+                        Stop download
+                    </MudButton>
+                }
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Download"
+                           Disabled="@_busy"
+                           OnClick="InstallAllAsync">
+                    @(_status.EngineInstalled ? "Download selected model" : "Install engine and model")
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           Disabled="@(_busy || !_status.EngineInstalled || _status.EngineRunning)"
+                           OnClick="StartAsync">
+                    Start engine
+                </MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Info"
+                           StartIcon="@Icons.Material.Filled.CloudDownload"
+                           Disabled="@(_busy || !_status.EngineInstalled)"
+                           OnClick="PullAsync">
+                    Download model only
+                </MudButton>
+                <MudButton Variant="Variant.Text"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           Disabled="@_busy"
+                           OnClick="RefreshAsync">
+                    Refresh
+                </MudButton>
+            </MudStack>
+
+            @if (ShowCatalog)
+            {
+                <MudDivider />
+                <MudText Typo="Typo.subtitle1">Models</MudText>
+                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
+                    <MudButton Size="Size.Small"
+                               Variant="@(_familyFilter == "All" ? Variant.Filled : Variant.Outlined)"
+                               Color="Color.Primary"
+                               OnClick="@(() => OnFamilyChanged("All"))">All</MudButton>
+                    @foreach (var family in LocalAiModels.Families)
+                    {
+                        var f = family;
+                        <MudButton Size="Size.Small"
+                                   Variant="@(string.Equals(_familyFilter, f, StringComparison.OrdinalIgnoreCase) ? Variant.Filled : Variant.Outlined)"
+                                   Color="Color.Primary"
+                                   OnClick="@(() => OnFamilyChanged(f))">@f</MudButton>
+                    }
+                </MudStack>
+                <MudStack Row="true" Spacing="2">
+                    <MudTextField T="string" @bind-Value="_search" Label="Search models" Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                                  Immediate="true" Class="flex-grow-1" />
+                    <MudCheckBox T="bool" @bind-Value="_hideTooLarge" Label="Hide models that will not run" Color="Color.Primary" />
+                </MudStack>
+
+                <MudTable Items="VisibleModels" Dense="true" Hover="true" Breakpoint="Breakpoint.None"
+                          Height="420px" FixedHeader="true" RowClassFunc="RowClass"
+                          OnRowClick="OnModelRowClick" T="CatalogRow">
+                    <HeaderContent>
+                        <MudTh></MudTh>
+                        <MudTh>Model</MudTh>
+                        <MudTh>Family</MudTh>
+                        <MudTh>Download</MudTh>
+                        <MudTh>RAM</MudTh>
+                        <MudTh>Fit</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>
+                            @if (string.Equals(_selectedModel, context.Model.Id, StringComparison.OrdinalIgnoreCase))
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" />
+                            }
+                        </MudTd>
+                        <MudTd>
+                            <MudText Typo="Typo.subtitle2">@context.Model.DisplayName</MudText>
+                            <MudText Typo="Typo.caption">@context.Model.Id · @context.Model.Description</MudText>
+                            @if (context.Installed)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">On disk</MudChip>
+                            }
+                        </MudTd>
+                        <MudTd>@context.Model.Family</MudTd>
+                        <MudTd>~@context.Model.DownloadGb.ToString("0.#") GB</MudTd>
+                        <MudTd>@context.Model.MinRamGb.ToString("0.#")+ GB</MudTd>
+                        <MudTd>
+                            <MudTooltip Text="@context.Fit.Detail">
+                                <MudChip T="string" Size="Size.Small" Color="@FitColor(context.Fit.Kind)" Variant="Variant.Filled">
+                                    @context.Fit.Title
+                                </MudChip>
+                            </MudTooltip>
+                        </MudTd>
+                    </RowTemplate>
+                    <NoRecordsContent>
+                        <MudText Class="pa-4">No models match this filter.</MudText>
+                    </NoRecordsContent>
+                </MudTable>
+            }
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter] public bool ShowCatalog { get; set; } = true;
+
+    private LocalAiStatus _status = new();
+    private LocalAiHardwareSnapshot? _hardware;
+    private string _selectedModel = LocalAiOptions.DefaultModel;
+    private LocalAiModelFit? _selectedFit;
+    private bool _busy;
+    private string _familyFilter = "All";
+    private string _search = string.Empty;
+    private bool _hideTooLarge = true;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _pollCts;
+
+    private sealed record CatalogRow(LocalAiModelChoice Model, LocalAiModelFit Fit, bool Installed);
+
+    private IEnumerable<LocalAiModelChoice> DropdownModels
+    {
+        get
+        {
+            foreach (var model in LocalAiModels.Catalog)
+            {
+                if (_familyFilter != "All" &&
+                    !string.Equals(model.Family, _familyFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                yield return model;
+            }
+        }
+    }
+
+    private static int FamilyCount(string family) =>
+        LocalAiModels.Catalog.Count(m => string.Equals(m.Family, family, StringComparison.OrdinalIgnoreCase));
+
+    private string FormatDropdownLabel(LocalAiModelChoice model)
+    {
+        var hw = _hardware ?? new LocalAiHardwareSnapshot { TotalRamGb = 8, AvailableRamGb = 4, CpuCores = 4 };
+        var fit = LocalAiModels.Assess(model, hw);
+        return $"{model.Family} · {model.DisplayName}  ({model.Id})  ·  ~{model.DownloadGb:0.#} GB  ·  {fit.Title}";
+    }
+
+    private string FormatSelectedId(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return string.Empty;
+        }
+
+        var model = LocalAiModels.Find(id);
+        return model == null ? id : FormatDropdownLabel(model);
+    }
+
+    private Task<IEnumerable<string>> SearchModelsAsync(string value, CancellationToken cancellationToken)
+    {
+        var q = (value ?? string.Empty).Trim();
+        IEnumerable<LocalAiModelChoice> list = LocalAiModels.Catalog;
+        if (_familyFilter != "All")
+        {
+            list = list.Where(m => string.Equals(m.Family, _familyFilter, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrEmpty(q) && LocalAiModels.Find(q) == null)
+        {
+            list = list.Where(m =>
+                m.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                m.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                m.Family.Contains(q, StringComparison.OrdinalIgnoreCase) ||
+                m.Description.Contains(q, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return Task.FromResult(list.Select(m => m.Id));
+    }
+
+    private IEnumerable<CatalogRow> VisibleModels
+    {
+        get
+        {
+            var hw = _hardware ?? new LocalAiHardwareSnapshot { TotalRamGb = 8, AvailableRamGb = 4, CpuCores = 4 };
+            var installed = _status.InstalledModels ?? Array.Empty<string>();
+            foreach (var model in LocalAiModels.Catalog)
+            {
+                if (_familyFilter != "All" &&
+                    !string.Equals(model.Family, _familyFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(_search))
+                {
+                    var q = _search.Trim();
+                    if (model.Id.Contains(q, StringComparison.OrdinalIgnoreCase) == false &&
+                        model.DisplayName.Contains(q, StringComparison.OrdinalIgnoreCase) == false &&
+                        model.Family.Contains(q, StringComparison.OrdinalIgnoreCase) == false &&
+                        model.Description.Contains(q, StringComparison.OrdinalIgnoreCase) == false)
+                    {
+                        continue;
+                    }
+                }
+
+                var fit = LocalAiModels.Assess(model, hw);
+                if (_hideTooLarge && fit.Kind == LocalAiFitKind.TooLarge)
+                {
+                    continue;
+                }
+
+                var onDisk = LocalAiEngineService.ModelIsPresent(installed, model.Id);
+                yield return new CatalogRow(model, fit, onDisk);
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Engine.StatusChanged += OnEngineStatusChanged;
+        _hardware = Engine.ProbeHardware();
+        var preferred = Engine.EffectiveModel;
+        if (LocalAiModels.Find(preferred) == null && _hardware != null)
+        {
+            preferred = LocalAiModels.SuggestDefault(_hardware).Id;
+        }
+        _selectedModel = preferred;
+        _familyFilter = "All";
+        RecalcFit();
+        await RefreshAsync();
+        _pollCts = new CancellationTokenSource();
+        _ = PollWhileBusyAsync(_pollCts.Token);
+    }
+
+    private async Task PollWhileBusyAsync(CancellationToken ct)
+    {
+        _timer = new PeriodicTimer(TimeSpan.FromMilliseconds(1500));
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(ct))
+            {
+                if (_busy || Engine.GetSnapshot().IsBusy)
+                {
+                    await InvokeAsync(() =>
+                    {
+                        _status = Engine.GetSnapshot();
+                        _busy = _status.IsBusy;
+                        if (_status.Hardware != null)
+                        {
+                            _hardware = _status.Hardware;
+                        }
+                        RecalcFit();
+                        StateHasChanged();
+                    });
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void OnEngineStatusChanged()
+    {
+        _ = InvokeAsync(() =>
+        {
+            _status = Engine.GetSnapshot();
+            _busy = _status.IsBusy;
+            if (_status.Hardware != null)
+            {
+                _hardware = _status.Hardware;
+            }
+            RecalcFit();
+            StateHasChanged();
+        });
+    }
+
+    private void OnFamilyChanged(string family)
+    {
+        _familyFilter = string.IsNullOrWhiteSpace(family) ? "All" : family;
+        if (_familyFilter == "All")
+        {
+            return;
+        }
+
+        var current = LocalAiModels.Find(_selectedModel);
+        if (current != null &&
+            string.Equals(current.Family, _familyFilter, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var firstInFamily = LocalAiModels.Catalog.FirstOrDefault(m =>
+            string.Equals(m.Family, _familyFilter, StringComparison.OrdinalIgnoreCase));
+        if (firstInFamily != null)
+        {
+            SelectModel(firstInFamily.Id);
+        }
+    }
+
+    private void OnModelRowClick(TableRowClickEventArgs<CatalogRow> args)
+    {
+        if (_busy || args.Item is null)
+        {
+            return;
+        }
+
+        SelectModel(args.Item.Model.Id);
+    }
+
+    private void SelectModel(string id)
+    {
+        _selectedModel = id;
+        Engine.SetPreferredModel(id);
+        RecalcFit();
+    }
+
+    private void RecalcFit()
+    {
+        var choice = LocalAiModels.Find(_selectedModel);
+        _selectedFit = choice == null || _hardware == null
+            ? null
+            : LocalAiModels.Assess(choice, _hardware);
+    }
+
+    private async Task RefreshAsync()
+    {
+        _status = await Engine.RefreshStatusAsync();
+        _busy = _status.IsBusy;
+        _hardware = _status.Hardware ?? Engine.ProbeHardware();
+        RecalcFit();
+    }
+
+    private async Task InstallAllAsync()
+    {
+        if (!await ConfirmIfRiskyAsync())
+        {
+            return;
+        }
+
+        await RunOp(() => Engine.InstallAndPrepareAsync(_selectedModel));
+    }
+
+    private async Task StartAsync()
+    {
+        await RunOp(() => Engine.StartEngineAsync());
+    }
+
+    private async Task PullAsync()
+    {
+        if (!await ConfirmIfRiskyAsync())
+        {
+            return;
+        }
+
+        await RunOp(() => Engine.PullModelAsync(_selectedModel));
+    }
+
+    private Task StopAsync()
+    {
+        if (!Engine.CancelCurrent())
+        {
+            Snackbar.Add("Nothing is downloading right now.", Severity.Info);
+            return Task.CompletedTask;
+        }
+
+        Snackbar.Add("Stopping download…", Severity.Info);
+        return Task.CompletedTask;
+    }
+
+    private async Task<bool> ConfirmIfRiskyAsync()
+    {
+        if (_selectedFit?.Kind == LocalAiFitKind.TooLarge)
+        {
+            var ok = await DialogService.ShowMessageBox(
+                "This model likely will not run",
+                _selectedFit.Detail + " Download it anyway?",
+                yesText: "Download anyway",
+                cancelText: "Cancel");
+            return ok == true;
+        }
+
+        if (_selectedFit?.Kind == LocalAiFitKind.Slow)
+        {
+            var ok = await DialogService.ShowMessageBox(
+                "This model will be slow",
+                _selectedFit.Detail + " Continue?",
+                yesText: "Download anyway",
+                cancelText: "Pick another");
+            return ok == true;
+        }
+
+        return true;
+    }
+
+    private async Task RunOp(Func<Task> work)
+    {
+        _busy = true;
+        try
+        {
+            await work();
+            await RefreshAsync();
+            if (_status.CanChat)
+            {
+                Snackbar.Add("Local AI is ready. Chart chat and document analysis stay on this machine.", Severity.Success);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            await RefreshAsync();
+            Snackbar.Add("Download stopped.", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            await RefreshAsync();
+        }
+        finally
+        {
+            _busy = Engine.GetSnapshot().IsBusy;
+        }
+    }
+
+    private string RowClass(CatalogRow row, int _) =>
+        string.Equals(row.Model.Id, _selectedModel, StringComparison.OrdinalIgnoreCase)
+            ? "mud-theme-primary mud-opacity-text"
+            : string.Empty;
+
+    private static Color FitColor(LocalAiFitKind kind) => kind switch
+    {
+        LocalAiFitKind.Recommended => Color.Success,
+        LocalAiFitKind.Usable => Color.Info,
+        LocalAiFitKind.Slow => Color.Warning,
+        LocalAiFitKind.TooLarge => Color.Error,
+        _ => Color.Default
+    };
+
+    private Color StatusColor => _status.Phase switch
+    {
+        LocalAiPhase.Ready => Color.Success,
+        LocalAiPhase.Error => Color.Error,
+        LocalAiPhase.InstallingEngine or LocalAiPhase.Starting or LocalAiPhase.DownloadingModel => Color.Info,
+        LocalAiPhase.NeedsSetup => Color.Warning,
+        _ => Color.Default
+    };
+
+    private Severity StatusSeverity => _status.Phase switch
+    {
+        LocalAiPhase.Ready => Severity.Success,
+        LocalAiPhase.Error => Severity.Error,
+        LocalAiPhase.InstallingEngine or LocalAiPhase.Starting or LocalAiPhase.DownloadingModel => Severity.Info,
+        LocalAiPhase.NeedsSetup => Severity.Warning,
+        _ => Severity.Normal
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        Engine.StatusChanged -= OnEngineStatusChanged;
+        if (_pollCts != null)
+        {
+            await _pollCts.CancelAsync();
+            _pollCts.Dispose();
+        }
+        _timer?.Dispose();
+    }
+}

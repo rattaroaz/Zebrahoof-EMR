@@ -66,6 +66,7 @@ Sections and links:
 | Link | Opens |
 |------|--------|
 | **Settings** | System settings (`/admin/settings`). |
+| **Local AI** | Download and run the on-machine Qwen engine (`/admin/local-ai`). |
 | **Templates** | Note and documentation templates (`/admin/templates`). |
 | **Sticky Notes** | Adds or manages personal sticky notes (menu shows count, e.g. `3/5`). Click the chip menu to show or hide individual notes. |
 | **Users** | User management (`/admin/users`) — **visible to Administrator role** only. |
@@ -139,7 +140,7 @@ Opens when you select a patient from the list or global search.
 ### Under the banner
 
 - **Inbox-style messages** for this patient may appear here so you can read chart-related messages.
-- **Send to Grok** / **Documents Received** — Sends uploaded chart documents to the AI assistant when configured; shows progress while sending and then a completed state.
+- **Send to local AI** / **Documents Received** — Sends uploaded chart documents to the on-machine Qwen engine when it is installed; shows progress while sending and then a completed state. Install the engine from **Admin → Local AI**.
 - **Patient sticky note** (pink floating button) — Opens a **patient-specific** sticky note panel.
 
 ### Chart tabs
@@ -263,6 +264,7 @@ Typically includes **Patient**, **Active Problems**, **Current Medications**, **
 | **`/admin/locations`** | Locations and departments. |
 | **`/admin/templates`** | Template management. |
 | **`/admin/settings`** | Application settings. |
+| **`/admin/local-ai`** | Download Ollama, pick Qwen / DeepSeek / Kimi / other open models, stop a download, and see warnings if a model will not fit this PC. Chart AI stays on this machine. |
 | **`/admin/sessions`** | Active session management. |
 | **`/admin/audit-log`** | Audit log review. |
 

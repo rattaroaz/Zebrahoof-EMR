@@ -6,9 +6,9 @@
 @using Microsoft.EntityFrameworkCore
 @inject MockClinicalDataService ClinicalDataService
 @inject NotificationService NotificationService
-@inject GrokApiService GrokApiService
+@inject IClinicalAiService ClinicalAi
 @inject PatientRecordUpdateService RecordUpdateService
-@inject GrokSessionStateService GrokSession
+@inject AiSessionStateService AiSession
 @inject IDialogService DialogService
 @inject ApplicationDbContext Db
 @inject ILogger<PatientDemographics> Logger
@@ -150,19 +150,19 @@
             </MudCardContent>
         </MudCard>
 
-        @* Grok AI Document Analysis *@
+        @* Local AI Document Analysis *@
         <MudCard Elevation="2" Class="mb-4">
             <MudCardHeader>
                 <CardHeaderAvatar>
                     <MudIcon Icon="@Icons.Material.Filled.SmartToy" Color="Color.Tertiary" />
                 </CardHeaderAvatar>
                 <CardHeaderContent>
-                    <MudText Typo="Typo.h6">Grok AI Document Analysis</MudText>
+                    <MudText Typo="Typo.h6">Local AI Document Analysis</MudText>
                 </CardHeaderContent>
             </MudCardHeader>
             <MudCardContent>
                 <MudStack Spacing="3">
-                    <MudText Typo="Typo.body2">Upload PDF or TXT files to analyze clinical data using Grok AI.</MudText>
+                    <MudText Typo="Typo.body2">Upload PDF or TXT files to analyze clinical data using the local Qwen engine. Nothing is sent to a cloud AI.</MudText>
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
                         <MudFileUpload T="IBrowserFile" FilesChanged="UploadDocument" Accept=".pdf, .txt">
                             <ActivatorContent>
@@ -174,9 +174,9 @@
                             </ActivatorContent>
                         </MudFileUpload>
                         <MudButton Variant="Variant.Filled"
-                                   Color="@(GrokSession.HaveRecordsBeenUpdated(Patient.Id) ? Color.Default : Color.Tertiary)"
-                                   StartIcon="@(GrokSession.HaveRecordsBeenUpdated(Patient.Id) ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.AutoFixHigh)"
-                                   Disabled="@(GrokSession.HaveRecordsBeenUpdated(Patient.Id) || _isUpdatingRecords)"
+                                   Color="@(AiSession.HaveRecordsBeenUpdated(Patient.Id) ? Color.Default : Color.Tertiary)"
+                                   StartIcon="@(AiSession.HaveRecordsBeenUpdated(Patient.Id) ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.AutoFixHigh)"
+                                   Disabled="@(AiSession.HaveRecordsBeenUpdated(Patient.Id) || _isUpdatingRecords)"
                                    OnClick="UpdateRecordsAsync">
                             @if (_isUpdatingRecords)
                             {
@@ -185,7 +185,7 @@
                             }
                             else
                             {
-                                <span>@(GrokSession.HaveRecordsBeenUpdated(Patient.Id) ? "Records Updated" : "Update Records")</span>
+                                <span>@(AiSession.HaveRecordsBeenUpdated(Patient.Id) ? "Records Updated" : "Update Records")</span>
                             }
                         </MudButton>
                         <MudMenu AnchorOrigin="Origin.BottomLeft"
@@ -230,7 +230,7 @@
                     @if (_isProcessingDoc)
                     {
                         <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-                        <MudText Typo="Typo.caption">Processing document with Grok AI...</MudText>
+                        <MudText Typo="Typo.caption">Processing document with local AI...</MudText>
                     }
                     @if (!string.IsNullOrEmpty(_docAnalysisResult))
                     {
@@ -572,12 +572,12 @@
             await Db.SaveChangesAsync();
             _uploadedDocs.Insert(0, savedDoc);
 
-            // New document uploaded - allow Send to Grok and Update Records again this session.
-            GrokSession.ResetDocumentsSent(Patient.Id);
-            GrokSession.ResetRecordsUpdated(Patient.Id);
+            // New document uploaded - allow Send to local AI and Update Records again this session.
+            AiSession.ResetDocumentsSent(Patient.Id);
+            AiSession.ResetRecordsUpdated(Patient.Id);
 
             var prompt = $"Analyze the following clinical document for patient {Patient.FirstName} {Patient.LastName}. Summarize the key patient information, including any diagnoses, medications, allergies, or critical lab results mentioned. Provide a structured and concise summary suitable for a healthcare provider.";
-            _docAnalysisResult = await GrokApiService.ProcessDocumentAsync(documentText, prompt);
+            _docAnalysisResult = await ClinicalAi.ProcessDocumentAsync(documentText, prompt);
             NotificationService.ShowSuccess("Document uploaded and processed");
         }
         catch (Exception ex)
@@ -648,11 +648,11 @@
 
     private async Task UpdateRecordsAsync()
     {
-        if (_isUpdatingRecords || GrokSession.HaveRecordsBeenUpdated(Patient.Id)) return;
+        if (_isUpdatingRecords || AiSession.HaveRecordsBeenUpdated(Patient.Id)) return;
 
         var confirm = await DialogService.ShowMessageBox(
             "Update Records",
-            $"Use Grok AI to reconcile {Patient.FullName}'s problems, medications, and allergies against any uploaded documents? Existing entries may be modified or replaced.",
+            $"Use the local AI engine to reconcile {Patient.FullName}'s problems, medications, and allergies against any uploaded documents? Existing entries may be modified or replaced. Data stays on this machine.",
             yesText: "Update", cancelText: "Cancel");
 
         if (confirm != true) return;
@@ -668,7 +668,7 @@
                 return;
             }
 
-            GrokSession.MarkRecordsUpdated(Patient.Id);
+            AiSession.MarkRecordsUpdated(Patient.Id);
 
             var changeMsg =
                 $"Problems {result.ProblemsBefore}→{result.ProblemsAfter}, " +

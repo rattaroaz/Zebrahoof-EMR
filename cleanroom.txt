@@ -17,8 +17,8 @@ Explicitly EXCLUDED from this spec:
   • Build scripts and developer tooling except where they affect runtime behavior
 
 The reference implementation is ASP.NET Core 10 Blazor Server + MudBlazor + EF
-Core + SQLite/PostgreSQL + xAI Grok. Recreate the BEHAVIOR and UI described
-here; do not need to copy the stack.
+Core + SQLite/PostgreSQL + a local Ollama/Qwen engine. Recreate the BEHAVIOR
+and UI described here; do not need to copy the stack.
 
 
 ================================================================================
@@ -39,7 +39,7 @@ Architecture pattern (reference):
         encounters, inbox, tasks, admin catalogs) synced to database on startup
         and on mutations
       - Direct database persistence for: Identity users, documents (binary),
-        encounter Grok messages, sticky notes, patient sticky notes, audit logs,
+        encounter local-AI messages, sticky notes, patient sticky notes, audit logs,
         user sessions
   • Dual auth state: server cookie session + in-app user context object for UI
     role display and location switching
@@ -456,7 +456,7 @@ B) PatientChartMessages panel:
    Per-patient inbox messages list + detail + reply composer
    Opens specific message when ?message={id} query param present
 
-C) "Send to Grok" button (right-aligned):
+C) "Send to local AI" button (right-aligned):
    Green filled button with Send icon when not sent
    Disabled + "Documents Received" + check icon after sent once per session
    Resets when new documents uploaded (document count increases)
@@ -473,7 +473,7 @@ F) Tab content area
 
 | Slug           | Label         | Component Behavior                          |
 |----------------|---------------|---------------------------------------------|
-| encounter      | Encounter     | Grok AI chat (default tab)                  |
+| encounter      | Encounter     | Local AI chat (default tab)                 |
 | chart/summary  | Summary       | Chart summary dashboard + risk scores       |
 | problems       | Problems      | Filterable problem list table               |
 | medications    | Medications   | Med list with high-risk flags               |
@@ -487,19 +487,19 @@ F) Tab content area
 | notes          | Notes         | Clinical notes CRUD + link to tree view     |
 | careteam       | Care Team     | Care team member cards                      |
 | demographics   | Demographics  | Contact edit, insurance, emergency contacts,|
-|                |               | document upload, "Update Records from Grok" |
+|                |               | document upload, "Update Records" (local AI)|
 
 Default tab when slug omitted or unknown: encounter
 
-5.4 Patient Chart Tab — Encounter (Grok Chat)
+5.4 Patient Chart Tab — Encounter (Local AI Chat)
 ---------------------------------------------
 Chat UI: scrollable message list + text input + Send button
 Enter key sends (Shift+Enter for newline if supported)
-Shows user messages and Grok responses with timestamps
-Loading spinner while Grok processing
+Shows user messages and local AI responses with timestamps
+Loading spinner while local AI processing
 "Clear History" button removes all persisted messages for patient
 
-System prompts sent to Grok:
+System prompts sent to the local engine:
   First message: "You are a helpful clinical assistant for the Zebrahoof EMR.
     You are answering a question about patient ID {patientId}."
   Follow-ups: "...continuing an ongoing discussion about patient ID {patientId}.
@@ -585,8 +585,8 @@ Read-only: Name, MRN, DOB, Sex, Primary Provider
 Insurance table (multiple plans, primary flag)
 Emergency contacts table
 Document upload section (same as Documents tab)
-"Update Records from Grok" button — see §11.3
-Resets when new documents uploaded (same session state as Send to Grok)
+"Update Records" button — see §11.3
+Resets when new documents uploaded (same session state as Send to local AI)
 
 5.18 Notes Tree View (/patients/{id}/notes/tree)
 ------------------------------------------------
@@ -779,38 +779,39 @@ ClinicalTaskStatus: Pending, InProgress, Completed, Cancelled
 
 
 ================================================================================
-11. AI / GROK INTEGRATION
+11. AI / LOCAL ENGINE INTEGRATION
 ================================================================================
 
-11.1 API Client Configuration
+11.1 Local engine (Ollama + Qwen)
 ------------------------------
-Provider: xAI (https://api.x.ai/v1/)
-Endpoint: POST /v1/responses (Responses API, NOT Chat Completions)
-Auth: Bearer token from GROK_API_KEY env var
-Default model: grok-4.20-multi-agent
-Timeout: 30 minutes
+Provider: local Ollama on loopback (http://127.0.0.1:11434)
+Endpoint: POST /api/chat (Ollama native; no cloud xAI/Grok)
+Auth: none (loopback only)
+Default model: qwen2.5:7b
+Timeout: 15 minutes (configurable)
 
-Optional env/config:
-  GROK_MODEL           — override model id
-  GROK_STORE           — bool, persist on xAI servers (default false)
-  GROK_REASONING_EFFORT — low|medium|high|xhigh (multi-agent models only)
-  GROK_SERVER_TOOLS    — comma-separated, default from config: web_search, x_search
+The backend can download the official Ollama Windows/Linux archive, extract it
+under App_Data/ai-engine/, start `ollama serve`, and pull the configured Qwen
+model. Admin UI: /admin/local-ai and Settings.
+
+Config (appsettings LocalAi):
+  BaseUrl, Model, AutoStart, RequestTimeoutMinutes, EngineDirectory
+
+No GROK_API_KEY. Clinical prompts must not leave the machine.
 
 Request body (JSON, camelCase):
   {
-    "model": "...",
-    "input": [ { "role": "system|user|assistant", "content": "..." } ],
-    "store": false,
-    "reasoning": { "effort": "low" },      // multi-agent only
-    "tools": [ { "type": "web_search" } ]  // multi-agent only
+    "model": "qwen2.5:7b",
+    "stream": false,
+    "messages": [ { "role": "system|user|assistant", "content": "..." } ]
   }
 
-Response parsing: extract output[].type=="message".content[].type=="output_text".text
-Concatenate all output_text parts.
+Response parsing: message.content (Ollama) or choices[].message.content (compat).
 
-If API key missing: return user-visible error string (do not crash app).
+If the engine is not installed/running: return a user-visible error pointing at
+Settings → Local AI (do not crash the app).
 
-11.2 Send to Grok (Patient Chart Button)
+11.2 Send to local AI (Patient Chart Button)
 ----------------------------------------
 Precondition: at least one of: documents with ExtractedText, problems, meds, allergies
 Disabled after first successful send per patient per session.
@@ -829,9 +830,9 @@ Prompt: "You are reviewing a patient chart... Acknowledge receipt, then provide
   a brief (3-5 sentence) summary noting discrepancies between uploaded documents
   and current local records."
 
-Shows success snackbar with counts. Marks GrokSession.documentsSent[patientId]=true.
+Shows success snackbar with counts. Marks AiSession.documentsSent[patientId]=true.
 
-11.3 Update Records from Grok (Demographics Tab)
+11.3 Update Records from local AI (Demographics Tab)
 -------------------------------------------------
 Gathers: problems, medications, allergies, all documents for patient
 Sends prompt requesting JSON-only response (no markdown fences):
@@ -865,7 +866,7 @@ Limits: max 18,000 chars per document, 60,000 total doc chars in prompt.
 ----------------------------
 Uses ChatAsync with multi-turn history. Persisted to EncounterMessage table.
 
-11.5 GrokSessionStateService (per browser circuit/session)
+11.5 AiSessionStateService (per browser circuit/session)
 ----------------------------------------------------------
 Tracks per patientId:
   documentsSent (bool)
@@ -1340,10 +1341,11 @@ GetActiveSessionsAsync, GetActiveSessionCountAsync
 ----------------------------------------
 UpdateAsync(patient) → UpdateRecordsResult — see §11.3
 
-19.8 GrokApiService (HttpClient Scoped)
+19.8 IClinicalAiService / LocalAiService (HttpClient Scoped)
 ---------------------------------------
 ChatAsync(systemPrompt, history, userMessage) → string
 ProcessDocumentAsync(documentContent, prompt) → string
+LocalAiEngineService (Singleton) installs/starts Ollama and pulls Qwen.
 
 19.9 AuthSyncService (Scoped)
 -----------------------------
@@ -1384,13 +1386,11 @@ Tracks user activity events (mousemove, keydown) to reset idle timer display
 
 Environment variables:
   ASPNETCORE_ENVIRONMENT — Development|Production|Staging
-  GROK_API_KEY           — required for AI features
-  GROK_MODEL, GROK_STORE, GROK_REASONING_EFFORT, GROK_SERVER_TOOLS
 
 appsettings.json keys:
   ConnectionStrings:DefaultConnection  — SQLite path
   ConnectionStrings:PostgresConnection   — optional production DB
-  Grok:Model, Grok:Store, Grok:ReasoningEffort, Grok:ServerTools[]
+  LocalAi:BaseUrl, LocalAi:Model, LocalAi:AutoStart, LocalAi:RequestTimeoutMinutes
   ForwardedHeaders:TrustAllProxies
   PlaywrightTestUser:* (optional test user seeding — skip in cleanroom)
   AllowedHosts: *
@@ -1476,10 +1476,10 @@ PHASE 3 — Core Clinical UI
   [ ] Inbox split pane + compose
 
 PHASE 4 — AI Integration
-  [ ] Grok API client (Responses API format)
+  [ ] Local Ollama/Qwen engine install + chat client
   [ ] Encounter chat with history persistence
-  [ ] Send to Grok button with session state
-  [ ] Update Records from Grok with JSON parsing + chart replace
+  [ ] Send to local AI button with session state
+  [ ] Update Records from local AI with JSON parsing + chart replace
 
 PHASE 5 — Admin & Account
   [ ] Admin hub + users/locations/templates/settings pages
