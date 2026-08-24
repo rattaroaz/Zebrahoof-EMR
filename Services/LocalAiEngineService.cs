@@ -744,7 +744,7 @@ public sealed class LocalAiEngineService : IDisposable
     /// Connection refused / probe timeout while the engine is down is expected,
     /// not a start failure.
     /// </summary>
-    internal static bool IsUnreachableEngine(Exception ex)
+    public static bool IsUnreachableEngine(Exception ex)
     {
         if (ex is HttpRequestException or TaskCanceledException or TimeoutException)
         {
