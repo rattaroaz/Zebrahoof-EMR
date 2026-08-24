@@ -259,7 +259,7 @@ jobs:
 
     - name: Run security scan
       run: |
-        dotnet list package --vulnerable --outdated
+        dotnet list "Zebrahoof EMR.csproj" package --vulnerable --include-transitive
 
     - name: Run code analysis
       uses: github/super-linter@v5
