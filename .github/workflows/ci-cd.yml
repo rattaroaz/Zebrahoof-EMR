@@ -197,8 +197,9 @@ jobs:
         color: ${{ steps.coverage.outputs.color }}
 
     - name: Comment PR with results
-      uses: actions/github-script@v7
       if: github.event_name == 'pull_request'
+      continue-on-error: true
+      uses: actions/github-script@v7
       with:
         script: |
           const fs = require('fs');
