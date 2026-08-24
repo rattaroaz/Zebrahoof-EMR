@@ -90,9 +90,9 @@ public static class LocalAiHardwareProbe
         return (0, contentRoot);
     }
 
-    internal static double BytesToGb(long bytes) => Math.Round(bytes / 1024d / 1024d / 1024d, 1);
+    public static double BytesToGb(long bytes) => Math.Round(bytes / 1024d / 1024d / 1024d, 1);
 
-    internal static double BytesToGb(ulong bytes) => Math.Round(bytes / 1024d / 1024d / 1024d, 1);
+    public static double BytesToGb(ulong bytes) => Math.Round(bytes / 1024d / 1024d / 1024d, 1);
 
     private static bool TryReadWindowsRam(out ulong total, out ulong available)
     {
