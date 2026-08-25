@@ -189,9 +189,10 @@ jobs:
     - name: Create coverage badge
       uses: schneegans/dynamic-badges-action@v1.7.0
       if: github.ref == 'refs/heads/main'
+      continue-on-error: true
       with:
         auth: ${{ secrets.GITHUB_TOKEN }}
-        gist-id: zebrahoof-emr-coverage
+        gistID: zebrahoof-emr-coverage
         label: coverage
         message: ${{ steps.coverage.outputs.percentage }}%
         color: ${{ steps.coverage.outputs.color }}
