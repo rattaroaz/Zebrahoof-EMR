@@ -159,6 +159,7 @@ jobs:
         name: zebrahoof-emr-coverage
 
     - name: Check coverage thresholds
+      id: coverage
       if: always()
       continue-on-error: true
       run: |
@@ -172,6 +173,9 @@ jobs:
         
         echo "Line coverage: $LINE_PERCENTAGE%"
         echo "Branch coverage: $BRANCH_PERCENTAGE%"
+
+        LINE_ROUNDED=$(printf '%.1f' "$LINE_PERCENTAGE")
+        echo "percentage=$LINE_ROUNDED" >> "$GITHUB_OUTPUT"
         
         # Check thresholds (75% line, 60% branch)
         if (( $(echo "$LINE_PERCENTAGE < 75" | bc -l) )); then
@@ -186,15 +190,21 @@ jobs:
         
         echo "✅ Coverage thresholds met!"
 
+    # Gist badges need a real gist ID (hex in the gist URL) and a PAT with gist scope.
+    # GITHUB_TOKEN cannot update gists. Set repo variable COVERAGE_GIST_ID and secret GIST_SECRET.
     - name: Create coverage badge
-      uses: schneegans/dynamic-badges-action@v1.7.0
-      if: github.ref == 'refs/heads/main'
+      uses: schneegans/dynamic-badges-action@v1.9.0
+      if: github.ref == 'refs/heads/main' && vars.COVERAGE_GIST_ID != ''
+      continue-on-error: true
       with:
-        auth: ${{ secrets.GITHUB_TOKEN }}
-        gist-id: zebrahoof-emr-coverage
+        auth: ${{ secrets.GIST_SECRET }}
+        gistID: ${{ vars.COVERAGE_GIST_ID }}
+        filename: coverage.json
         label: coverage
         message: ${{ steps.coverage.outputs.percentage }}%
-        color: ${{ steps.coverage.outputs.color }}
+        valColorRange: ${{ steps.coverage.outputs.percentage }}
+        maxColorRange: 100
+        minColorRange: 50
 
     - name: Comment PR with results
       if: github.event_name == 'pull_request'
