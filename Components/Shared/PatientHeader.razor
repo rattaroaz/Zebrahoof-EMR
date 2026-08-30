@@ -57,11 +57,9 @@
 
                 @* Quick Actions *@
                 <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Science" OnClick="ShowOrderDialog">Order tests</MudButton>
                     <MudButton StartIcon="@Icons.Material.Filled.NoteAdd">New Note</MudButton>
                     <MudButton StartIcon="@Icons.Material.Filled.EventAvailable" OnClick="@ShowAppointments">Appointments</MudButton>
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true">
-                        <MudMenuItem Icon="@Icons.Material.Filled.Science" OnClick="ShowOrderDialog">Order tests</MudMenuItem>
                         <MudMenuItem Icon="@Icons.Material.Filled.Print">Print Summary</MudMenuItem>
                         <MudMenuItem Icon="@Icons.Material.Filled.Send">Send Message</MudMenuItem>
                         <MudMenuItem Icon="@Icons.Material.Filled.Assignment">Create Task</MudMenuItem>
@@ -75,25 +73,6 @@
 @code {
     [Parameter, EditorRequired]
     public Patient Patient { get; set; } = null!;
-
-    private async Task ShowOrderDialog()
-    {
-        var parameters = new DialogParameters<OrderEntryDialog>
-        {
-            { x => x.PatientId, Patient.Id },
-            { x => x.PatientName, Patient.FullName },
-            { x => x.InitialFilter, OrderCatalogFilter.All }
-        };
-
-        var options = new DialogOptions
-        {
-            MaxWidth = MaxWidth.Large,
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
-        await DialogService.ShowAsync<OrderEntryDialog>("Order tests", parameters, options);
-    }
 
     private async Task ShowAppointments()
     {

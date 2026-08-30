@@ -93,48 +93,6 @@ h1:focus {
     border-radius: 4px;
 }
 
-.summary-window-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-    align-items: stretch;
-}
-
-.summary-window-item {
-    min-width: 0;
-}
-
-.summary-window-item .mud-paper {
-    height: 100%;
-}
-
-.summary-window-handle {
-    cursor: grab;
-    user-select: none;
-}
-
-.summary-window-handle:active,
-.summary-window-dragging .summary-window-handle {
-    cursor: grabbing;
-}
-
-.summary-window-dragging {
-    opacity: 0.55;
-    pointer-events: none;
-}
-
-@media (max-width: 960px) {
-    .summary-window-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-
-@media (max-width: 600px) {
-    .summary-window-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
 /* Fix MudDatePicker calendar rendering - ensure full width and solid background */
 .schedule-datepicker-popover {
     min-width: 330px !important;

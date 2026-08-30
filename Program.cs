@@ -215,12 +215,6 @@ builder.Services.AddHttpClient(LocalAiEngineService.HttpClientName, client =>
     client.Timeout = TimeSpan.FromHours(2);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Zebrahoof-EMR-LocalAI");
 });
-builder.Services.AddHttpClient(LocalAiLibraryCatalogService.HttpClientName, client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(90);
-    client.DefaultRequestHeaders.UserAgent.ParseAdd("Zebrahoof-EMR-LocalAI");
-});
-builder.Services.AddSingleton<LocalAiLibraryCatalogService>();
 builder.Services.AddHttpClient<IClinicalAiService, LocalAiService>((sp, client) =>
 {
     var opts = sp.GetRequiredService<IOptions<LocalAiOptions>>().Value;
@@ -256,19 +250,7 @@ if (!app.Environment.IsDevelopment())
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
-app.UseStatusCodePages(statusContext =>
-{
-    var http = statusContext.HttpContext;
-    if (http.Response.StatusCode != StatusCodes.Status404NotFound
-        || http.Response.HasStarted
-        || StatusCodePagePaths.ShouldLeaveNotFoundAsIs(http.Request.Path))
-    {
-        return Task.CompletedTask;
-    }
-
-    http.Response.Redirect("/not-found");
-    return Task.CompletedTask;
-});
+app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
 app.UseMiddleware<CorrelationIdMiddleware>();

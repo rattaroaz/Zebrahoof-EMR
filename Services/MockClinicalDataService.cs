@@ -39,7 +39,6 @@ public class MockClinicalDataService
     private readonly Dictionary<int, List<RiskScoreEntry>> _riskScoresByPatient;
     private readonly List<LabPanel> _labPanels;
     private readonly List<ImagingCatalog> _imagingCatalog;
-    private readonly List<ProcedureCatalog> _procedureCatalog;
     private readonly List<string> _specialties;
     private readonly List<LabOrder> _labOrders;
     private readonly List<ImagingOrder> _imagingOrders;
@@ -92,7 +91,6 @@ public class MockClinicalDataService
         _riskScoresByPatient = GenerateMockRiskScores();
         _labPanels = GenerateMockLabPanels();
         _imagingCatalog = GenerateMockImagingCatalog();
-        _procedureCatalog = GenerateMockProcedureCatalog();
         _specialties = GenerateMockSpecialties();
         _labOrders = new List<LabOrder>();
         _imagingOrders = new List<ImagingOrder>();
@@ -1194,222 +1192,6 @@ public class MockClinicalDataService
 
     public Task<List<ImagingCatalog>> GetImagingCatalogAsync() => Task.FromResult(_imagingCatalog.ToList());
 
-    public Task<List<ProcedureCatalog>> GetProcedureCatalogAsync() => Task.FromResult(_procedureCatalog.ToList());
-
-    public List<SimulatedOrderSpec> GetSimulatedOrderCatalog(OrderCatalogFilter filter = OrderCatalogFilter.All)
-    {
-        var rows = new List<SimulatedOrderSpec>();
-
-        if (filter is OrderCatalogFilter.All or OrderCatalogFilter.Labs)
-        {
-            rows.AddRange(_labPanels.Select(p => new SimulatedOrderSpec
-            {
-                Type = OrderType.Lab,
-                Name = p.Name,
-                Category = p.Category,
-                Destination = "Labs",
-                RequiresFasting = p.RequiresFasting,
-                IncludedTests = p.IncludedTests.ToList()
-            }));
-        }
-
-        if (filter is OrderCatalogFilter.All or OrderCatalogFilter.Radiology or OrderCatalogFilter.Ekg or OrderCatalogFilter.Echo)
-        {
-            foreach (var study in _imagingCatalog)
-            {
-                var type = study.Modality.Equals("EKG", StringComparison.OrdinalIgnoreCase)
-                    ? OrderType.Ekg
-                    : study.Modality.Equals("Echocardiogram", StringComparison.OrdinalIgnoreCase)
-                        ? OrderType.Imaging
-                        : OrderType.Imaging;
-
-                var matches = filter switch
-                {
-                    OrderCatalogFilter.Ekg => type == OrderType.Ekg,
-                    OrderCatalogFilter.Echo => study.Modality.Equals("Echocardiogram", StringComparison.OrdinalIgnoreCase),
-                    OrderCatalogFilter.Radiology => type != OrderType.Ekg,
-                    _ => true
-                };
-
-                if (!matches) continue;
-
-                rows.Add(new SimulatedOrderSpec
-                {
-                    Type = type,
-                    Name = study.Description,
-                    Category = study.Modality,
-                    Destination = "Imaging",
-                    Modality = study.Modality,
-                    BodyPart = study.BodyPart,
-                    CanHaveContrast = study.CanHaveContrast
-                });
-            }
-        }
-
-        if (filter is OrderCatalogFilter.All or OrderCatalogFilter.Procedure)
-        {
-            rows.AddRange(_procedureCatalog.Select(p => new SimulatedOrderSpec
-            {
-                Type = OrderType.Procedure,
-                Name = p.Name,
-                Category = p.Category,
-                Destination = "Labs",
-                IncludedTests = p.IncludedTests.ToList()
-            }));
-        }
-
-        return rows;
-    }
-
-    public Task<List<SimulatedOrderRecord>> GetSimulatedOrdersByPatientAsync(int patientId)
-    {
-        var labs = _labOrders.Where(o => o.PatientId == patientId).Select(o => new SimulatedOrderRecord
-        {
-            Key = $"lab-{o.Id}",
-            Type = string.Equals(o.PanelName, "Point of Care", StringComparison.OrdinalIgnoreCase)
-                ? OrderType.Procedure
-                : OrderType.Lab,
-            PatientId = o.PatientId,
-            DisplayName = o.PanelName ?? o.TestName,
-            Destination = "Labs",
-            Priority = o.Priority,
-            OrderingProvider = o.OrderingProvider,
-            OrderedAt = o.OrderedAt,
-            Status = o.Status,
-            ResultSummary = SummarizeExistingLabs(o.PatientId, o.PanelName ?? o.TestName, o.OrderedAt)
-        });
-
-        var imaging = _imagingOrders.Where(o => o.PatientId == patientId).Select(o => new SimulatedOrderRecord
-        {
-            Key = $"img-{o.Id}",
-            Type = o.Modality.Equals("EKG", StringComparison.OrdinalIgnoreCase) ? OrderType.Ekg : OrderType.Imaging,
-            PatientId = o.PatientId,
-            DisplayName = o.StudyDescription,
-            Destination = "Imaging",
-            Priority = o.Priority,
-            OrderingProvider = o.OrderingProvider,
-            OrderedAt = o.OrderedAt,
-            Status = o.Status,
-            ResultSummary = _imagingStudies
-                .Where(s => s.PatientId == patientId && s.Description == o.StudyDescription)
-                .OrderByDescending(s => s.StudyDate)
-                .Select(s => s.Impression)
-                .FirstOrDefault()
-        });
-
-        return Task.FromResult(labs.Concat(imaging).OrderByDescending(o => o.OrderedAt).ToList());
-    }
-
-    public Task<SimulatedOrderSignResult> SignSimulatedCartAsync(
-        int patientId,
-        string patientName,
-        string orderingProvider,
-        IReadOnlyList<OrderCartItem> cart)
-    {
-        if (patientId <= 0) throw new ArgumentOutOfRangeException(nameof(patientId));
-        if (cart.Count == 0) throw new ArgumentException("Cart is empty.", nameof(cart));
-
-        var now = DateTime.Now;
-        var labCount = 0;
-        var imagingCount = 0;
-
-        foreach (var item in cart)
-        {
-            if (item.OrderData is not SimulatedOrderSpec spec) continue;
-
-            if (spec.Type is OrderType.Lab or OrderType.Procedure)
-            {
-                var panelName = spec.Type == OrderType.Procedure ? "Point of Care" : spec.Name;
-                var order = new LabOrder
-                {
-                    PatientId = patientId,
-                    TestName = spec.Name,
-                    PanelName = panelName,
-                    Priority = item.Priority,
-                    ClinicalIndication = item.Details,
-                    OrderingProvider = orderingProvider,
-                    IsFasting = spec.RequiresFasting,
-                    OrderedAt = now,
-                    Status = OrderStatus.Completed
-                };
-                order.Id = NextId(_labOrders.Select(o => o.Id));
-                _labOrders.Add(order);
-                PersistAdd(order);
-
-                var results = SimulatedOrderFulfillment.BuildLabResults(
-                    patientId,
-                    panelName,
-                    spec.IncludedTests.Count > 0 ? spec.IncludedTests : [spec.Name],
-                    now);
-                foreach (var result in results)
-                {
-                    result.Id = NextId(_labResults.Select(r => r.Id));
-                    _labResults.Add(result);
-                    PersistAdd(result);
-                    labCount++;
-                }
-            }
-            else if (spec.Type is OrderType.Imaging or OrderType.Ekg)
-            {
-                var order = new ImagingOrder
-                {
-                    PatientId = patientId,
-                    Modality = spec.Modality ?? spec.Category,
-                    BodyPart = spec.BodyPart ?? string.Empty,
-                    StudyDescription = spec.Name,
-                    Priority = item.Priority,
-                    ClinicalIndication = item.Details,
-                    OrderingProvider = orderingProvider,
-                    OrderedAt = now,
-                    ScheduledAt = now,
-                    Status = OrderStatus.Completed
-                };
-                order.Id = NextId(_imagingOrders.Select(o => o.Id));
-                _imagingOrders.Add(order);
-                PersistAdd(order);
-
-                var study = SimulatedOrderFulfillment.BuildImagingStudy(patientId, spec, orderingProvider, now);
-                study.Id = NextId(_imagingStudies.Select(s => s.Id));
-                _imagingStudies.Add(study);
-                PersistAdd(study);
-                imagingCount++;
-            }
-        }
-
-        var interaction = new PatientInteraction
-        {
-            Id = NextId(_interactions.Select(i => i.Id)),
-            PatientId = patientId,
-            PatientName = patientName,
-            DateTime = now,
-            Type = labCount > 0 ? InteractionType.LabReview : InteractionType.OfficeVisit,
-            Summary = $"Simulated orders resulted ({labCount} lab, {imagingCount} imaging).",
-            Provider = orderingProvider
-        };
-        _interactions.Add(interaction);
-        PersistAdd(interaction);
-
-        NotifyPatientDataChanged(patientId);
-
-        return Task.FromResult(new SimulatedOrderSignResult(labCount, imagingCount));
-    }
-
-    private string? SummarizeExistingLabs(int patientId, string panelName, DateTime orderedAt)
-    {
-        var results = _labResults
-            .Where(r => r.PatientId == patientId
-                        && string.Equals(r.PanelName, panelName, StringComparison.OrdinalIgnoreCase)
-                        && Math.Abs((r.CollectedAt - orderedAt).TotalMinutes) < 2)
-            .ToList();
-        return results.Count == 0 ? null : SimulatedOrderFulfillment.SummarizeLabs(results);
-    }
-
-    private static int NextId(IEnumerable<int> ids)
-    {
-        var list = ids.ToList();
-        return list.Count > 0 ? list.Max() + 1 : 1;
-    }
-
     public Task<List<string>> GetSpecialtiesAsync() => Task.FromResult(_specialties.ToList());
 
     public Task<List<LabOrder>> GetLabOrdersByPatientAsync(int patientId) =>
@@ -1600,9 +1382,7 @@ public class MockClinicalDataService
         new() { Id = 7, Name = "Liver Function Tests (LFTs)", Category = "Chemistry", IncludedTests = ["AST", "ALT", "Alkaline Phosphatase", "Total Bilirubin", "Direct Bilirubin", "Albumin", "Total Protein"] },
         new() { Id = 8, Name = "Urinalysis", Category = "Urinalysis", IncludedTests = ["pH", "Specific Gravity", "Protein", "Glucose", "Ketones", "Blood", "Leukocyte Esterase", "Nitrites"] },
         new() { Id = 9, Name = "PT/INR", Category = "Coagulation", IncludedTests = ["Prothrombin Time", "INR"] },
-        new() { Id = 10, Name = "Urine Drug Screen", Category = "Toxicology", IncludedTests = ["Amphetamines", "Barbiturates", "Benzodiazepines", "Cannabinoids", "Cocaine", "Opiates", "PCP"] },
-        new() { Id = 11, Name = "Troponin", Category = "Cardiac", IncludedTests = ["Troponin"] },
-        new() { Id = 12, Name = "BNP", Category = "Cardiac", IncludedTests = ["BNP"] }
+        new() { Id = 10, Name = "Urine Drug Screen", Category = "Toxicology", IncludedTests = ["Amphetamines", "Barbiturates", "Benzodiazepines", "Cannabinoids", "Cocaine", "Opiates", "PCP"] }
     ];
 
     private static List<ImagingCatalog> GenerateMockImagingCatalog() =>
@@ -1620,21 +1400,7 @@ public class MockClinicalDataService
         new() { Id = 11, Modality = "Ultrasound", BodyPart = "Abdomen", Description = "Abdominal Ultrasound" },
         new() { Id = 12, Modality = "Ultrasound", BodyPart = "Pelvis", Description = "Pelvic Ultrasound" },
         new() { Id = 13, Modality = "Ultrasound", BodyPart = "Thyroid", Description = "Thyroid Ultrasound" },
-        new() { Id = 14, Modality = "Echocardiogram", BodyPart = "Heart", Description = "Transthoracic Echocardiogram" },
-        new() { Id = 15, Modality = "EKG", BodyPart = "Heart", Description = "12-Lead Electrocardiogram" },
-        new() { Id = 16, Modality = "EKG", BodyPart = "Heart", Description = "Rhythm Strip" }
-    ];
-
-    private static List<ProcedureCatalog> GenerateMockProcedureCatalog() =>
-    [
-        new() { Id = 1, Name = "Fingerstick Glucose", IncludedTests = ["Fingerstick Glucose"] },
-        new() { Id = 2, Name = "Urine Dipstick", IncludedTests = ["pH", "Specific Gravity", "Protein", "Glucose", "Ketones", "Blood", "Leukocyte Esterase", "Nitrites"] },
-        new() { Id = 3, Name = "Rapid Strep", IncludedTests = ["Rapid Strep"] },
-        new() { Id = 4, Name = "Rapid Flu", IncludedTests = ["Rapid Flu"] },
-        new() { Id = 5, Name = "Rapid COVID", IncludedTests = ["Rapid COVID"] },
-        new() { Id = 6, Name = "Urine hCG", IncludedTests = ["Urine hCG"] },
-        new() { Id = 7, Name = "Point-of-care A1c", IncludedTests = ["Point-of-care A1c"] },
-        new() { Id = 8, Name = "Point-of-care INR", IncludedTests = ["Point-of-care INR"] }
+        new() { Id = 14, Modality = "Echocardiogram", BodyPart = "Heart", Description = "Transthoracic Echocardiogram" }
     ];
 
     private static List<string> GenerateMockSpecialties() =>

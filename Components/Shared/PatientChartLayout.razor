@@ -90,9 +90,6 @@
             case "history":
                 <PatientHistory PatientId="Patient.Id" />
                 break;
-            case "orders":
-                <PatientOrders Patient="Patient" />
-                break;
             case "labs":
                 <PatientLabs PatientId="Patient.Id" />
                 break;
@@ -155,7 +152,6 @@
         new("medications", "Medications", Icons.Material.Filled.Medication),
         new("allergies", "Allergies", Icons.Material.Filled.Warning),
         new("history", "History", Icons.Material.Filled.History),
-        new("orders", "Orders", Icons.Material.Filled.Assignment),
         new("labs", "Labs", Icons.Material.Filled.Science),
         new("imaging", "Imaging", Icons.Material.Filled.Image),
         new("vitals", "Vitals", Icons.Material.Filled.MonitorHeart),
@@ -213,18 +209,13 @@
             if (!string.IsNullOrEmpty(savedOrder))
             {
                 var tabKeys = System.Text.Json.JsonSerializer.Deserialize<List<string>>(savedOrder);
-                if (tabKeys != null)
+                if (tabKeys != null && tabKeys.Count == _defaultTabs.Count)
                 {
                     var reordered = new List<TabDefinition>();
                     foreach (var key in tabKeys)
                     {
                         var tab = _defaultTabs.FirstOrDefault(t => t.Key == key);
                         if (tab != null) reordered.Add(tab);
-                    }
-                    foreach (var tab in _defaultTabs)
-                    {
-                        if (reordered.All(t => t.Key != tab.Key))
-                            reordered.Add(tab);
                     }
                     if (reordered.Count == _defaultTabs.Count)
                         _orderedTabs = reordered;

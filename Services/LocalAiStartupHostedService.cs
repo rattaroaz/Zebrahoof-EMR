@@ -9,18 +9,15 @@ namespace Zebrahoof_EMR.Services;
 public sealed class LocalAiStartupHostedService : BackgroundService
 {
     private readonly LocalAiEngineService _engine;
-    private readonly LocalAiLibraryCatalogService _catalog;
     private readonly IOptions<LocalAiOptions> _options;
     private readonly ILogger<LocalAiStartupHostedService> _logger;
 
     public LocalAiStartupHostedService(
         LocalAiEngineService engine,
-        LocalAiLibraryCatalogService catalog,
         IOptions<LocalAiOptions> options,
         ILogger<LocalAiStartupHostedService> logger)
     {
         _engine = engine;
-        _catalog = catalog;
         _options = options;
         _logger = logger;
     }
@@ -29,7 +26,6 @@ public sealed class LocalAiStartupHostedService : BackgroundService
     {
         try
         {
-            await _catalog.EnsureFreshAsync(stoppingToken);
             await _engine.RefreshStatusAsync(stoppingToken);
             if (!_options.Value.AutoStart)
             {

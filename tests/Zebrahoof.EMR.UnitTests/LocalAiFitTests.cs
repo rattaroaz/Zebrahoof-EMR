@@ -5,16 +5,14 @@ namespace Zebrahoof.EMR.UnitTests;
 public class LocalAiFitTests
 {
     [Fact]
-    public void Catalog_IncludesOnlySupportedFamilies()
+    public void Catalog_IncludesQwenDeepSeekKimiAndOthers()
     {
         Assert.Contains(LocalAiModels.Catalog, m => m.Family == "Qwen" && m.Id.StartsWith("qwen2.5:"));
         Assert.Contains(LocalAiModels.Catalog, m => m.Id.StartsWith("qwen3:"));
-        Assert.Contains(LocalAiModels.Catalog, m => m.Id == "qwen3.8:27b");
         Assert.Contains(LocalAiModels.Catalog, m => m.Family == "DeepSeek" && m.Id.Contains("deepseek-r1"));
+        Assert.Contains(LocalAiModels.Catalog, m => m.Family == "Kimi" && m.Id.Contains("kimi"));
+        Assert.Contains(LocalAiModels.Catalog, m => m.Family == "Llama");
         Assert.Contains(LocalAiModels.Catalog, m => m.Family == "Gemma");
-        Assert.Contains(LocalAiModels.Catalog, m => m.Family == "GPT-OSS");
-        Assert.DoesNotContain(LocalAiModels.Catalog, m => m.Family is "Kimi" or "Llama" or "Mistral" or "Phi" or "GLM");
-        Assert.All(LocalAiModels.Catalog, m => Assert.True(LocalAiModels.IsSupportedFamily(m.Family)));
         Assert.True(LocalAiModels.Catalog.Length >= 20);
     }
 

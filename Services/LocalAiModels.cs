@@ -58,7 +58,6 @@ public static class LocalAiModels
         Q("qwen3:32b", "3 32B", "Dense Qwen 3 32B.", 20.0, 32, 40, 20, 32),
         Q("qwen3-coder:30b", "3 Coder 30B", "MoE coder (~3B active). Strong on a 24 GB GPU.", 19.0, 24, 32, 16, 30),
         Q("qwen3.6:27b", "3.6 27B", "Newer Qwen dense model for a single high-end GPU.", 17.0, 24, 32, 16, 27),
-        Q("qwen3.8:27b", "3.8 27B", "Qwen 3.8 dense 27B with vision and long context.", 18.0, 24, 32, 16, 27),
 
         // DeepSeek
         D("deepseek-r1:1.5b", "R1 1.5B", "Tiny reasoning distill. Slow-ish because it thinks first.", 1.1, 3, 4, 2, 1.5, true),
@@ -69,6 +68,18 @@ public static class LocalAiModels
         D("deepseek-r1:70b", "R1 70B", "Very large reasoning model.", 43.0, 64, 80, 40, 70, true),
         D("deepseek-r1:671b", "R1 671B", "Full DeepSeek-R1. Needs a multi-GPU server.", 400.0, 512, 640, 320, 671, true),
 
+        // Kimi (Moonshot)
+        K("kimi-k2", "K2", "Moonshot Kimi K2 MoE. Very large download.", 60.0, 48, 80, 24, 1000),
+        K("kimi-k2.6", "K2.6", "Newer Kimi K2.6 agentic / coding model.", 60.0, 48, 80, 24, 1000),
+        K("kimi-k2.7-code", "K2.7 Code", "Kimi coding-focused build on K2.6.", 60.0, 48, 80, 24, 1000),
+
+        // Llama
+        O("llama3.2:1b", "Llama", "3.2 1B", "Tiny Llama 3.2.", 1.3, 3, 4, 2, 1),
+        O("llama3.2:3b", "Llama", "3.2 3B", "Small Llama 3.2.", 2.0, 4, 6, 3, 3),
+        O("llama3.1:8b", "Llama", "3.1 8B", "Widely used general 8B.", 4.9, 8, 12, 6, 8),
+        O("llama3.1:70b", "Llama", "3.1 70B", "Large Llama 3.1.", 40.0, 64, 80, 40, 70),
+        O("llama3.3:70b", "Llama", "3.3 70B", "Newer 70B Llama.", 43.0, 64, 80, 40, 70),
+
         // Gemma
         O("gemma3:1b", "Gemma", "3 1B", "Small Gemma 3.", 0.8, 3, 4, 2, 1),
         O("gemma3:4b", "Gemma", "3 4B", "Compact multimodal Gemma 3.", 3.3, 6, 8, 4, 4),
@@ -78,31 +89,22 @@ public static class LocalAiModels
         O("gemma4:12b", "Gemma", "4 12B", "Mid Gemma 4 with vision.", 8.0, 16, 20, 10, 12),
         O("gemma4:31b", "Gemma", "4 31B", "Largest common Gemma 4 dense tag.", 20.0, 32, 40, 20, 31),
 
-        O("gpt-oss:20b", "GPT-OSS", "20B", "OpenAI open-weights 20B. Fits many 16 GB machines.", 13.0, 16, 24, 12, 20)
+        // Other open models
+        O("mistral:7b", "Mistral", "7B", "Classic Mistral 7B.", 4.4, 8, 10, 6, 7),
+        O("mistral-nemo", "Mistral", "Nemo 12B", "Mistral Nemo 12B.", 7.1, 14, 18, 10, 12),
+        O("phi4", "Phi", "4", "Microsoft Phi-4.", 9.1, 14, 18, 10, 14),
+        O("phi4-mini", "Phi", "4 Mini", "Smaller Phi-4.", 2.5, 5, 8, 4, 3.8),
+        O("gpt-oss:20b", "GPT-OSS", "20B", "OpenAI open-weights 20B. Fits many 16 GB machines.", 13.0, 16, 24, 12, 20),
+        O("glm4:9b", "GLM", "4 9B", "Zhipu GLM-4 9B class tag.", 5.5, 10, 14, 8, 9)
     ];
-
-    public static readonly string[] SupportedFamilies = ["Qwen", "DeepSeek", "Gemma", "GPT-OSS"];
 
     public static readonly string[] Families =
         Catalog.Select(m => m.Family).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
-    public static bool IsSupportedFamily(string? family) =>
-        !string.IsNullOrWhiteSpace(family)
-        && SupportedFamilies.Contains(family, StringComparer.OrdinalIgnoreCase);
-
-    public static IReadOnlyList<LocalAiModelChoice> OnlySupported(IEnumerable<LocalAiModelChoice> models) =>
-        models.Where(m => IsSupportedFamily(m.Family)).ToArray();
-
-    public static LocalAiModelChoice? Find(string? id, IEnumerable<LocalAiModelChoice>? catalog = null)
-    {
-        if (string.IsNullOrWhiteSpace(id))
-        {
-            return null;
-        }
-
-        var list = catalog ?? Catalog;
-        return list.FirstOrDefault(m => string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
-    }
+    public static LocalAiModelChoice? Find(string? id) =>
+        string.IsNullOrWhiteSpace(id)
+            ? null
+            : Catalog.FirstOrDefault(m => string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase));
 
     public static LocalAiModelFit Assess(LocalAiModelChoice model, LocalAiHardwareSnapshot hw)
     {
@@ -179,13 +181,10 @@ public static class LocalAiModels
             BuildOkDetail(model, hw, gpuOk));
     }
 
-    public static LocalAiModelChoice SuggestDefault(
-        LocalAiHardwareSnapshot hw,
-        IReadOnlyList<LocalAiModelChoice>? catalog = null)
+    public static LocalAiModelChoice SuggestDefault(LocalAiHardwareSnapshot hw)
     {
-        var list = catalog ?? Catalog;
-        var ranked = list
-            .Where(m => IsSupportedFamily(m.Family))
+        var ranked = Catalog
+            .Where(m => m.Family is "Qwen" or "DeepSeek" or "Llama" or "Gemma")
             .Select(m => (Model: m, Fit: Assess(m, hw)))
             .Where(x => x.Fit.Kind is LocalAiFitKind.Recommended or LocalAiFitKind.Usable)
             .OrderBy(x => x.Fit.Kind)
@@ -200,9 +199,7 @@ public static class LocalAiModels
             return qwen.Model;
         }
 
-        return ranked.FirstOrDefault().Model
-               ?? list.FirstOrDefault(m => m.Id == "qwen2.5:3b")
-               ?? list[0];
+        return ranked.FirstOrDefault().Model ?? Catalog.First(m => m.Id == "qwen2.5:3b");
     }
 
     private static string BuildOkDetail(LocalAiModelChoice model, LocalAiHardwareSnapshot hw, bool gpuOk)
@@ -220,6 +217,11 @@ public static class LocalAiModels
         string id, string name, string desc,
         double dl, double minRam, double recRam, double minVram, double param, bool reasoning) =>
         new(id, "DeepSeek", name, desc, dl, minRam, recRam, minVram, param, reasoning);
+
+    private static LocalAiModelChoice K(
+        string id, string name, string desc,
+        double dl, double minRam, double recRam, double minVram, double param) =>
+        new(id, "Kimi", name, desc, dl, minRam, recRam, minVram, param);
 
     private static LocalAiModelChoice O(
         string id, string family, string name, string desc,
