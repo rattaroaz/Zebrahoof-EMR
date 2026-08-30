@@ -1,0 +1,35 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Assignment" Class="mr-2" />
+            Order for @PatientName
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <OrderComposer PatientId="PatientId"
+                       PatientName="PatientName"
+                       InitialFilter="InitialFilter"
+                       OnSigned="OnSigned" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public int PatientId { get; set; }
+
+    [Parameter]
+    public string PatientName { get; set; } = string.Empty;
+
+    [Parameter]
+    public OrderCatalogFilter InitialFilter { get; set; } = OrderCatalogFilter.All;
+
+    private void OnSigned() => MudDialog.Close(DialogResult.Ok(true));
+
+    private void Close() => MudDialog.Cancel();
+}

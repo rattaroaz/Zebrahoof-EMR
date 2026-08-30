@@ -506,7 +506,54 @@ public enum OrderType
     Medication,
     Lab,
     Imaging,
-    Referral
+    Referral,
+    Ekg,
+    Procedure
+}
+
+public enum OrderCatalogFilter
+{
+    All,
+    Labs,
+    Radiology,
+    Ekg,
+    Echo,
+    Procedure
+}
+
+public class ProcedureCatalog
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Category { get; set; } = "Point of Care";
+    public List<string> IncludedTests { get; set; } = new();
+}
+
+public class SimulatedOrderSpec
+{
+    public OrderType Type { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public string Category { get; set; } = string.Empty;
+    public string Destination { get; set; } = "Labs";
+    public string? Modality { get; set; }
+    public string? BodyPart { get; set; }
+    public bool RequiresFasting { get; set; }
+    public bool CanHaveContrast { get; set; }
+    public List<string> IncludedTests { get; set; } = new();
+}
+
+public class SimulatedOrderRecord
+{
+    public string Key { get; set; } = string.Empty;
+    public OrderType Type { get; set; }
+    public int PatientId { get; set; }
+    public string DisplayName { get; set; } = string.Empty;
+    public string Destination { get; set; } = string.Empty;
+    public string Priority { get; set; } = "Routine";
+    public string OrderingProvider { get; set; } = string.Empty;
+    public DateTime OrderedAt { get; set; }
+    public OrderStatus Status { get; set; }
+    public string? ResultSummary { get; set; }
 }
 
 public class OrderWarning

@@ -4,5 +4,17 @@ This document represents the UI of the program.
 Login:  Userprofile@zebrahoof.com Password: password
 example:  Admin@zebrahoof.com Password: password
 
+1. clinician situational awareness
+2. do not make someone remember one screen to use another
+3. 
+
+
+what emr does better:
+confirm diagnoses.  first principles
+treatment choices review.
+deficiencies to treatment.
+request records.
+correct record.
+real time advice.  auto check tests.
 
 

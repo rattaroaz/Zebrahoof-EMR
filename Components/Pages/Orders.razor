@@ -1,22 +1,57 @@
 @page "/orders"
+@inject MockPatientService PatientService
+@inject NavigationManager Navigation
 
 <PageTitle>Orders - Zebrahoof EMR</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Orders</MudText>
-
-<MudAlert Severity="Severity.Info" Class="mb-4">
-    Order entry (CPOE) will be implemented in Phase 14. This is a placeholder page.
-</MudAlert>
+<MudText Typo="Typo.h4" Class="mb-2">Orders</MudText>
+<MudText Typo="Typo.body2" Class="mud-text-secondary mb-4">
+    Ordering lives on the patient chart. Pick a patient to open their Orders tab, or use
+    <strong>Order tests</strong> in the chart banner.
+</MudText>
 
 <MudCard Elevation="2">
     <MudCardContent>
-        <MudText Typo="Typo.h6" Class="mb-4">Order Entry Features (Coming Soon)</MudText>
-        <MudList T="string">
-            <MudListItem Icon="@Icons.Material.Filled.Medication">Medication Orders (e-prescribing)</MudListItem>
-            <MudListItem Icon="@Icons.Material.Filled.Science">Lab Orders</MudListItem>
-            <MudListItem Icon="@Icons.Material.Filled.RadioButtonChecked">Imaging Orders</MudListItem>
-            <MudListItem Icon="@Icons.Material.Filled.Send">Referrals & Consults</MudListItem>
-            <MudListItem Icon="@Icons.Material.Filled.ShoppingCart">Order Cart with Clinical Warnings</MudListItem>
-        </MudList>
+        <MudAutocomplete T="Patient"
+                         Label="Open patient orders"
+                         Value="_selectedPatient"
+                         ValueChanged="OnPatientChanged"
+                         SearchFunc="SearchPatients"
+                         ToStringFunc="@(p => p == null ? string.Empty : $"{p.FullName} · {p.MRN}")"
+                         Variant="Variant.Outlined"
+                         Clearable="true"
+                         ResetValueOnEmptyText="true" />
     </MudCardContent>
 </MudCard>
+
+@code {
+    private Patient? _selectedPatient;
+    private List<Patient> _patients = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _patients = await PatientService.GetAllPatientsAsync();
+
+        var uri = Navigation.ToAbsoluteUri(Navigation.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+        if (query.TryGetValue("patientId", out var idValue) && int.TryParse(idValue, out var patientId))
+        {
+            Navigation.NavigateTo($"/patients/{patientId}/orders", replace: true);
+        }
+    }
+
+    private async Task<IEnumerable<Patient>> SearchPatients(string value, CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return _patients.Take(12);
+
+        return await PatientService.SearchPatientsAsync(value);
+    }
+
+    private void OnPatientChanged(Patient? patient)
+    {
+        _selectedPatient = patient;
+        if (patient != null)
+            Navigation.NavigateTo($"/patients/{patient.Id}/orders");
+    }
+}

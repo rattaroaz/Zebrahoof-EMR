@@ -1,4 +1,8 @@
 @inject MockClinicalDataService ClinicalDataService
+@inject MockPatientService PatientService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@implements IDisposable
 
 <MudCard Elevation="2">
     <MudCardHeader>
@@ -6,7 +10,10 @@
             <MudText Typo="Typo.h6">Imaging Studies</MudText>
         </CardHeaderContent>
         <CardHeaderActions>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.MonitorHeart" Class="mr-2" OnClick="@(() => OpenOrderDialog(OrderCatalogFilter.Ekg))">
+                Order EKG
+            </MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => OpenOrderDialog(OrderCatalogFilter.Radiology))">
                 Order Imaging
             </MudButton>
         </CardHeaderActions>
@@ -46,7 +53,7 @@
                                 <MudIconButton Icon="@Icons.Material.Filled.Description" Size="Size.Small" Color="Color.Primary" />
                             </MudTooltip>
                         }
-                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" OnClick="@(() => ShowImpression(context))" />
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
@@ -65,7 +72,42 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        ClinicalDataService.PatientDataChanged += OnPatientDataChanged;
         _studies = await ClinicalDataService.GetImagingByPatientAsync(PatientId);
+    }
+
+    private async void OnPatientDataChanged(int patientId)
+    {
+        if (patientId != PatientId) return;
+        _studies = await ClinicalDataService.GetImagingByPatientAsync(PatientId);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+    }
+
+    private async Task OpenOrderDialog(OrderCatalogFilter filter)
+    {
+        var patient = await PatientService.GetPatientByIdAsync(PatientId);
+        var parameters = new DialogParameters<OrderEntryDialog>
+        {
+            { x => x.PatientId, PatientId },
+            { x => x.PatientName, patient?.FullName ?? "Patient" },
+            { x => x.InitialFilter, filter }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
+        await DialogService.ShowAsync<OrderEntryDialog>("Order", parameters, options);
+    }
+
+    private void ShowImpression(ImagingStudy study)
+    {
+        var text = string.IsNullOrWhiteSpace(study.Impression)
+            ? "No report on file yet."
+            : study.Impression;
+        Snackbar.Add($"{study.Description}: {text}", Severity.Normal);
     }
 
     private Color GetModalityColor(string modality) => modality switch
@@ -75,6 +117,8 @@
         "MRI" => Color.Primary,
         "Ultrasound" => Color.Success,
         "PET" => Color.Secondary,
+        "EKG" => Color.Secondary,
+        "Echocardiogram" => Color.Success,
         _ => Color.Default
     };
 

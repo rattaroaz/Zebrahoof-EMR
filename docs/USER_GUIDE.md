@@ -52,7 +52,7 @@ Sections and links:
 | **Patients** | Patient list and charts (`/patients`). |
 | **Schedule** | Appointments calendar (`/schedule`). |
 | **Tasks** | Task list (`/tasks`). |
-| **Orders** | Orders placeholder (`/orders`) — see note below. |
+| **Orders** | Patient picker that opens the chart **Orders** tab (`/orders`). |
 
 **Communication**
 
@@ -66,7 +66,7 @@ Sections and links:
 | Link | Opens |
 |------|--------|
 | **Settings** | System settings (`/admin/settings`). |
-| **Local AI** | Download and run the on-machine Qwen engine (`/admin/local-ai`). |
+| **Local AI** | Download and run the on-machine engine (`/admin/local-ai`). The model list is pulled from Ollama’s library at most once a week. |
 | **Templates** | Note and documentation templates (`/admin/templates`). |
 | **Sticky Notes** | Adds or manages personal sticky notes (menu shows count, e.g. `3/5`). Click the chip menu to show or hide individual notes. |
 | **Users** | User management (`/admin/users`) — **visible to Administrator role** only. |
@@ -99,6 +99,7 @@ Welcome line uses your display name.
 | **Messages** | Unread-style summary; opens **Inbox** from rows or **View All**. |
 | **Recent Interactions** | Recent activity; items can open the patient chart. Link to **Patients**. |
 | **Clinical Alerts** | Pending alerts when present. |
+| **Quick Actions** | **Find Patient**, **View Schedule**, **Check Messages**. Ordering is on the patient chart, not the home screen. |
 
 ---
 
@@ -133,9 +134,10 @@ Opens when you select a patient from the list or global search.
 - Patient **avatar**, **full name**, **MRN**, **DOB**, **age**, **sex**, **primary provider**.
 - **Allergy** chips (or **NKA** if none).
 - **Alert** chips.
+- **Order tests** — Opens the simulated order cart for this patient (labs, radiology, EKG, echo, in-office).
 - **New Note** — Quick action (documentation workflow).
 - **Appointments** — Opens an **Appointments** dialog for that patient; from there you can go to scheduling.
-- **⋮ More** menu — **Print Summary**, **Send Message**, **Create Task**.
+- **⋮ More** menu — **Order tests**, **Print Summary**, **Send Message**, **Create Task**.
 
 ### Under the banner
 
@@ -150,11 +152,12 @@ You can **drag tabs** to reorder them; order may be remembered in the browser.
 | Tab | Shows |
 |-----|--------|
 | **Encounter** | Encounter-focused content for the patient. |
-| **Summary** | High-level chart summary. |
+| **Summary** | High-level chart windows (problems, meds, allergies, and other tabs). Drag a title bar to change the order; windows stay in a grid with space between them. **Add window** places a hidden tab, **×** removes it, **Reset layout** restores defaults. Layout is remembered in the browser. |
 | **Problems** | Problem list. |
 | **Medications** | Medications. |
 | **Allergies** | Allergies. |
 | **History** | Medical history. |
+| **Orders** | Simulated order cart and this patient’s recent orders. |
 | **Labs** | Lab results. |
 | **Imaging** | Imaging. |
 | **Vitals** | Vital signs. |
@@ -199,9 +202,18 @@ Clicking an **hour row** may start booking at that time. Appointment blocks on t
 
 ---
 
-## Orders (`/orders`)
+## Orders (on the patient chart)
 
-This page is a **placeholder** for future **computerized provider order entry (CPOE)**. It lists planned capabilities (medications, labs, imaging, referrals, order cart). No live ordering workflow is available here yet.
+Open a patient. Use **Order tests** in the banner, or the **Orders** tab (`/patients/{id}/orders`). Add items to the cart and **Sign & result now**. Invented results appear immediately. The left-nav **Orders** link only picks a patient and then opens that chart tab.
+
+| Catalog | Where results land |
+|---------|--------------------|
+| **Labs** (BMP, CMP, CBC, lipids, A1c, thyroid, LFTs, UA, PT/INR, trop, BNP) | Chart **Labs** tab |
+| **Radiology** (X-ray, CT, MRI, ultrasound) and **Echo** | Chart **Imaging** tab |
+| **EKG** (12-lead, rhythm strip) | Chart **Imaging** tab (modality EKG) |
+| **In-office** (glucose, UA dipstick, strep, flu, COVID, urine hCG, POC A1c, POC INR) | Chart **Labs** tab, panel **Point of Care** |
+
+Labs and Imaging still have **Order Labs** / **In-office** / **Order Imaging** / **Order EKG**. This is not real CPOE or e-prescribing.
 
 ---
 
@@ -264,7 +276,7 @@ Typically includes **Patient**, **Active Problems**, **Current Medications**, **
 | **`/admin/locations`** | Locations and departments. |
 | **`/admin/templates`** | Template management. |
 | **`/admin/settings`** | Application settings. |
-| **`/admin/local-ai`** | Download Ollama, pick Qwen / DeepSeek / Kimi / other open models, stop a download, and see warnings if a model will not fit this PC. Chart AI stays on this machine. |
+| **`/admin/local-ai`** | Download Ollama, pick Qwen / DeepSeek / Gemma / GPT-OSS, stop a download, and see warnings if a model will not fit this PC. Chart AI stays on this machine. |
 | **`/admin/sessions`** | Active session management. |
 | **`/admin/audit-log`** | Audit log review. |
 
@@ -298,6 +310,7 @@ These are personal workspace notes, separate from **patient** sticky notes on th
 | See your day at a glance | **Dashboard** |
 | Find a patient | **Search patients** or **Patients** |
 | Open a chart | Select a patient → chart tabs |
+| Order a test | Open a patient → **Order tests** or the **Orders** tab |
 | Book or view appointments | **Schedule** |
 | Work your queue | **Tasks** |
 | Read or send internal messages | **Inbox** |
