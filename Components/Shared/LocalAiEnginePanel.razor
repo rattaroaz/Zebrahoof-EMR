@@ -1,5 +1,6 @@
 @using Zebrahoof_EMR.Services
 @inject LocalAiEngineService Engine
+@inject LocalAiLibraryCatalogService Library
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @implements IAsyncDisposable
@@ -11,7 +12,7 @@
         </CardHeaderAvatar>
         <CardHeaderContent>
             <MudText Typo="Typo.h6">Local AI engine</MudText>
-            <MudText Typo="Typo.caption" Color="Color.Secondary">Ollama on this machine · Qwen, DeepSeek, Kimi, and others</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@LibraryCaption</MudText>
         </CardHeaderContent>
         <CardHeaderActions>
             <MudChip T="string" Color="@StatusColor" Variant="Variant.Filled" Class="mt-2 mr-2">@_status.Phase</MudChip>
@@ -89,7 +90,7 @@
                                ValueChanged="OnFamilyChanged"
                                Disabled="@_busy">
                         <MudSelectItem Value="@("All")">All families</MudSelectItem>
-                        @foreach (var family in LocalAiModels.Families)
+                        @foreach (var family in _families)
                         {
                             <MudSelectItem Value="@family">@family (@FamilyCount(family))</MudSelectItem>
                         }
@@ -103,14 +104,14 @@
                                      ValueChanged="SelectModel"
                                      SearchFunc="SearchModelsAsync"
                                      ToStringFunc="FormatSelectedId"
-                                     MaxItems="200"
+                                     MaxItems="400"
                                      MaxHeight="480"
                                      OpenOnFocus="true"
                                      ResetValueOnEmptyText="false"
                                      CoerceText="false"
                                      CoerceValue="false"
                                      Disabled="@_busy"
-                                     HelperText="@($"{DropdownModels.Count()} models — type deepseek, kimi, llama, gemma, qwen3…")" />
+                                     HelperText="@($"{DropdownModels.Count()} models — Qwen, DeepSeek, Gemma, GPT-OSS")" />
                 </MudItem>
             </MudGrid>
 
@@ -138,13 +139,6 @@
                            OnClick="StartAsync">
                     Start engine
                 </MudButton>
-                <MudButton Variant="Variant.Outlined"
-                           Color="Color.Info"
-                           StartIcon="@Icons.Material.Filled.CloudDownload"
-                           Disabled="@(_busy || !_status.EngineInstalled)"
-                           OnClick="PullAsync">
-                    Download model only
-                </MudButton>
                 <MudButton Variant="Variant.Text"
                            StartIcon="@Icons.Material.Filled.Refresh"
                            Disabled="@_busy"
@@ -162,7 +156,7 @@
                                Variant="@(_familyFilter == "All" ? Variant.Filled : Variant.Outlined)"
                                Color="Color.Primary"
                                OnClick="@(() => OnFamilyChanged("All"))">All</MudButton>
-                    @foreach (var family in LocalAiModels.Families)
+                    @foreach (var family in _families)
                     {
                         var f = family;
                         <MudButton Size="Size.Small"
@@ -237,6 +231,10 @@
     private bool _hideTooLarge = true;
     private PeriodicTimer? _timer;
     private CancellationTokenSource? _pollCts;
+    private IReadOnlyList<LocalAiModelChoice> _models = LocalAiModels.Catalog;
+    private IReadOnlyList<string> _families = LocalAiModels.Families;
+    private DateTimeOffset? _libraryPulledAt;
+    private bool _libraryFromLive;
 
     private sealed record CatalogRow(LocalAiModelChoice Model, LocalAiModelFit Fit, bool Installed);
 
@@ -244,7 +242,7 @@
     {
         get
         {
-            foreach (var model in LocalAiModels.Catalog)
+            foreach (var model in _models)
             {
                 if (_familyFilter != "All" &&
                     !string.Equals(model.Family, _familyFilter, StringComparison.OrdinalIgnoreCase))
@@ -257,8 +255,13 @@
         }
     }
 
-    private static int FamilyCount(string family) =>
-        LocalAiModels.Catalog.Count(m => string.Equals(m.Family, family, StringComparison.OrdinalIgnoreCase));
+    private string LibraryCaption =>
+        _libraryFromLive && _libraryPulledAt is { } pulled
+            ? $"Ollama library on this machine · last pulled {pulled.LocalDateTime:MMM d, yyyy} · updates weekly"
+            : "Ollama on this machine · built-in list until the weekly library pull succeeds";
+
+    private int FamilyCount(string family) =>
+        _models.Count(m => string.Equals(m.Family, family, StringComparison.OrdinalIgnoreCase));
 
     private string FormatDropdownLabel(LocalAiModelChoice model)
     {
@@ -274,20 +277,20 @@
             return string.Empty;
         }
 
-        var model = LocalAiModels.Find(id);
+        var model = LocalAiModels.Find(id, _models);
         return model == null ? id : FormatDropdownLabel(model);
     }
 
     private Task<IEnumerable<string>> SearchModelsAsync(string value, CancellationToken cancellationToken)
     {
         var q = (value ?? string.Empty).Trim();
-        IEnumerable<LocalAiModelChoice> list = LocalAiModels.Catalog;
+        IEnumerable<LocalAiModelChoice> list = _models;
         if (_familyFilter != "All")
         {
             list = list.Where(m => string.Equals(m.Family, _familyFilter, StringComparison.OrdinalIgnoreCase));
         }
 
-        if (!string.IsNullOrEmpty(q) && LocalAiModels.Find(q) == null)
+        if (!string.IsNullOrEmpty(q) && LocalAiModels.Find(q, _models) == null)
         {
             list = list.Where(m =>
                 m.Id.Contains(q, StringComparison.OrdinalIgnoreCase) ||
@@ -305,7 +308,7 @@
         {
             var hw = _hardware ?? new LocalAiHardwareSnapshot { TotalRamGb = 8, AvailableRamGb = 4, CpuCores = 4 };
             var installed = _status.InstalledModels ?? Array.Empty<string>();
-            foreach (var model in LocalAiModels.Catalog)
+            foreach (var model in _models)
             {
                 if (_familyFilter != "All" &&
                     !string.Equals(model.Family, _familyFilter, StringComparison.OrdinalIgnoreCase))
@@ -341,10 +344,11 @@
     {
         Engine.StatusChanged += OnEngineStatusChanged;
         _hardware = Engine.ProbeHardware();
+        await ApplyLibraryAsync();
         var preferred = Engine.EffectiveModel;
-        if (LocalAiModels.Find(preferred) == null && _hardware != null)
+        if (LocalAiModels.Find(preferred, _models) == null && _hardware != null)
         {
-            preferred = LocalAiModels.SuggestDefault(_hardware).Id;
+            preferred = LocalAiModels.SuggestDefault(_hardware, _models).Id;
         }
         _selectedModel = preferred;
         _familyFilter = "All";
@@ -405,14 +409,14 @@
             return;
         }
 
-        var current = LocalAiModels.Find(_selectedModel);
+        var current = LocalAiModels.Find(_selectedModel, _models);
         if (current != null &&
             string.Equals(current.Family, _familyFilter, StringComparison.OrdinalIgnoreCase))
         {
             return;
         }
 
-        var firstInFamily = LocalAiModels.Catalog.FirstOrDefault(m =>
+        var firstInFamily = _models.FirstOrDefault(m =>
             string.Equals(m.Family, _familyFilter, StringComparison.OrdinalIgnoreCase));
         if (firstInFamily != null)
         {
@@ -439,14 +443,24 @@
 
     private void RecalcFit()
     {
-        var choice = LocalAiModels.Find(_selectedModel);
+        var choice = LocalAiModels.Find(_selectedModel, _models);
         _selectedFit = choice == null || _hardware == null
             ? null
             : LocalAiModels.Assess(choice, _hardware);
     }
 
+    private async Task ApplyLibraryAsync()
+    {
+        var snap = await Library.EnsureFreshAsync();
+        _models = snap.Models;
+        _families = snap.Families;
+        _libraryPulledAt = snap.PulledAtUtc;
+        _libraryFromLive = snap.FromLiveLibrary;
+    }
+
     private async Task RefreshAsync()
     {
+        await ApplyLibraryAsync();
         _status = await Engine.RefreshStatusAsync();
         _busy = _status.IsBusy;
         _hardware = _status.Hardware ?? Engine.ProbeHardware();
@@ -466,16 +480,6 @@
     private async Task StartAsync()
     {
         await RunOp(() => Engine.StartEngineAsync());
-    }
-
-    private async Task PullAsync()
-    {
-        if (!await ConfirmIfRiskyAsync())
-        {
-            return;
-        }
-
-        await RunOp(() => Engine.PullModelAsync(_selectedModel));
     }
 
     private Task StopAsync()

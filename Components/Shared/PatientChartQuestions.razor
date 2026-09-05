@@ -1,0 +1,179 @@
+@using Zebrahoof_EMR.Models
+@using Zebrahoof_EMR.Services
+@inject PatientChartAskService AskService
+@inject PatientChartAskSession AskSession
+@inject LocalAiEngineService LocalAiEngine
+@inject ISnackbar Snackbar
+@inject ILogger<PatientChartQuestions> Logger
+
+<MudPaper Elevation="1" Class="pa-3 mb-3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+        <MudStack Spacing="0">
+            <MudText Typo="Typo.subtitle1">Ask or order</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                Ask a question or tell the local AI to change this chart — problems, meds, orders, notes, and the rest of the record.
+            </MudText>
+        </MudStack>
+        @if (_turns.Count > 0)
+        {
+            <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.DeleteSweep"
+                       Disabled="@_isProcessing" OnClick="Clear">
+                Clear
+            </MudButton>
+        }
+    </MudStack>
+
+    @if (!_aiReady)
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="mb-2"
+                  Icon="@Icons.Material.Filled.SmartToy">
+            Local AI is not ready. Install a model from
+            <MudLink Href="/admin/local-ai">Local AI</MudLink>.
+            Chart data stays on this machine.
+        </MudAlert>
+    }
+
+    <MudTextField T="string"
+                  @bind-Value="_input"
+                  Label="Question or order"
+                  Placeholder="e.g. What are the active problems?  or  Order a CBC and add penicillin allergy"
+                  Variant="Variant.Outlined"
+                  Lines="3"
+                  Immediate="true"
+                  Disabled="@_isProcessing"
+                  OnKeyDown="HandleKeyDown" />
+
+    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-2">
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.Send"
+                   Disabled="@(string.IsNullOrWhiteSpace(_input) || _isProcessing)"
+                   OnClick="SendAsync">
+            @if (_isProcessing)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Working…</span>
+            }
+            else
+            {
+                <span>Send</span>
+            }
+        </MudButton>
+    </MudStack>
+
+    @if (_turns.Count == 0 && !_isProcessing)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-3">
+            Nothing asked yet. The AI can answer from this chart or carry out the change you request.
+        </MudText>
+    }
+    else
+    {
+        <MudStack Spacing="2" Class="mt-3" Style="max-height: 360px; overflow-y: auto;">
+            @foreach (var turn in Enumerable.Reverse(_turns))
+            {
+                <MudPaper Elevation="0" Outlined="true" Class="pa-3">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">@turn.CreatedAt.ToString("g")</MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mt-1">You</MudText>
+                    <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@turn.UserInput</MudText>
+                    <MudText Typo="Typo.subtitle2" Class="mt-2">AI</MudText>
+                    @if (turn.IsProcessing)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap;">@turn.Answer</MudText>
+                        @if (turn.Applied.Count > 0)
+                        {
+                            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-2">
+                                @foreach (var change in turn.Applied)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">@change</MudChip>
+                                }
+                            </MudStack>
+                        }
+                    }
+                </MudPaper>
+            }
+        </MudStack>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public Patient Patient { get; set; } = null!;
+
+    private string _input = string.Empty;
+    private bool _isProcessing;
+    private bool _aiReady;
+    private List<ChartAskInteraction> _turns = [];
+
+    protected override void OnParametersSet()
+    {
+        _turns = AskSession.For(Patient.Id);
+        _aiReady = LocalAiEngine.GetSnapshot().CanChat;
+    }
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !e.ShiftKey && !string.IsNullOrWhiteSpace(_input) && !_isProcessing)
+        {
+            await SendAsync();
+        }
+    }
+
+    private async Task SendAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_input) || _isProcessing)
+        {
+            return;
+        }
+
+        var message = _input.Trim();
+        _input = string.Empty;
+        var history = _turns
+            .Where(t => !t.IsProcessing && !string.IsNullOrWhiteSpace(t.Answer))
+            .Select(t => new ChartAskTurn(t.UserInput, t.Answer))
+            .ToList();
+
+        var turn = new ChartAskInteraction
+        {
+            UserInput = message,
+            IsProcessing = true,
+            CreatedAt = DateTime.Now
+        };
+        _turns.Add(turn);
+        _isProcessing = true;
+
+        try
+        {
+            var result = await AskService.AskAsync(Patient, message, history);
+            turn.Answer = result.Answer;
+            turn.Applied = result.Applied.ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Chart ask failed for patient {PatientId}", Patient.Id);
+            turn.Answer = $"Could not complete that request: {ex.Message}";
+            Snackbar.Add(turn.Answer, Severity.Error);
+        }
+        finally
+        {
+            turn.IsProcessing = false;
+            _isProcessing = false;
+            _aiReady = LocalAiEngine.GetSnapshot().CanChat;
+        }
+    }
+
+    private void Clear()
+    {
+        if (_isProcessing)
+        {
+            return;
+        }
+
+        AskSession.Clear(Patient.Id);
+        _turns = AskSession.For(Patient.Id);
+    }
+}

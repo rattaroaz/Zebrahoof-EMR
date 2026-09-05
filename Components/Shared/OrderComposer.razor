@@ -1,0 +1,210 @@
+@inject MockClinicalDataService ClinicalDataService
+@inject AuthStateService AuthState
+@inject ISnackbar Snackbar
+
+<MudAlert Severity="Severity.Info" Dense="true" Class="mb-4" Icon="@Icons.Material.Filled.Science">
+    Simulated ordering. Signing posts invented results immediately
+    — labs and point-of-care on the Labs tab, radiology / EKG / echo on Imaging.
+</MudAlert>
+
+<MudGrid>
+    <MudItem xs="12" md="7">
+        <MudPaper Elevation="2" Class="pa-4">
+            <MudText Typo="Typo.subtitle1" Class="mb-3">Catalog</MudText>
+            <MudButtonGroup Color="Color.Primary" Variant="Variant.Outlined" Class="flex-wrap">
+                <MudButton Variant="@FilterVariant(OrderCatalogFilter.All)" OnClick="@(() => SetFilter(OrderCatalogFilter.All))">All</MudButton>
+                <MudButton Variant="@FilterVariant(OrderCatalogFilter.Labs)" OnClick="@(() => SetFilter(OrderCatalogFilter.Labs))">Labs</MudButton>
+                <MudButton Variant="@FilterVariant(OrderCatalogFilter.Radiology)" OnClick="@(() => SetFilter(OrderCatalogFilter.Radiology))">Radiology</MudButton>
+                <MudButton Variant="@FilterVariant(OrderCatalogFilter.Ekg)" OnClick="@(() => SetFilter(OrderCatalogFilter.Ekg))">EKG</MudButton>
+                <MudButton Variant="@FilterVariant(OrderCatalogFilter.Echo)" OnClick="@(() => SetFilter(OrderCatalogFilter.Echo))">Echo</MudButton>
+                <MudButton Variant="@FilterVariant(OrderCatalogFilter.Procedure)" OnClick="@(() => SetFilter(OrderCatalogFilter.Procedure))">In-office</MudButton>
+            </MudButtonGroup>
+            <MudTextField @bind-Value="_search"
+                          Label="Search tests"
+                          Variant="Variant.Outlined"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          Class="mt-3 mb-3" />
+            <MudList T="SimulatedOrderSpec" Dense="true" Style="max-height: 420px; overflow-y: auto;">
+                @foreach (var item in VisibleCatalog)
+                {
+                    <MudListItem T="SimulatedOrderSpec" OnClick="@(() => AddToCart(item))">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.body1">@item.Name</MudText>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                    @item.Category
+                                    @if (item.RequiresFasting)
+                                    {
+                                        <text> · Fasting</text>
+                                    }
+                                    @if (item.IncludedTests.Count > 1)
+                                    {
+                                        <text> · @item.IncludedTests.Count tests</text>
+                                    }
+                                    · @item.Destination
+                                </MudText>
+                            </MudStack>
+                            <MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Size="Size.Small" />
+                        </MudStack>
+                    </MudListItem>
+                }
+            </MudList>
+            @if (!VisibleCatalog.Any())
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary pa-2">No matching tests.</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="12" md="5">
+        <MudPaper Elevation="2" Class="pa-4">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+                <MudText Typo="Typo.subtitle1">Cart (@_cart.Count)</MudText>
+                <MudButton Variant="Variant.Text" Size="Size.Small" Disabled="@(_cart.Count == 0)" OnClick="ClearCart">Clear</MudButton>
+            </MudStack>
+            <MudTextField @bind-Value="_indication" Label="Clinical indication (optional)" Variant="Variant.Outlined" Class="mb-3" />
+            <MudSelect T="string" @bind-Value="_priority" Label="Priority" Variant="Variant.Outlined" Class="mb-3">
+                <MudSelectItem Value="@("Routine")">Routine</MudSelectItem>
+                <MudSelectItem Value="@("STAT")">STAT</MudSelectItem>
+            </MudSelect>
+            @if (_cart.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">Add labs, imaging, EKG, echo, or in-office tests.</MudText>
+            }
+            else
+            {
+                <MudStack Spacing="2">
+                    @foreach (var item in _cart)
+                    {
+                        <MudPaper Elevation="0" Class="pa-2 mud-background">
+                            <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween">
+                                <MudStack Spacing="0">
+                                    <MudText Typo="Typo.body2">@item.DisplayName</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@item.Type · @item.Priority</MudText>
+                                </MudStack>
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="@(() => RemoveFromCart(item))" />
+                            </MudStack>
+                        </MudPaper>
+                    }
+                </MudStack>
+            }
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       Class="mt-4"
+                       StartIcon="@Icons.Material.Filled.AssignmentTurnedIn"
+                       Disabled="@(_cart.Count == 0 || PatientId <= 0 || _signing)"
+                       OnClick="SignCart">
+                @if (_signing)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                Sign &amp; result now
+            </MudButton>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    [Parameter]
+    public string PatientName { get; set; } = string.Empty;
+
+    [Parameter]
+    public OrderCatalogFilter InitialFilter { get; set; } = OrderCatalogFilter.All;
+
+    [Parameter]
+    public EventCallback OnSigned { get; set; }
+
+    private OrderCatalogFilter _filter = OrderCatalogFilter.All;
+    private bool _filterInitialized;
+    private string _search = string.Empty;
+    private string _indication = string.Empty;
+    private string _priority = "Routine";
+    private bool _signing;
+    private readonly List<OrderCartItem> _cart = new();
+    private List<SimulatedOrderSpec> _catalog = new();
+
+    private IEnumerable<SimulatedOrderSpec> VisibleCatalog =>
+        _catalog.Where(c =>
+            string.IsNullOrWhiteSpace(_search)
+            || c.Name.Contains(_search, StringComparison.OrdinalIgnoreCase)
+            || c.Category.Contains(_search, StringComparison.OrdinalIgnoreCase));
+
+    protected override void OnParametersSet()
+    {
+        if (!_filterInitialized)
+        {
+            _filter = InitialFilter;
+            _filterInitialized = true;
+        }
+
+        ReloadCatalog();
+    }
+
+    private void SetFilter(OrderCatalogFilter filter)
+    {
+        _filter = filter;
+        ReloadCatalog();
+    }
+
+    private Variant FilterVariant(OrderCatalogFilter filter) =>
+        _filter == filter ? Variant.Filled : Variant.Outlined;
+
+    private void ReloadCatalog()
+    {
+        _catalog = ClinicalDataService.GetSimulatedOrderCatalog(_filter);
+    }
+
+    private void AddToCart(SimulatedOrderSpec spec)
+    {
+        if (_cart.Any(c => c.DisplayName == spec.Name && c.Type == spec.Type))
+        {
+            Snackbar.Add($"{spec.Name} is already in the cart.", Severity.Info);
+            return;
+        }
+
+        _cart.Add(new OrderCartItem
+        {
+            Type = spec.Type,
+            DisplayName = spec.Name,
+            Details = string.IsNullOrWhiteSpace(_indication) ? spec.Category : _indication,
+            Priority = _priority,
+            OrderData = spec
+        });
+    }
+
+    private void RemoveFromCart(OrderCartItem item) => _cart.Remove(item);
+
+    private void ClearCart() => _cart.Clear();
+
+    private async Task SignCart()
+    {
+        if (PatientId <= 0 || _cart.Count == 0) return;
+
+        _signing = true;
+        try
+        {
+            var provider = AuthState.CurrentUser?.FullName ?? "Dr. Sarah Smith";
+            var result = await ClinicalDataService.SignSimulatedCartAsync(
+                PatientId,
+                PatientName,
+                provider,
+                _cart);
+
+            Snackbar.Add(
+                $"Signed. {result.LabResultCount} lab result(s) and {result.ImagingStudyCount} imaging/EKG study(ies) posted.",
+                Severity.Success);
+
+            _cart.Clear();
+            await OnSigned.InvokeAsync();
+        }
+        finally
+        {
+            _signing = false;
+        }
+    }
+}

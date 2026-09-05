@@ -1,0 +1,89 @@
+@inject MockClinicalDataService ClinicalDataService
+@implements IDisposable
+
+<MudStack Spacing="4">
+    <OrderComposer PatientId="Patient.Id"
+                   PatientName="Patient.FullName"
+                   OnSigned="ReloadOrders" />
+
+    <MudText Typo="Typo.h6">Recent orders</MudText>
+    @if (_orders.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Class="mud-text-secondary">No orders yet. Add a test to the cart and sign.</MudText>
+    }
+    else
+    {
+        <MudTable Items="@_orders" Hover="true" Dense="true" Elevation="2">
+            <HeaderContent>
+                <MudTh>When</MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh>Order</MudTh>
+                <MudTh>Posted to</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Result</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="When">@context.OrderedAt.ToString("g")</MudTd>
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Size="Size.Small" Color="@TypeColor(context.Type)">@context.Type</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Order">@context.DisplayName</MudTd>
+                <MudTd DataLabel="Posted to">
+                    <MudLink Href="@ChartHref(context)">@context.Destination</MudLink>
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Success">@context.Status</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Result">
+                    <MudText Typo="Typo.caption">@(context.ResultSummary ?? "—")</MudText>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudStack>
+
+@code {
+    [Parameter, EditorRequired]
+    public Patient Patient { get; set; } = null!;
+
+    private List<SimulatedOrderRecord> _orders = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        ClinicalDataService.PatientDataChanged += OnPatientDataChanged;
+        await ReloadOrders();
+    }
+
+    private async void OnPatientDataChanged(int patientId)
+    {
+        if (patientId != Patient.Id) return;
+        await ReloadOrders();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+    }
+
+    private async Task ReloadOrders()
+    {
+        _orders = await ClinicalDataService.GetSimulatedOrdersByPatientAsync(Patient.Id);
+    }
+
+    private string ChartHref(SimulatedOrderRecord order)
+    {
+        var tab = order.Destination.Equals("Imaging", StringComparison.OrdinalIgnoreCase) ? "imaging" : "labs";
+        return $"/patients/{order.PatientId}/{tab}";
+    }
+
+    private static Color TypeColor(OrderType type) => type switch
+    {
+        OrderType.Lab => Color.Info,
+        OrderType.Procedure => Color.Success,
+        OrderType.Ekg => Color.Secondary,
+        OrderType.Imaging => Color.Warning,
+        _ => Color.Default
+    };
+}

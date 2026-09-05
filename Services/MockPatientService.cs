@@ -81,6 +81,39 @@ public class MockPatientService
         return patient;
     }
 
+    public async Task<Patient?> UpdatePatientAsync(int id, Action<Patient> mutate)
+    {
+        await EnsureHydratedAsync();
+        var patient = _patients.FirstOrDefault(p => p.Id == id);
+        if (patient == null)
+        {
+            return null;
+        }
+
+        mutate(patient);
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var tracked = await db.Patients.FirstOrDefaultAsync(p => p.Id == id);
+        if (tracked != null)
+        {
+            tracked.FirstName = patient.FirstName;
+            tracked.LastName = patient.LastName;
+            tracked.Phone = patient.Phone;
+            tracked.Email = patient.Email;
+            tracked.Address = patient.Address;
+            tracked.City = patient.City;
+            tracked.State = patient.State;
+            tracked.ZipCode = patient.ZipCode;
+            tracked.PrimaryProvider = patient.PrimaryProvider;
+            tracked.InsuranceName = patient.InsuranceName;
+            tracked.InsuranceId = patient.InsuranceId;
+            await db.SaveChangesAsync();
+        }
+
+        return patient;
+    }
+
     /// <summary>
     /// Lazily merges any patients persisted in the database into the in-memory list.
     /// Seeded mock patients (Ids 1–5) are kept as-is; DB patients with the same Id win.

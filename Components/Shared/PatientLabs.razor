@@ -1,4 +1,7 @@
 @inject MockClinicalDataService ClinicalDataService
+@inject MockPatientService PatientService
+@inject IDialogService DialogService
+@implements IDisposable
 
 <MudCard Elevation="2">
     <MudCardHeader>
@@ -6,8 +9,11 @@
             <MudText Typo="Typo.h6">Laboratory Results</MudText>
         </CardHeaderContent>
         <CardHeaderActions>
-            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" Class="mr-2">
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Add" Class="mr-2" OnClick="@(() => OpenOrderDialog(OrderCatalogFilter.Labs))">
                 Order Labs
+            </MudButton>
+            <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Biotech" OnClick="@(() => OpenOrderDialog(OrderCatalogFilter.Procedure))">
+                In-office
             </MudButton>
         </CardHeaderActions>
     </MudCardHeader>
@@ -80,7 +86,34 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        ClinicalDataService.PatientDataChanged += OnPatientDataChanged;
         _labResults = await ClinicalDataService.GetLabResultsByPatientAsync(PatientId);
+    }
+
+    private async void OnPatientDataChanged(int patientId)
+    {
+        if (patientId != PatientId) return;
+        _labResults = await ClinicalDataService.GetLabResultsByPatientAsync(PatientId);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+    }
+
+    private async Task OpenOrderDialog(OrderCatalogFilter filter)
+    {
+        var patient = await PatientService.GetPatientByIdAsync(PatientId);
+        var parameters = new DialogParameters<OrderEntryDialog>
+        {
+            { x => x.PatientId, PatientId },
+            { x => x.PatientName, patient?.FullName ?? "Patient" },
+            { x => x.InitialFilter, filter }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true };
+        await DialogService.ShowAsync<OrderEntryDialog>("Order", parameters, options);
     }
 
     private Color GetStatusColor(LabResultStatus status) => status switch

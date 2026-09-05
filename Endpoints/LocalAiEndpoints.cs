@@ -123,10 +123,14 @@ public static class LocalAiEndpoints
         return Results.Ok(engine.ProbeHardware());
     }
 
-    private static IResult GetModels([FromServices] LocalAiEngineService engine)
+    private static async Task<IResult> GetModels(
+        [FromServices] LocalAiEngineService engine,
+        [FromServices] LocalAiLibraryCatalogService catalog,
+        CancellationToken cancellationToken)
     {
+        var snap = await catalog.EnsureFreshAsync(cancellationToken);
         var hw = engine.ProbeHardware();
-        var models = LocalAiModels.Catalog.Select(m =>
+        var models = snap.Models.Select(m =>
         {
             var fit = LocalAiModels.Assess(m, hw);
             return new
@@ -146,7 +150,14 @@ public static class LocalAiEndpoints
                 fitDetail = fit.Detail
             };
         });
-        return Results.Ok(new { hardware = hw, suggested = LocalAiModels.SuggestDefault(hw).Id, models });
+        return Results.Ok(new
+        {
+            hardware = hw,
+            suggested = LocalAiModels.SuggestDefault(hw, snap.Models).Id,
+            pulledAtUtc = snap.PulledAtUtc,
+            fromLiveLibrary = snap.FromLiveLibrary,
+            models
+        });
     }
 }
 
