@@ -6,6 +6,34 @@ namespace Zebrahoof.EMR.UnitTests;
 public class LocalAiEngineServiceTests
 {
     [Fact]
+    public void KnownCanChat_IsUnknownUntilProbed_AndReadyOnlyWhenEngineAndModelAreUp()
+    {
+        var unknown = new LocalAiStatus();
+        Assert.Null(unknown.KnownCanChat);
+        Assert.False(unknown.CanChat);
+
+        var ready = new LocalAiStatus
+        {
+            Phase = LocalAiPhase.Ready,
+            EngineInstalled = true,
+            EngineRunning = true,
+            ModelReady = true,
+            Model = "qwen2.5:7b"
+        };
+        Assert.True(ready.KnownCanChat);
+
+        var installedNotRunning = new LocalAiStatus
+        {
+            Phase = LocalAiPhase.NeedsSetup,
+            EngineInstalled = true,
+            EngineRunning = false,
+            ModelReady = false
+        };
+        Assert.False(installedNotRunning.KnownCanChat);
+        Assert.Contains("not running", installedNotRunning.NotReadyMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ComputePhase_ReadyWhenInstalledRunningAndModelPresent()
     {
         var phase = LocalAiEnginePaths.ComputePhase(
@@ -85,6 +113,76 @@ public class LocalAiEngineServiceTests
     {
         var dir = LocalAiEnginePaths.GetDefaultEngineDirectory(@"C:\app");
         Assert.Equal(Path.Combine(@"C:\app", "App_Data", "ai-engine", "ollama"), dir);
+    }
+
+    [Fact]
+    public void ListInstalledModelTags_ReadsOllamaManifests()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "zh-models-" + Guid.NewGuid().ToString("N"));
+        var manifests = Path.Combine(root, "manifests", "registry.ollama.ai", "library");
+        Directory.CreateDirectory(Path.Combine(manifests, "qwen2.5"));
+        Directory.CreateDirectory(Path.Combine(manifests, "qwen3"));
+        File.WriteAllText(Path.Combine(manifests, "qwen2.5", "7b"), "{}");
+        File.WriteAllText(Path.Combine(manifests, "qwen3", "8b"), "{}");
+
+        var tags = LocalAiEnginePaths.ListInstalledModelTags(root);
+
+        Assert.Contains("qwen2.5:7b", tags);
+        Assert.Contains("qwen3:8b", tags);
+        Directory.Delete(root, recursive: true);
+    }
+
+    [Fact]
+    public void ListInstalledModelTags_EmptyWhenMissing()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "zh-models-missing-" + Guid.NewGuid().ToString("N"));
+        Assert.Empty(LocalAiEnginePaths.ListInstalledModelTags(root));
+    }
+
+    [Theory]
+    [InlineData("registry.ollama.ai/library/qwen2.5/7b", "qwen2.5:7b")]
+    [InlineData("registry.ollama.ai/library/qwen3.8/27b", "qwen3.8:27b")]
+    [InlineData("registry.ollama.ai/lmstudio/foo/bar", "lmstudio/foo:bar")]
+    public void TryParseManifestTag_MapsOllamaLayout(string relative, string expected)
+    {
+        var root = Path.Combine(@"C:\models", "manifests");
+        var file = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+        Assert.True(LocalAiEnginePaths.TryParseManifestTag(root, file, out var tag));
+        Assert.Equal(expected, tag);
+    }
+
+    [Fact]
+    public void FormatSavedModelsSummary_Truncates()
+    {
+        var tags = new[] { "a", "b", "c", "d", "e", "f", "g" };
+        Assert.Equal("a, b, c, and 4 more", LocalAiEnginePaths.FormatSavedModelsSummary(tags, show: 3));
+        Assert.Equal("a, b", LocalAiEnginePaths.FormatSavedModelsSummary(["a", "b"]));
+        Assert.Equal(string.Empty, LocalAiEnginePaths.FormatSavedModelsSummary(Array.Empty<string>()));
+    }
+
+    [Fact]
+    public void PreferredModel_RoundTripsOnDisk()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "zh-pref-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        Assert.Null(LocalAiEnginePaths.TryReadPreferredModel(root));
+
+        LocalAiEnginePaths.WritePreferredModel(root, "  qwen3:8b  ");
+        Assert.Equal("qwen3:8b", LocalAiEnginePaths.TryReadPreferredModel(root));
+        Assert.True(File.Exists(LocalAiEnginePaths.GetPreferredModelPath(root)));
+
+        LocalAiEnginePaths.WritePreferredModel(root, "deepseek-r1:7b");
+        Assert.Equal("deepseek-r1:7b", LocalAiEnginePaths.TryReadPreferredModel(root));
+        Directory.Delete(root, recursive: true);
+    }
+
+    [Fact]
+    public void MergeTags_UnionsAndDedupes()
+    {
+        var merged = LocalAiEnginePaths.MergeTags(["qwen2.5:7b"], ["qwen2.5:7b", "qwen3:8b"], null);
+        Assert.Equal(2, merged.Count);
+        Assert.Contains("qwen2.5:7b", merged);
+        Assert.Contains("qwen3:8b", merged);
     }
 
     [Fact]

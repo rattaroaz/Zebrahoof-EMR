@@ -48,11 +48,12 @@ public sealed class LocalAiEngineService : IDisposable
         _options = options;
         _logger = logger;
         _probeClient = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+        _preferredModel = LocalAiEnginePaths.TryReadPreferredModel(environment.ContentRootPath);
         _status = new LocalAiStatus
         {
             Phase = LocalAiPhase.Unknown,
             Message = "Checking local AI engine…",
-            Model = options.CurrentValue.Model,
+            Model = EffectiveModel,
             Host = NormalizeHost(options.CurrentValue.BaseUrl)
         };
     }
@@ -85,7 +86,8 @@ public sealed class LocalAiEngineService : IDisposable
         var running = false;
         var modelReady = false;
         string? version = null;
-        IReadOnlyList<string> models = Array.Empty<string>();
+        var diskModels = ListOnDiskModels();
+        IReadOnlyList<string> models = diskModels;
         string? error = null;
 
         if (installed)
@@ -106,8 +108,8 @@ public sealed class LocalAiEngineService : IDisposable
             if (tags != null)
             {
                 running = true;
-                models = tags;
-                modelReady = ModelIsPresent(tags, model);
+                models = LocalAiEnginePaths.MergeTags(tags, diskModels);
+                modelReady = ModelIsPresent(models, model);
             }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException)
@@ -135,15 +137,25 @@ public sealed class LocalAiEngineService : IDisposable
         }
         else if (installed && running && modelReady)
         {
-            message = $"Ready — {model} on this machine. Clinical data is not sent to the cloud.";
+            message = $"Ready — {model} is saved on this PC and will be reused next time. Clinical data is not sent to the cloud.";
         }
         else if (installed && running && !modelReady)
         {
-            message = $"Engine is running, but {model} is not downloaded yet.";
+            message = models.Count > 0
+                ? $"Engine is running, but {model} is not downloaded yet. Already saved: {LocalAiEnginePaths.FormatSavedModelsSummary(models)}."
+                : $"Engine is running, but {model} is not downloaded yet.";
+        }
+        else if (installed && !running && models.Count > 0)
+        {
+            message = $"{models.Count} model{(models.Count == 1 ? "" : "s")} already saved on this PC ({LocalAiEnginePaths.FormatSavedModelsSummary(models)}). Start the engine to use them — no download needed.";
         }
         else if (installed && !running)
         {
             message = "Engine is installed but not running.";
+        }
+        else if (models.Count > 0)
+        {
+            message = $"{models.Count} model{(models.Count == 1 ? "" : "s")} already saved on this PC ({LocalAiEnginePaths.FormatSavedModelsSummary(models)}). Install or start the engine to use them.";
         }
         else
         {
@@ -173,6 +185,7 @@ public sealed class LocalAiEngineService : IDisposable
             EngineRunning = running,
             ModelReady = modelReady,
             InstalledModels = models,
+            ModelsDirectory = LocalAiEnginePaths.GetModelsDirectory(_environment.ContentRootPath),
             ProgressPercent = current.IsBusy ? current.ProgressPercent : null,
             ProgressDetail = current.IsBusy ? current.ProgressDetail : null,
             Error = _busyInstalling || _busyPulling ? current.Error : error,
@@ -192,7 +205,7 @@ public sealed class LocalAiEngineService : IDisposable
         {
             if (!string.IsNullOrWhiteSpace(modelId))
             {
-                _preferredModel = modelId.Trim();
+                RememberPreferredModel(modelId);
             }
 
             await InstallEngineCoreAsync(ct);
@@ -212,7 +225,7 @@ public sealed class LocalAiEngineService : IDisposable
         {
             if (!string.IsNullOrWhiteSpace(modelId))
             {
-                _preferredModel = modelId.Trim();
+                RememberPreferredModel(modelId);
             }
 
             return PullModelCoreAsync(EffectiveModel, ct);
@@ -271,9 +284,39 @@ public sealed class LocalAiEngineService : IDisposable
             return;
         }
 
-        _preferredModel = modelId.Trim();
-        _ = RefreshStatusAsync();
+        var trimmed = modelId.Trim();
+        var changed = !string.Equals(_preferredModel, trimmed, StringComparison.OrdinalIgnoreCase);
+        RememberPreferredModel(trimmed);
+        if (changed)
+        {
+            _ = RefreshStatusAsync();
+        }
     }
+
+    private void RememberPreferredModel(string modelId)
+    {
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            return;
+        }
+
+        var trimmed = modelId.Trim();
+        _preferredModel = trimmed;
+        try
+        {
+            LocalAiEnginePaths.WritePreferredModel(_environment.ContentRootPath, trimmed);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "Could not persist the selected local AI model");
+        }
+    }
+
+    public IReadOnlyList<string> ListOnDiskModels() =>
+        LocalAiEnginePaths.ListInstalledModelTagsForApp(_environment.ContentRootPath);
+
+    public IReadOnlyList<string> GetKnownInstalledModels() =>
+        LocalAiEnginePaths.MergeTags(GetSnapshot().InstalledModels, ListOnDiskModels());
 
     private async Task InstallEngineCoreAsync(CancellationToken cancellationToken)
     {
@@ -408,6 +451,22 @@ public sealed class LocalAiEngineService : IDisposable
             throw new InvalidOperationException("No local AI model is configured.");
         }
 
+        var alreadySaved = ModelIsPresent(GetKnownInstalledModels(), model);
+        if (alreadySaved)
+        {
+            PublishBusy(LocalAiPhase.DownloadingModel, $"{model} is already saved on this PC. No download needed.");
+            _busyPulling = false;
+            var status = await RefreshStatusAsync(cancellationToken);
+            Publish(status with
+            {
+                Message = $"{model} is already saved on this PC and will be reused. No download needed.",
+                ProgressPercent = null,
+                ProgressDetail = null,
+                CanCancel = false
+            });
+            return;
+        }
+
         _busyPulling = true;
         PublishBusy(LocalAiPhase.DownloadingModel, $"Downloading {model}…", progress: 0);
 
@@ -449,7 +508,8 @@ public sealed class LocalAiEngineService : IDisposable
             }
 
             var tags = await ProbeTagsAsync(host, cancellationToken) ?? Array.Empty<string>();
-            if (!ModelIsPresent(tags, model))
+            var saved = LocalAiEnginePaths.MergeTags(tags, ListOnDiskModels());
+            if (!ModelIsPresent(saved, model))
             {
                 throw new InvalidOperationException(
                     $"The engine finished the download request but {model} is not listed. Check disk space and try again.");

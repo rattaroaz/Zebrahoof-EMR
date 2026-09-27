@@ -83,6 +83,8 @@ public static class LocalAiModels
 
     public static readonly string[] SupportedFamilies = ["Qwen", "DeepSeek", "Gemma", "GPT-OSS"];
 
+    public const int MaxEnginesPerFamily = 5;
+
     public static readonly string[] Families =
         Catalog.Select(m => m.Family).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
@@ -92,6 +94,74 @@ public static class LocalAiModels
 
     public static IReadOnlyList<LocalAiModelChoice> OnlySupported(IEnumerable<LocalAiModelChoice> models) =>
         models.Where(m => IsSupportedFamily(m.Family)).ToArray();
+
+    public static bool WillRun(LocalAiFitKind kind) => kind is not LocalAiFitKind.TooLarge;
+
+    public static int FamilyRank(string family)
+    {
+        var index = Array.FindIndex(SupportedFamilies, f => string.Equals(f, family, StringComparison.OrdinalIgnoreCase));
+        return index < 0 ? SupportedFamilies.Length : index;
+    }
+
+    /// <summary>
+    /// Per family, the strongest models that will actually run on this PC.
+    /// Already-installed tags stay visible even when they no longer fit.
+    /// </summary>
+    public static IReadOnlyList<LocalAiModelChoice> SelectTopRunnablePerFamily(
+        IEnumerable<LocalAiModelChoice> models,
+        LocalAiHardwareSnapshot hw,
+        int perFamily = MaxEnginesPerFamily,
+        IEnumerable<string>? alwaysIncludeIds = null)
+    {
+        var supported = OnlySupported(models);
+        var keep = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (alwaysIncludeIds != null)
+        {
+            foreach (var id in alwaysIncludeIds)
+            {
+                if (!string.IsNullOrWhiteSpace(id) && Find(id, supported) != null)
+                {
+                    keep.Add(id.Trim());
+                }
+            }
+        }
+
+        foreach (var group in supported.GroupBy(m => m.Family, StringComparer.OrdinalIgnoreCase))
+        {
+            var top = group
+                .Select(m => (Model: m, Fit: Assess(m, hw)))
+                .Where(x => WillRun(x.Fit.Kind))
+                .OrderByDescending(x => PowerScore(x.Model))
+                .ThenBy(x => x.Model.Id, StringComparer.OrdinalIgnoreCase)
+                .Take(Math.Max(0, perFamily))
+                .Select(x => x.Model.Id);
+
+            foreach (var id in top)
+            {
+                keep.Add(id);
+            }
+        }
+
+        return supported
+            .Where(m => keep.Contains(m.Id))
+            .OrderBy(m => FamilyRank(m.Family))
+            .ThenByDescending(m => PowerScore(m))
+            .ThenBy(m => m.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    public static bool IsOfferedOnThisMachine(
+        string? id,
+        IEnumerable<LocalAiModelChoice> models,
+        LocalAiHardwareSnapshot hw,
+        IEnumerable<string>? alwaysIncludeIds = null) =>
+        Find(id, SelectTopRunnablePerFamily(models, hw, alwaysIncludeIds: alwaysIncludeIds)) != null;
+
+    /// <summary>Larger parameter count first; reasoning and weight size break ties.</summary>
+    public static double PowerScore(LocalAiModelChoice model) =>
+        model.ParameterBillion * 1000
+        + (model.Reasoning ? 10 : 0)
+        + Math.Min(model.DownloadGb, 9.99);
 
     public static LocalAiModelChoice? Find(string? id, IEnumerable<LocalAiModelChoice>? catalog = null)
     {
@@ -181,9 +251,15 @@ public static class LocalAiModels
 
     public static LocalAiModelChoice SuggestDefault(
         LocalAiHardwareSnapshot hw,
-        IReadOnlyList<LocalAiModelChoice>? catalog = null)
+        IReadOnlyList<LocalAiModelChoice>? catalog = null,
+        IEnumerable<string>? installedIds = null)
     {
         var list = catalog ?? Catalog;
+        if (list.Count == 0)
+        {
+            list = Catalog;
+        }
+
         var ranked = list
             .Where(m => IsSupportedFamily(m.Family))
             .Select(m => (Model: m, Fit: Assess(m, hw)))
@@ -192,6 +268,16 @@ public static class LocalAiModels
             .ThenByDescending(x => x.Model.ParameterBillion)
             .ThenBy(x => x.Model.Id, StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        if (installedIds != null)
+        {
+            var saved = ranked.FirstOrDefault(x =>
+                LocalAiEngineService.ModelIsPresent(installedIds, x.Model.Id));
+            if (saved.Model != null)
+            {
+                return saved.Model;
+            }
+        }
 
         var qwen = ranked.FirstOrDefault(x => x.Model.Id.StartsWith("qwen2.5:", StringComparison.OrdinalIgnoreCase)
                                               && x.Model.ParameterBillion is >= 3 and <= 8);

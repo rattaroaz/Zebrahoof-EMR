@@ -1,4 +1,5 @@
 @page "/schedule"
+@implements IDisposable
 @inject MockAppointmentService AppointmentService
 @inject IDialogService DialogService
 
@@ -397,9 +398,14 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        AppointmentService.Changed += OnAppointmentsChanged;
         _weekStart = GetWeekStart(_selectedDate ?? DateTime.Today);
         await LoadAppointments();
     }
+
+    private void OnAppointmentsChanged() => _ = InvokeAsync(LoadAppointments);
+
+    public void Dispose() => AppointmentService.Changed -= OnAppointmentsChanged;
 
     private async Task LoadAppointments()
     {

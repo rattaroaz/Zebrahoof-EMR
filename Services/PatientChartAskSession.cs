@@ -4,6 +4,21 @@ namespace Zebrahoof_EMR.Services;
 public sealed class PatientChartAskSession
 {
     private readonly Dictionary<int, List<ChartAskInteraction>> _byPatient = new();
+    private readonly HashSet<int> _open = [];
+
+    public bool IsOpen(int patientId) => _open.Contains(patientId);
+
+    public void SetOpen(int patientId, bool open)
+    {
+        if (open)
+        {
+            _open.Add(patientId);
+        }
+        else
+        {
+            _open.Remove(patientId);
+        }
+    }
 
     public List<ChartAskInteraction> For(int patientId)
     {
@@ -24,6 +39,7 @@ public sealed class ChartAskInteraction
     public string UserInput { get; set; } = string.Empty;
     public string Answer { get; set; } = string.Empty;
     public List<string> Applied { get; set; } = [];
+    public bool WarnMix { get; set; }
     public bool IsProcessing { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 }

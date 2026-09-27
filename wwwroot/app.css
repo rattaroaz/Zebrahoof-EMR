@@ -177,3 +177,197 @@ h1:focus {
     min-width: 300px !important;
     overflow: visible !important;
 }
+
+.chart-ask-launcher {
+    position: fixed;
+    right: 20px;
+    bottom: 24px;
+    z-index: 10040;
+}
+
+.chart-ask-launcher-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    cursor: pointer;
+    color: #fff;
+    background: #0f1419;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    box-shadow: 0 8px 24px rgba(15, 20, 25, 0.35);
+}
+
+.chart-ask-launcher-btn:hover {
+    background: #1a2330;
+}
+
+.chart-ask-panel {
+    position: fixed;
+    top: 72px;
+    right: 16px;
+    bottom: 16px;
+    width: min(420px, calc(100vw - 32px));
+    z-index: 10050;
+    display: flex;
+    flex-direction: column;
+    border-radius: 20px;
+    overflow: hidden;
+    background: var(--mud-palette-surface);
+    border: 1px solid var(--mud-palette-lines-default);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+}
+
+.chart-ask-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 8px 10px 16px;
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
+
+.chart-ask-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.chart-ask-header-actions {
+    display: flex;
+    align-items: center;
+}
+
+.chart-ask-thread {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px 8px;
+}
+
+.chart-ask-empty {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px 20px;
+    gap: 8px;
+}
+
+.chart-ask-empty-icon {
+    font-size: 2.4rem;
+    opacity: 0.85;
+}
+
+.chart-ask-row {
+    display: flex;
+    margin-bottom: 10px;
+}
+
+.chart-ask-row-user {
+    justify-content: flex-end;
+}
+
+.chart-ask-row-ai {
+    justify-content: flex-start;
+}
+
+.chart-ask-bubble {
+    max-width: 86%;
+    padding: 10px 14px;
+    line-height: 1.45;
+    font-size: 0.95rem;
+    word-break: break-word;
+}
+
+.chart-ask-bubble-user {
+    background: var(--mud-palette-primary);
+    color: var(--mud-palette-primary-text);
+    border-radius: 18px 18px 4px 18px;
+}
+
+.chart-ask-bubble-ai {
+    background: color-mix(in srgb, var(--mud-palette-text-primary) 8%, var(--mud-palette-surface));
+    color: var(--mud-palette-text-primary);
+    border-radius: 18px 18px 18px 4px;
+}
+
+.chart-ask-thinking {
+    opacity: 0.7;
+}
+
+.chart-ask-thinking::after {
+    content: "…";
+}
+
+.chart-ask-mix-warning {
+    margin-top: 10px;
+}
+
+.chart-ask-applied {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.chart-ask-chip {
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--mud-palette-success);
+    color: var(--mud-palette-success);
+}
+
+.chart-ask-composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 10px 12px 12px;
+    border-top: 1px solid var(--mud-palette-lines-default);
+}
+
+.chart-ask-input {
+    flex: 1;
+    resize: none;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: 16px;
+    padding: 10px 12px;
+    font: inherit;
+    background: var(--mud-palette-background);
+    color: var(--mud-palette-text-primary);
+}
+
+.chart-ask-input:focus {
+    outline: 2px solid var(--mud-palette-primary);
+    outline-offset: 1px;
+}
+
+.chart-ask-send {
+    width: 40px;
+    height: 40px;
+    border: none;
+    border-radius: 50%;
+    background: var(--mud-palette-text-primary);
+    color: var(--mud-palette-surface);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.chart-ask-send:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.chart-ask-chip-link {
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+}

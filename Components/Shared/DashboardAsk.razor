@@ -1,15 +1,15 @@
-@using Zebrahoof_EMR.Models
 @using Zebrahoof_EMR.Services
-@inject PatientChartAskService AskService
-@inject PatientChartAskSession AskSession
+@inject DashboardAskService AskService
+@inject DashboardAskSession AskSession
+@inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
-@inject ILogger<PatientChartQuestions> Logger
+@inject ILogger<DashboardAsk> Logger
 
-@if (!AskSession.IsOpen(Patient.Id))
+@if (!AskSession.IsOpen)
 {
     <div class="chart-ask-launcher">
-        <MudTooltip Text="Ask about this patient">
+        <MudTooltip Text="Ask a general question">
             <button type="button" class="chart-ask-launcher-btn" @onclick="Open" aria-label="Ask AI">
                 <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" />
                 <span>Ask AI</span>
@@ -26,7 +26,7 @@ else
                 <span>Ask AI</span>
             </div>
             <div class="chart-ask-header-actions">
-                @if (_turns.Count > 0)
+                @if (AskSession.Turns.Count > 0)
                 {
                     <MudIconButton Icon="@Icons.Material.Filled.DeleteSweep"
                                    Size="Size.Small"
@@ -41,22 +41,22 @@ else
             </div>
         </div>
 
-        <div id="@ThreadId" class="chart-ask-thread">
+        <div id="dashboard-ask-thread" class="chart-ask-thread">
             <LocalAiNotReadyAlert Class="ma-3" />
 
-            @if (_turns.Count == 0)
+            @if (AskSession.Turns.Count == 0)
             {
                 <div class="chart-ask-empty">
                     <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Class="chart-ask-empty-icon" />
-                    <MudText Typo="Typo.h6">Ask about this patient</MudText>
+                    <MudText Typo="Typo.h6">Ask a general question</MudText>
                     <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        Questions are about @Patient.FullName by default. The AI can answer or change this chart.
+                        Answers are clinic-wide and do not assume a particular patient.
                     </MudText>
                 </div>
             }
             else
             {
-                @foreach (var turn in _turns)
+                @foreach (var turn in AskSession.Turns)
                 {
                     <div class="chart-ask-row chart-ask-row-user">
                         <div class="chart-ask-bubble chart-ask-bubble-user">@turn.UserInput</div>
@@ -85,6 +85,18 @@ else
                                         }
                                     </div>
                                 }
+                                @if (turn.Patients.Count > 0)
+                                {
+                                    <div class="chart-ask-applied">
+                                        @foreach (var hit in turn.Patients)
+                                        {
+                                            <button type="button" class="chart-ask-chip chart-ask-chip-link"
+                                                    @onclick="@(() => OpenChart(hit.Id))">
+                                                Open @hit.Name
+                                            </button>
+                                        }
+                                    </div>
+                                }
                             }
                         </div>
                     </div>
@@ -95,7 +107,7 @@ else
         <div class="chart-ask-composer">
             <textarea class="chart-ask-input"
                       rows="2"
-                      placeholder="Ask about this patient…"
+                      placeholder="Ask a general question…"
                       @bind="_input"
                       @bind:event="oninput"
                       @onkeydown="HandleKeyDown"
@@ -119,20 +131,9 @@ else
 }
 
 @code {
-    [Parameter, EditorRequired]
-    public Patient Patient { get; set; } = null!;
-
     private string _input = string.Empty;
     private bool _isProcessing;
     private bool _scrollAfterRender;
-    private List<ChartAskInteraction> _turns = [];
-
-    private string ThreadId => $"chart-ask-thread-{Patient.Id}";
-
-    protected override void OnParametersSet()
-    {
-        _turns = AskSession.For(Patient.Id);
-    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -145,17 +146,18 @@ else
         try
         {
             await JS.InvokeVoidAsync("eval",
-                $"var el=document.getElementById('{ThreadId}'); if(el) el.scrollTop=el.scrollHeight;");
+                "var el=document.getElementById('dashboard-ask-thread'); if(el) el.scrollTop=el.scrollHeight;");
         }
         catch
         {
-            // Panel may have closed before scroll.
         }
     }
 
-    private void Open() => AskSession.SetOpen(Patient.Id, true);
+    private void Open() => AskSession.IsOpen = true;
 
-    private void Close() => AskSession.SetOpen(Patient.Id, false);
+    private void Close() => AskSession.IsOpen = false;
+
+    private void OpenChart(int patientId) => Navigation.NavigateTo($"/patients/{patientId}/chart");
 
     private async Task HandleKeyDown(KeyboardEventArgs e)
     {
@@ -174,31 +176,32 @@ else
 
         var message = _input.Trim();
         _input = string.Empty;
-        var history = _turns
+        var history = AskSession.Turns
             .Where(t => !t.IsProcessing && !string.IsNullOrWhiteSpace(t.Answer))
             .Select(t => new ChartAskTurn(t.UserInput, t.Answer))
             .ToList();
 
-        var turn = new ChartAskInteraction
+        var turn = new ClinicAskInteraction
         {
             UserInput = message,
             IsProcessing = true,
             CreatedAt = DateTime.Now
         };
-        _turns.Add(turn);
+        AskSession.Turns.Add(turn);
         _isProcessing = true;
         _scrollAfterRender = true;
 
         try
         {
-            var result = await AskService.AskAsync(Patient, message, history);
+            var result = await AskService.AskAsync(message, history);
             turn.Answer = result.Answer;
+            turn.Patients = result.Patients.ToList();
             turn.Applied = result.Applied.ToList();
             turn.WarnMix = result.WarnMix;
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Chart ask failed for patient {PatientId}", Patient.Id);
+            Logger.LogError(ex, "Dashboard ask failed");
             turn.Answer = $"Could not complete that request: {ex.Message}";
             Snackbar.Add(turn.Answer, Severity.Error);
         }
@@ -217,7 +220,6 @@ else
             return;
         }
 
-        AskSession.Clear(Patient.Id);
-        _turns = AskSession.For(Patient.Id);
+        AskSession.Clear();
     }
 }

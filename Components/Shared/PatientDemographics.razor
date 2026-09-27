@@ -572,8 +572,6 @@
             await Db.SaveChangesAsync();
             _uploadedDocs.Insert(0, savedDoc);
 
-            // New document uploaded - allow Send to local AI and Update Records again this session.
-            AiSession.ResetDocumentsSent(Patient.Id);
             AiSession.ResetRecordsUpdated(Patient.Id);
 
             var prompt = $"Analyze the following clinical document for patient {Patient.FirstName} {Patient.LastName}. Summarize the key patient information, including any diagnoses, medications, allergies, or critical lab results mentioned. Provide a structured and concise summary suitable for a healthcare provider.";

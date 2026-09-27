@@ -5,6 +5,7 @@
 @inject NotificationService Notifications
 @inject NavigationManager Navigation
 @inject MockClinicalDataService ClinicalData
+@inject DashboardAskSession DashboardAskSession
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -74,6 +75,10 @@
 <SessionMonitor />
 <ToastContainer />
 <StickyNoteContainer />
+@if (!PatientAskGuard.IsPatientMode(Navigation.Uri))
+{
+    <DashboardAsk />
+}
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
@@ -133,6 +138,7 @@
         AuthState.OnAuthStateChanged += OnStateChangedHandler;
         AppState.OnStateChanged += OnStateChangedHandler;
         ClinicalData.InboxChanged += OnInboxDataChanged;
+        Navigation.LocationChanged += OnLocationChanged;
         await RefreshUnreadMessageCountAsync();
     }
 
@@ -145,6 +151,16 @@
             await RefreshUnreadMessageCountAsync();
             StateHasChanged();
         });
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (PatientAskGuard.IsPatientMode(e.Location))
+        {
+            DashboardAskSession.IsOpen = false;
+        }
+
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private async void OnStateChangedHandler()
@@ -171,5 +187,6 @@
         AuthState.OnAuthStateChanged -= OnStateChangedHandler;
         AppState.OnStateChanged -= OnStateChangedHandler;
         ClinicalData.InboxChanged -= OnInboxDataChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
     }
 }

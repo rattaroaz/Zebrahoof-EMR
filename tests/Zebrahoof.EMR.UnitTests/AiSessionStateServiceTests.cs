@@ -5,17 +5,15 @@ namespace Zebrahoof.EMR.UnitTests;
 public class AiSessionStateServiceTests
 {
     [Fact]
-    public void DocumentAndRecordFlags_RoundTripPerPatient()
+    public void RecordFlags_RoundTripPerPatient()
     {
         var state = new AiSessionStateService();
 
-        Assert.False(state.HaveDocumentsBeenSent(1));
-        state.MarkDocumentsSent(1);
-        Assert.True(state.HaveDocumentsBeenSent(1));
-        Assert.False(state.HaveDocumentsBeenSent(2));
-
+        Assert.False(state.HaveRecordsBeenUpdated(1));
         state.MarkRecordsUpdated(1);
         Assert.True(state.HaveRecordsBeenUpdated(1));
+        Assert.False(state.HaveRecordsBeenUpdated(2));
+
         state.ResetRecordsUpdated(1);
         Assert.False(state.HaveRecordsBeenUpdated(1));
     }
@@ -28,7 +26,5 @@ public class AiSessionStateServiceTests
         Assert.True(state.UpdateDocumentCount(9, 1));
         Assert.False(state.UpdateDocumentCount(9, 1));
         Assert.True(state.UpdateDocumentCount(9, 3));
-        state.ResetDocumentsSent(9);
-        Assert.False(state.HaveDocumentsBeenSent(9));
     }
 }

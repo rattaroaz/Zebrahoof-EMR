@@ -37,9 +37,54 @@ public class MockAppointmentService
         "Telehealth"
     ];
 
+    public event Action? Changed;
+
     public MockAppointmentService()
     {
         _appointments = GenerateMockAppointments();
+    }
+
+    private void NotifyChanged() => Changed?.Invoke();
+
+    public Task<DateTime> FindNextOpenSlotAsync(DateTime onOrAfter, int durationMinutes = 30)
+    {
+        durationMinutes = durationMinutes is > 0 and <= 180 ? durationMinutes : 30;
+        var clinicOpen = TimeSpan.FromHours(8);
+        var clinicClose = TimeSpan.FromHours(17);
+        var cursor = SnapToQuarterHour(onOrAfter);
+        if (cursor.TimeOfDay < clinicOpen)
+        {
+            cursor = cursor.Date.Add(clinicOpen);
+        }
+
+        for (var day = 0; day < 14; day++)
+        {
+            var date = cursor.Date.AddDays(day);
+            var slot = day == 0 ? cursor : date.Add(clinicOpen);
+            while (slot.TimeOfDay.Add(TimeSpan.FromMinutes(durationMinutes)) <= clinicClose)
+            {
+                var end = slot.AddMinutes(durationMinutes);
+                var taken = _appointments.Any(a =>
+                    a.Status is not AppointmentStatus.Cancelled and not AppointmentStatus.NoShow
+                    && a.DateTime < end
+                    && slot < a.DateTime.AddMinutes(a.DurationMinutes));
+                if (!taken)
+                {
+                    return Task.FromResult(slot);
+                }
+
+                slot = slot.AddMinutes(15);
+            }
+        }
+
+        return Task.FromResult(onOrAfter.Date.AddDays(1).Add(clinicOpen));
+    }
+
+    private static DateTime SnapToQuarterHour(DateTime value)
+    {
+        var minutes = ((value.Minute + 14) / 15) * 15;
+        var snapped = value.Date.AddHours(value.Hour).AddMinutes(minutes);
+        return snapped < value ? snapped.AddMinutes(15) : snapped;
     }
 
     public Task<List<Appointment>> GetTodaysAppointmentsAsync() =>
@@ -66,7 +111,11 @@ public class MockAppointmentService
     public Task UpdateStatusAsync(int id, AppointmentStatus status)
     {
         var apt = _appointments.FirstOrDefault(a => a.Id == id);
-        if (apt != null) apt.Status = status;
+        if (apt != null)
+        {
+            apt.Status = status;
+            NotifyChanged();
+        }
         return Task.CompletedTask;
     }
 
@@ -74,6 +123,7 @@ public class MockAppointmentService
     {
         appointment.Id = _nextId++;
         _appointments.Add(appointment);
+        NotifyChanged();
         return Task.FromResult(appointment);
     }
 
@@ -91,6 +141,7 @@ public class MockAppointmentService
             existing.Location = appointment.Location;
             existing.Status = appointment.Status;
             existing.Notes = appointment.Notes;
+            NotifyChanged();
         }
         return Task.CompletedTask;
     }
@@ -98,7 +149,11 @@ public class MockAppointmentService
     public Task DeleteAppointmentAsync(int id)
     {
         var apt = _appointments.FirstOrDefault(a => a.Id == id);
-        if (apt != null) _appointments.Remove(apt);
+        if (apt != null)
+        {
+            _appointments.Remove(apt);
+            NotifyChanged();
+        }
         return Task.CompletedTask;
     }
 

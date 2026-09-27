@@ -22,6 +22,183 @@ public static class LocalAiEnginePaths
         return Path.Combine(contentRoot, "App_Data", "ai-engine", "models");
     }
 
+    public static string GetPreferredModelPath(string contentRoot) =>
+        Path.Combine(contentRoot, "App_Data", "ai-engine", "preferred-model.txt");
+
+    public static string? TryReadPreferredModel(string contentRoot)
+    {
+        try
+        {
+            var path = GetPreferredModelPath(contentRoot);
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            var value = File.ReadAllText(path).Trim();
+            return string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    public static void WritePreferredModel(string contentRoot, string modelId)
+    {
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            return;
+        }
+
+        var path = GetPreferredModelPath(contentRoot);
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        var trimmed = modelId.Trim();
+        var temp = path + ".tmp";
+        File.WriteAllText(temp, trimmed);
+        File.Copy(temp, path, overwrite: true);
+        try
+        {
+            File.Delete(temp);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    public static string GetUserOllamaModelsDirectory()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(home, ".ollama", "models");
+    }
+
+    public static IReadOnlyList<string> GetModelSearchDirectories(string contentRoot)
+    {
+        var dirs = new List<string> { GetModelsDirectory(contentRoot) };
+        var userDir = GetUserOllamaModelsDirectory();
+        if (!string.Equals(dirs[0], userDir, StringComparison.OrdinalIgnoreCase))
+        {
+            dirs.Add(userDir);
+        }
+
+        return dirs;
+    }
+
+    public static IReadOnlyList<string> ListInstalledModelTagsForApp(string contentRoot) =>
+        MergeTags(GetModelSearchDirectories(contentRoot).SelectMany(ListInstalledModelTags));
+
+    public static IReadOnlyList<string> ListInstalledModelTags(string modelsDirectory)
+    {
+        var manifests = Path.Combine(modelsDirectory, "manifests");
+        if (!Directory.Exists(manifests))
+        {
+            return Array.Empty<string>();
+        }
+
+        var tags = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        IEnumerable<string> files;
+        try
+        {
+            files = Directory.EnumerateFiles(manifests, "*", SearchOption.AllDirectories);
+        }
+        catch (IOException)
+        {
+            return Array.Empty<string>();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Array.Empty<string>();
+        }
+
+        foreach (var file in files)
+        {
+            if (TryParseManifestTag(manifests, file, out var tag))
+            {
+                tags.Add(tag);
+            }
+        }
+
+        return tags.ToArray();
+    }
+
+    public static bool TryParseManifestTag(string manifestsRoot, string manifestFile, out string tag)
+    {
+        tag = string.Empty;
+        if (string.IsNullOrWhiteSpace(manifestFile))
+        {
+            return false;
+        }
+
+        var rel = Path.GetRelativePath(manifestsRoot, manifestFile);
+        if (string.IsNullOrWhiteSpace(rel) || rel.StartsWith("..", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var parts = rel.Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 3)
+        {
+            return false;
+        }
+
+        var tagPart = parts[^1];
+        var name = parts[^2];
+        var ns = parts[^3];
+        if (string.IsNullOrWhiteSpace(tagPart) || string.IsNullOrWhiteSpace(name))
+        {
+            return false;
+        }
+
+        tag = string.Equals(ns, "library", StringComparison.OrdinalIgnoreCase)
+            ? $"{name}:{tagPart}"
+            : $"{ns}/{name}:{tagPart}";
+        return true;
+    }
+
+    public static IReadOnlyList<string> MergeTags(params IEnumerable<string>?[] sources)
+    {
+        var tags = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in sources)
+        {
+            if (source == null)
+            {
+                continue;
+            }
+
+            foreach (var name in source)
+            {
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    tags.Add(name.Trim());
+                }
+            }
+        }
+
+        return tags.ToArray();
+    }
+
+    public static string FormatSavedModelsSummary(IReadOnlyList<string> tags, int show = 6)
+    {
+        if (tags.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        var shown = tags.Take(show).ToArray();
+        var text = string.Join(", ", shown);
+        var extra = tags.Count - shown.Length;
+        return extra > 0 ? $"{text}, and {extra} more" : text;
+    }
+
     public static string GetDownloadsDirectory(string contentRoot)
     {
         return Path.Combine(contentRoot, "App_Data", "ai-engine", "downloads");

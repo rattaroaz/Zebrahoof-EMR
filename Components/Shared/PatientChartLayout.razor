@@ -2,9 +2,6 @@
 @using Zebrahoof_EMR.Data
 @using Zebrahoof_EMR.Models
 @inject NavigationManager Navigation
-@inject MockClinicalDataService ClinicalDataService
-@inject IClinicalAiService ClinicalAi
-@inject NotificationService NotificationService
 @inject AiSessionStateService AiSession
 @inject ApplicationDbContext Db
 @inject IJSRuntime JS
@@ -16,27 +13,6 @@
 
     <PatientChartMessages PatientId="Patient.Id" InitialMessageId="InboxMessageId" />
 
-    <PatientChartQuestions Patient="Patient" />
-
-    @* Send uploaded documents to the local AI engine *@
-    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="my-2">
-        <MudButton Variant="Variant.Filled"
-                   Color="@(AiSession.HaveDocumentsBeenSent(Patient.Id) ? Color.Default : Color.Success)"
-                   StartIcon="@(AiSession.HaveDocumentsBeenSent(Patient.Id) ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Send)"
-                   Disabled="@(AiSession.HaveDocumentsBeenSent(Patient.Id) || _isSendingToAi)"
-                   OnClick="SendToLocalAiAsync">
-            @if (_isSendingToAi)
-            {
-                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                <span>Sending...</span>
-            }
-            else
-            {
-                <span>@(AiSession.HaveDocumentsBeenSent(Patient.Id) ? "Documents Received" : "Send to local AI")</span>
-            }
-        </MudButton>
-    </MudStack>
-    
     @* Patient Sticky Note Toggle *@
     <div style="position: fixed; top: 80px; right: 20px; z-index: 9999;">
         <MudTooltip Text="Patient Sticky">
@@ -126,6 +102,8 @@
     </div>
 </MudStack>
 
+<PatientChartQuestions Patient="Patient" />
+
 @* Patient Sticky Note - positioned fixed *@
 <PatientStickyNoteCard @ref="_patientNoteCard" PatientId="Patient.Id" />
 
@@ -142,7 +120,6 @@
     public int? InboxMessageId { get; set; }
 
     private int _activeTabIndex;
-    private bool _isSendingToAi;
     private string? _draggingTab;
     private string? _dragOverTab;
     private const string TabOrderStorageKey = "zebrahoof-chart-tab-order";
@@ -196,8 +173,6 @@
             var grew = AiSession.UpdateDocumentCount(Patient.Id, count);
             if (grew)
             {
-                // New documents uploaded - allow Send to local AI and Update Records again
-                AiSession.ResetDocumentsSent(Patient.Id);
                 AiSession.ResetRecordsUpdated(Patient.Id);
             }
         }
@@ -333,116 +308,6 @@
         if (tab == "chart" && (currentTab == "chart" || currentTab == "summary"))
             return Color.Primary;
         return currentTab == tab ? Color.Primary : Color.Default;
-    }
-
-    private async Task SendToLocalAiAsync()
-    {
-        if (_isSendingToAi || AiSession.HaveDocumentsBeenSent(Patient.Id)) return;
-
-        _isSendingToAi = true;
-        try
-        {
-            var documents = await Db.Documents
-                .Where(d => d.PatientId == Patient.Id && !string.IsNullOrEmpty(d.ExtractedText))
-                .OrderByDescending(d => d.Date)
-                .ToListAsync();
-
-            var problems = await ClinicalDataService.GetProblemsByPatientAsync(Patient.Id);
-            var medications = await ClinicalDataService.GetMedicationsByPatientAsync(Patient.Id);
-            var allergies = await ClinicalDataService.GetAllergiesByPatientAsync(Patient.Id);
-            var latestVitals = await ClinicalDataService.GetLatestVitalsByPatientAsync(Patient.Id);
-            var recentLabs = await ClinicalDataService.GetRecentLabResultsByPatientAsync(Patient.Id, 10);
-            var immunizations = await ClinicalDataService.GetImmunizationsByPatientAsync(Patient.Id);
-
-            if (documents.Count == 0 && problems.Count == 0 && medications.Count == 0 && allergies.Count == 0)
-            {
-                NotificationService.ShowWarning("No documents or records available to send. Upload documents or add records first.");
-                return;
-            }
-
-            var payload = new System.Text.StringBuilder();
-
-            payload.AppendLine("=== PATIENT ===");
-            payload.AppendLine($"Name: {Patient.FullName}");
-            payload.AppendLine($"MRN: {Patient.MRN}");
-            payload.AppendLine($"DOB: {Patient.DateOfBirth:yyyy-MM-dd}");
-            payload.AppendLine($"Sex: {Patient.Sex}");
-            payload.AppendLine();
-
-            payload.AppendLine("=== CURRENT LOCAL RECORDS ===");
-
-            payload.AppendLine($"-- Problems ({problems.Count}) --");
-            foreach (var p in problems)
-            {
-                payload.AppendLine($"- {p.Name} | Status: {p.Status} | Onset: {p.OnsetDate:yyyy-MM-dd} | ICD: {p.IcdCode}");
-            }
-            payload.AppendLine();
-
-            payload.AppendLine($"-- Medications ({medications.Count}) --");
-            foreach (var m in medications)
-            {
-                payload.AppendLine($"- {m.Name} {m.Dose} {m.Route} {m.Frequency} | Status: {m.Status} | Start: {m.StartDate:yyyy-MM-dd}");
-            }
-            payload.AppendLine();
-
-            payload.AppendLine($"-- Allergies ({allergies.Count}) --");
-            foreach (var a in allergies)
-            {
-                payload.AppendLine($"- {a.Allergen} | Reaction: {a.Reaction} | Severity: {a.Severity} | Status: {a.Status}");
-            }
-            payload.AppendLine();
-
-            if (latestVitals != null)
-            {
-                payload.AppendLine("-- Latest Vitals --");
-                payload.AppendLine($"Date: {latestVitals.RecordedAt:yyyy-MM-dd HH:mm} | BP: {latestVitals.SystolicBP}/{latestVitals.DiastolicBP} | HR: {latestVitals.HeartRate} | Temp: {latestVitals.Temperature} | SpO2: {latestVitals.OxygenSaturation} | Wt: {latestVitals.Weight} | Ht: {latestVitals.Height}");
-                payload.AppendLine();
-            }
-
-            payload.AppendLine($"-- Recent Lab Results ({recentLabs.Count}) --");
-            foreach (var l in recentLabs)
-            {
-                payload.AppendLine($"- {l.TestName}: {l.Value} {l.Units} (ref {l.ReferenceRange}) | {l.Status} | Collected {l.CollectedAt:yyyy-MM-dd}");
-            }
-            payload.AppendLine();
-
-            payload.AppendLine($"-- Immunizations ({immunizations.Count}) --");
-            foreach (var i in immunizations)
-            {
-                payload.AppendLine($"- {i.VaccineName} | Administered: {i.AdministeredDate:yyyy-MM-dd}");
-            }
-            payload.AppendLine();
-
-            payload.AppendLine("=== UPLOADED DOCUMENTS ===");
-            if (documents.Count == 0)
-            {
-                payload.AppendLine("(none)");
-            }
-            else
-            {
-                foreach (var doc in documents)
-                {
-                    payload.AppendLine($"--- DOCUMENT: {doc.Name} | Category: {doc.Category} | Date: {doc.Date:yyyy-MM-dd} ---");
-                    payload.AppendLine(doc.ExtractedText);
-                    payload.AppendLine();
-                }
-            }
-
-            var prompt = $"You are reviewing a patient chart. The following payload contains {Patient.FullName}'s current local EMR records followed by the full text of {documents.Count} uploaded document(s). Acknowledge receipt, then provide a brief (3-5 sentence) summary noting any discrepancies between the uploaded documents and the current local records (e.g., medications in a document but not in the active list, new diagnoses, new allergies).";
-            _ = await ClinicalAi.ProcessDocumentAsync(payload.ToString(), prompt);
-
-            AiSession.MarkDocumentsSent(Patient.Id);
-            NotificationService.ShowSuccess($"Local AI received {documents.Count} document(s) and current records ({problems.Count} problems, {medications.Count} meds, {allergies.Count} allergies).");
-        }
-        catch (Exception ex)
-        {
-            NotificationService.ShowError($"Failed to send to local AI: {ex.Message}");
-        }
-        finally
-        {
-            _isSendingToAi = false;
-            StateHasChanged();
-        }
     }
 
     private async Task TogglePatientNote()

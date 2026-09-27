@@ -74,6 +74,7 @@ Sections and links:
 ### Below the main content
 
 - **Breadcrumbs** — When there is a trail, links appear under the app bar so you can step back through sections (for example Patients → a patient name).
+- **Ask AI** (lower right, management pages) — On every page where no patient chart is open (dashboard, patient list, schedule, inbox, admin, and the rest). Questions are general and do not assume a particular patient. You can book a named patient or change that patient’s chart in any way **your role allows**. If your role cannot make the change, Ask AI tells you instead of doing it. Naming a specific patient still answers, with a mixing warning. Requires Local AI.
 - **Session idle** — A small **warning chip** may appear in the bottom-right (for example “Session idle: mm:ss”) when your session is nearing idle timeout. Staying active refreshes your session; if you are idle too long, you may be signed out for security.
 
 ### Blazor reconnect
@@ -100,6 +101,7 @@ Welcome line uses your display name.
 | **Recent Interactions** | Recent activity; items can open the patient chart. Link to **Patients**. |
 | **Clinical Alerts** | Pending alerts when present. |
 | **Quick Actions** | **Find Patient**, **View Schedule**, **Check Messages**. Ordering is on the patient chart, not the home screen. |
+| **Ask AI** (lower right) | Same management-mode launcher as the other clinic pages. Ask generally (schedule, lists, clinic-wide recall). Matching patients can be opened from the reply. Naming a specific patient still answers, with a mixing warning. |
 
 ---
 
@@ -142,8 +144,7 @@ Opens when you select a patient from the list or global search.
 ### Under the banner
 
 - **Inbox-style messages** for this patient may appear here so you can read chart-related messages.
-- **Ask or order** — Below the inbox. Type a question or tell the local AI to change this chart (add a problem, discontinue a med, order a CBC, write a note, update demographics, and similar). The AI answers in place and applies the change to the record when you ask it to. Requires Local AI to be installed.
-- **Send to local AI** / **Documents Received** — Sends uploaded chart documents to the on-machine Qwen engine when it is installed; shows progress while sending and then a completed state. Install the engine from **Admin → Local AI**.
+- **Ask AI** (floating button, lower right) — Opens a chat popout over the chart. Questions are about **this patient** by default. You can ask it to change anything on the chart you are allowed to change (problems, meds, allergies, vitals, notes, orders, referrals, care team, tasks, messages, demographics, insurance, schedule, and alerts). If your role cannot make that change, Ask AI tells you instead of doing it. History and uploaded documents stay UI-only. If you ask about a different patient, the reply still comes through, with a mixing warning. Requires Local AI.
 - **Patient sticky note** (pink floating button) — Opens a **patient-specific** sticky note panel.
 
 ### Chart tabs
@@ -185,7 +186,7 @@ You can **drag tabs** to reorder them; order may be remembered in the browser.
 | **Provider** | **All Providers** or a specific provider. |
 | **Day** / **Week** | Switches calendar density. |
 
-Clicking an **hour row** may start booking at that time. Appointment blocks on the grid can be selected for details (depending on implementation).
+Clicking an **hour row** may start booking at that time. Appointment blocks on the grid can be selected for details (depending on implementation). **Ask AI** can add a named patient to the calendar; jump to the date it reports if you do not see the new block on the day you are viewing.
 
 ---
 

@@ -24,6 +24,53 @@
                 @_status.Message
             </MudAlert>
 
+            <MudPaper Outlined="true" Class="pa-3" Style="border-left: 4px solid var(--mud-palette-primary);">
+                <MudText Typo="Typo.overline" Color="Color.Primary">Currently using</MudText>
+                <MudText Typo="Typo.h6">@InUseDisplayName</MudText>
+                <MudText Typo="Typo.caption">
+                    @_selectedModel
+                    @if (SelectedIsSaved)
+                    {
+                        <text> · saved on this PC</text>
+                    }
+                    else
+                    {
+                        <text> · not downloaded yet</text>
+                    }
+                    @if (_status.ModelReady && string.Equals(_status.Model, _selectedModel, StringComparison.OrdinalIgnoreCase))
+                    {
+                        <text> · ready for chart chat</text>
+                    }
+                </MudText>
+            </MudPaper>
+
+            @if (SavedModelTags.Count > 0)
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense="false">
+                    <MudText Typo="Typo.subtitle2">Already on this PC — no download needed</MudText>
+                    <MudText Typo="Typo.body2">
+                        These models are saved on this drive and will be reused the next time you open the app.
+                    </MudText>
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap" Class="mt-2">
+                        @foreach (var tag in SavedModelTags)
+                        {
+                            var saved = tag;
+                            <MudChip T="string"
+                                     Size="Size.Small"
+                                     Color="Color.Success"
+                                     Variant="@(IsInUse(saved) ? Variant.Filled : Variant.Outlined)"
+                                     OnClick="@(() => SelectSavedModel(saved))">@saved</MudChip>
+                        }
+                    </MudStack>
+                    @if (!string.IsNullOrWhiteSpace(_status.ModelsDirectory))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                            Saved in @_status.ModelsDirectory
+                        </MudText>
+                    }
+                </MudAlert>
+            }
+
             @if (_hardware != null)
             {
                 <MudPaper Outlined="true" Class="pa-3">
@@ -74,8 +121,8 @@
                         <td>@(_status.EngineRunning ? "Yes — " + _status.Host : "No")</td>
                     </tr>
                     <tr>
-                        <td><strong>Selected model</strong></td>
-                        <td>@_selectedModel @(_status.ModelReady && string.Equals(_status.Model, _selectedModel, StringComparison.OrdinalIgnoreCase) ? "(downloaded)" : "")</td>
+                        <td><strong>Currently using</strong></td>
+                        <td>@InUseDisplayName (@_selectedModel)</td>
                     </tr>
                 </tbody>
             </MudSimpleTable>
@@ -111,7 +158,7 @@
                                      CoerceText="false"
                                      CoerceValue="false"
                                      Disabled="@_busy"
-                                     HelperText="@($"{DropdownModels.Count()} models — Qwen, DeepSeek, Gemma, GPT-OSS")" />
+                                     HelperText="@($"Using {_selectedModel} — change only by picking a different model")" />
                 </MudItem>
             </MudGrid>
 
@@ -127,10 +174,10 @@
                 }
                 <MudButton Variant="Variant.Filled"
                            Color="Color.Primary"
-                           StartIcon="@Icons.Material.Filled.Download"
+                           StartIcon="@(SelectedIsSaved ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.Download)"
                            Disabled="@_busy"
                            OnClick="InstallAllAsync">
-                    @(_status.EngineInstalled ? "Download selected model" : "Install engine and model")
+                    @PrimaryActionLabel
                 </MudButton>
                 <MudButton Variant="Variant.Outlined"
                            Color="Color.Primary"
@@ -172,7 +219,7 @@
                     <MudCheckBox T="bool" @bind-Value="_hideTooLarge" Label="Hide models that will not run" Color="Color.Primary" />
                 </MudStack>
 
-                <MudTable Items="VisibleModels" Dense="true" Hover="true" Breakpoint="Breakpoint.None"
+                <MudTable Items="VisibleModelsOrdered" Dense="true" Hover="true" Breakpoint="Breakpoint.None"
                           Height="420px" FixedHeader="true" RowClassFunc="RowClass"
                           OnRowClick="OnModelRowClick" T="CatalogRow">
                     <HeaderContent>
@@ -185,7 +232,7 @@
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd>
-                            @if (string.Equals(_selectedModel, context.Model.Id, StringComparison.OrdinalIgnoreCase))
+                            @if (IsInUse(context.Model.Id))
                             {
                                 <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" />
                             }
@@ -193,9 +240,13 @@
                         <MudTd>
                             <MudText Typo="Typo.subtitle2">@context.Model.DisplayName</MudText>
                             <MudText Typo="Typo.caption">@context.Model.Id · @context.Model.Description</MudText>
+                            @if (IsInUse(context.Model.Id))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Filled">In use</MudChip>
+                            }
                             @if (context.Installed)
                             {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">On disk</MudChip>
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Saved on this PC</MudChip>
                             }
                         </MudTd>
                         <MudTd>@context.Model.Family</MudTd>
@@ -223,7 +274,7 @@
 
     private LocalAiStatus _status = new();
     private LocalAiHardwareSnapshot? _hardware;
-    private string _selectedModel = LocalAiOptions.DefaultModel;
+    private string _selectedModel = string.Empty;
     private LocalAiModelFit? _selectedFit;
     private bool _busy;
     private string _familyFilter = "All";
@@ -237,6 +288,47 @@
     private bool _libraryFromLive;
 
     private sealed record CatalogRow(LocalAiModelChoice Model, LocalAiModelFit Fit, bool Installed);
+
+    private IReadOnlyList<string> SavedModelTags =>
+        _status.InstalledModels is { Count: > 0 } tags ? tags : Array.Empty<string>();
+
+    private bool SelectedIsSaved =>
+        LocalAiEngineService.ModelIsPresent(SavedModelTags, _selectedModel);
+
+    private bool IsInUse(string? id) =>
+        !string.IsNullOrWhiteSpace(id)
+        && (string.Equals(_selectedModel, id, StringComparison.OrdinalIgnoreCase)
+            || LocalAiEngineService.ModelIsPresent(new[] { id }, _selectedModel)
+            || LocalAiEngineService.ModelIsPresent(new[] { _selectedModel }, id));
+
+    private string InUseDisplayName
+    {
+        get
+        {
+            var choice = LocalAiModels.Find(_selectedModel, _models) ?? Library.Find(_selectedModel);
+            return choice == null
+                ? (string.IsNullOrWhiteSpace(_selectedModel) ? "None selected" : _selectedModel)
+                : $"{choice.Family} {choice.DisplayName}";
+        }
+    }
+
+    private string PrimaryActionLabel
+    {
+        get
+        {
+            if (SelectedIsSaved && _status.EngineRunning)
+            {
+                return "Use saved model";
+            }
+
+            if (SelectedIsSaved)
+            {
+                return "Start engine to use saved model";
+            }
+
+            return _status.EngineInstalled ? "Download selected model" : "Install engine and model";
+        }
+    }
 
     private IEnumerable<LocalAiModelChoice> DropdownModels
     {
@@ -257,8 +349,8 @@
 
     private string LibraryCaption =>
         _libraryFromLive && _libraryPulledAt is { } pulled
-            ? $"Ollama library on this machine · last pulled {pulled.LocalDateTime:MMM d, yyyy} · updates weekly"
-            : "Ollama on this machine · built-in list until the weekly library pull succeeds";
+            ? $"Top {LocalAiModels.MaxEnginesPerFamily} per family that run here · library pulled {pulled.LocalDateTime:MMM d, yyyy} · updates weekly"
+            : $"Top {LocalAiModels.MaxEnginesPerFamily} per family that run here · built-in list until the weekly library pull succeeds";
 
     private int FamilyCount(string family) =>
         _models.Count(m => string.Equals(m.Family, family, StringComparison.OrdinalIgnoreCase));
@@ -267,7 +359,9 @@
     {
         var hw = _hardware ?? new LocalAiHardwareSnapshot { TotalRamGb = 8, AvailableRamGb = 4, CpuCores = 4 };
         var fit = LocalAiModels.Assess(model, hw);
-        return $"{model.Family} · {model.DisplayName}  ({model.Id})  ·  ~{model.DownloadGb:0.#} GB  ·  {fit.Title}";
+        var onDisk = LocalAiEngineService.ModelIsPresent(SavedModelTags, model.Id);
+        var saved = onDisk ? "  ·  On this PC" : string.Empty;
+        return $"{model.Family} · {model.DisplayName}  ({model.Id})  ·  ~{model.DownloadGb:0.#} GB  ·  {fit.Title}{saved}";
     }
 
     private string FormatSelectedId(string? id)
@@ -340,17 +434,14 @@
         }
     }
 
+    private IEnumerable<CatalogRow> VisibleModelsOrdered =>
+        VisibleModels.OrderByDescending(r => r.Installed).ThenBy(r => r.Model.Family, StringComparer.OrdinalIgnoreCase);
+
     protected override async Task OnInitializedAsync()
     {
         Engine.StatusChanged += OnEngineStatusChanged;
         _hardware = Engine.ProbeHardware();
         await ApplyLibraryAsync();
-        var preferred = Engine.EffectiveModel;
-        if (LocalAiModels.Find(preferred, _models) == null && _hardware != null)
-        {
-            preferred = LocalAiModels.SuggestDefault(_hardware, _models).Id;
-        }
-        _selectedModel = preferred;
         _familyFilter = "All";
         RecalcFit();
         await RefreshAsync();
@@ -404,24 +495,6 @@
     private void OnFamilyChanged(string family)
     {
         _familyFilter = string.IsNullOrWhiteSpace(family) ? "All" : family;
-        if (_familyFilter == "All")
-        {
-            return;
-        }
-
-        var current = LocalAiModels.Find(_selectedModel, _models);
-        if (current != null &&
-            string.Equals(current.Family, _familyFilter, StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        var firstInFamily = _models.FirstOrDefault(m =>
-            string.Equals(m.Family, _familyFilter, StringComparison.OrdinalIgnoreCase));
-        if (firstInFamily != null)
-        {
-            SelectModel(firstInFamily.Id);
-        }
     }
 
     private void OnModelRowClick(TableRowClickEventArgs<CatalogRow> args)
@@ -441,6 +514,19 @@
         RecalcFit();
     }
 
+    private void SelectSavedModel(string id)
+    {
+        if (_busy)
+        {
+            return;
+        }
+
+        var match = _models.FirstOrDefault(m =>
+            string.Equals(m.Id, id, StringComparison.OrdinalIgnoreCase)
+            || LocalAiEngineService.ModelIsPresent(new[] { id }, m.Id));
+        SelectModel(match?.Id ?? id);
+    }
+
     private void RecalcFit()
     {
         var choice = LocalAiModels.Find(_selectedModel, _models);
@@ -452,18 +538,45 @@
     private async Task ApplyLibraryAsync()
     {
         var snap = await Library.EnsureFreshAsync();
-        _models = snap.Models;
-        _families = snap.Families;
+        var hw = _hardware ?? Engine.ProbeHardware();
+        var keep = LocalAiEnginePaths.MergeTags(
+            Engine.GetKnownInstalledModels(),
+            [Engine.EffectiveModel, _selectedModel]);
+        var offered = Library.GetOfferedForHardware(hw, keep);
+        _models = offered.Models;
+        _families = offered.Families.Count > 0 ? offered.Families : snap.Families;
         _libraryPulledAt = snap.PulledAtUtc;
         _libraryFromLive = snap.FromLiveLibrary;
+        RestoreUserSelection();
+    }
+
+    private void RestoreUserSelection()
+    {
+        var preferred = Engine.EffectiveModel;
+        if (string.IsNullOrWhiteSpace(preferred))
+        {
+            return;
+        }
+
+        _selectedModel = preferred;
+        if (LocalAiModels.Find(preferred, _models) != null)
+        {
+            return;
+        }
+
+        var extra = Library.Find(preferred) ?? LocalAiModels.Find(preferred);
+        if (extra != null)
+        {
+            _models = _models.Append(extra).ToArray();
+        }
     }
 
     private async Task RefreshAsync()
     {
-        await ApplyLibraryAsync();
         _status = await Engine.RefreshStatusAsync();
         _busy = _status.IsBusy;
         _hardware = _status.Hardware ?? Engine.ProbeHardware();
+        await ApplyLibraryAsync();
         RecalcFit();
     }
 
@@ -496,6 +609,11 @@
 
     private async Task<bool> ConfirmIfRiskyAsync()
     {
+        if (SelectedIsSaved)
+        {
+            return true;
+        }
+
         if (_selectedFit?.Kind == LocalAiFitKind.TooLarge)
         {
             var ok = await DialogService.ShowMessageBox(
@@ -524,9 +642,18 @@
         _busy = true;
         try
         {
+            var alreadySaved = SelectedIsSaved;
             await work();
             await RefreshAsync();
-            if (_status.CanChat)
+            if (alreadySaved)
+            {
+                Snackbar.Add($"{_selectedModel} is already saved on this PC. No download needed.", Severity.Success);
+            }
+            else if (SelectedIsSaved)
+            {
+                Snackbar.Add($"{_selectedModel} is saved on this drive and will be available next time without downloading again.", Severity.Success);
+            }
+            else if (_status.CanChat)
             {
                 Snackbar.Add("Local AI is ready. Chart chat and document analysis stay on this machine.", Severity.Success);
             }
@@ -548,7 +675,7 @@
     }
 
     private string RowClass(CatalogRow row, int _) =>
-        string.Equals(row.Model.Id, _selectedModel, StringComparison.OrdinalIgnoreCase)
+        IsInUse(row.Model.Id)
             ? "mud-theme-primary mud-opacity-text"
             : string.Empty;
 

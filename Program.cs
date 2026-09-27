@@ -240,8 +240,12 @@ builder.Services.AddHttpClient<IClinicalAiService, LocalAiService>((sp, client) 
 builder.Services.AddSingleton<LocalAiEngineService>();
 builder.Services.AddHostedService<LocalAiStartupHostedService>();
 builder.Services.AddScoped<PatientRecordUpdateService>();
+builder.Services.AddSingleton<AskAppointmentActions>();
+builder.Services.AddSingleton<ChartPrivilegeService>();
 builder.Services.AddScoped<PatientChartAskService>();
 builder.Services.AddScoped<PatientChartAskSession>();
+builder.Services.AddScoped<DashboardAskService>();
+builder.Services.AddScoped<DashboardAskSession>();
 builder.Services.AddScoped<EncounterMessageService>();
 builder.Services.AddScoped<AiSessionStateService>();
 

@@ -1,0 +1,76 @@
+@using Zebrahoof_EMR.Services
+@inject LocalAiEngineService Engine
+@inject ILogger<LocalAiNotReadyAlert> Logger
+@implements IDisposable
+
+@if (_confirmed && _status.KnownCanChat == false)
+{
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Outlined" Dense="true" Class="@Class"
+              Icon="@Icons.Material.Filled.SmartToy">
+        @_status.NotReadyMessage
+        <MudLink Href="/admin/local-ai">@(_status.EngineInstalled ? "Open Local AI" : "Install a model")</MudLink>.
+        @if (!string.IsNullOrWhiteSpace(Note))
+        {
+            <span> @Note</span>
+        }
+    </MudAlert>
+}
+
+@code {
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public string? Note { get; set; }
+
+    private LocalAiStatus _status = new();
+    private bool _confirmed;
+
+    protected override void OnInitialized()
+    {
+        Engine.StatusChanged += OnEngineStatusChanged;
+        _status = Engine.GetSnapshot();
+        if (_status.CanChat)
+        {
+            _confirmed = true;
+            return;
+        }
+
+        _ = RefreshAsync();
+    }
+
+    private void OnEngineStatusChanged()
+    {
+        _ = InvokeAsync(() =>
+        {
+            var status = Engine.GetSnapshot();
+            _status = status;
+            if (status.CanChat)
+            {
+                _confirmed = true;
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            var status = await Engine.RefreshStatusAsync();
+            await InvokeAsync(() =>
+            {
+                _status = status;
+                _confirmed = true;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not refresh local AI readiness for Ask");
+        }
+    }
+
+    public void Dispose() => Engine.StatusChanged -= OnEngineStatusChanged;
+}

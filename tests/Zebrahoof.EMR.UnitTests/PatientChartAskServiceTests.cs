@@ -81,16 +81,97 @@ public class PatientChartAskServiceTests
         ], applied, failed);
 
         Assert.Empty(applied);
-        Assert.Contains(failed, f => f.Contains("unknown", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(failed, f =>
+            f.Contains("not a supported", StringComparison.OrdinalIgnoreCase)
+            || f.Contains("unknown", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ApplyActions_FrontDeskCannotPrescribe()
+    {
+        var clinical = new MockClinicalDataService();
+        var patients = new MockPatientService(Substitute.For<IServiceScopeFactory>());
+        var service = new PatientChartAskService(
+            clinical,
+            patients,
+            new AskAppointmentActions(new MockAppointmentService()),
+            new ChartPrivilegeService(),
+            SignedIn(UserRole.FrontDesk),
+            Substitute.For<IClinicalAiService>(),
+            NullLogger<PatientChartAskService>.Instance);
+        var patient = new Patient { Id = 1, FirstName = "Test", LastName = "Patient" };
+
+        var applied = new List<string>();
+        var failed = new List<string>();
+        await service.ApplyActionsAsync(patient,
+        [
+            new ChartAskAction { Op = "prescribe", Name = "Amoxicillin", Dose = "500 mg" }
+        ], applied, failed);
+
+        Assert.Empty(applied);
+        Assert.Contains(failed, f => f.Contains("Front Desk", StringComparison.OrdinalIgnoreCase));
+        var meds = await clinical.GetMedicationsByPatientAsync(patient.Id);
+        Assert.DoesNotContain(meds, m => m.Name.Contains("Amoxicillin", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task ApplyActions_SchedulesAppointmentForOpenChart()
+    {
+        var appointments = new MockAppointmentService();
+        var clinical = new MockClinicalDataService();
+        var patients = new MockPatientService(Substitute.For<IServiceScopeFactory>());
+        var service = new PatientChartAskService(
+            clinical,
+            patients,
+            new AskAppointmentActions(appointments),
+            new ChartPrivilegeService(),
+            SignedIn(UserRole.Physician),
+            Substitute.For<IClinicalAiService>(),
+            NullLogger<PatientChartAskService>.Instance);
+        var patient = new Patient { Id = 4, FirstName = "Maria", LastName = "Garcia", PrimaryProvider = "Dr. Sarah Smith" };
+        var when = DateTime.Today.AddDays(6).AddHours(10);
+
+        var applied = new List<string>();
+        var failed = new List<string>();
+        await service.ApplyActionsAsync(patient,
+        [
+            new ChartAskAction
+            {
+                Op = "add_appointment",
+                PatientId = 4,
+                PatientName = "Maria Garcia",
+                ScheduledAt = when.ToString("yyyy-MM-ddTHH:mm:ss")
+            }
+        ], applied, failed);
+
+        Assert.Empty(failed);
+        Assert.Contains(applied, a => a.Contains("Maria Garcia", StringComparison.OrdinalIgnoreCase));
+        var created = await appointments.GetAppointmentsByPatientAsync(4);
+        Assert.Contains(created, a => a.DateTime == when);
     }
 
     private static (PatientChartAskService Service, MockClinicalDataService Clinical, Patient Patient) CreateService()
     {
         var clinical = new MockClinicalDataService();
         var patients = new MockPatientService(Substitute.For<IServiceScopeFactory>());
+        var schedule = new AskAppointmentActions(new MockAppointmentService());
         var ai = Substitute.For<IClinicalAiService>();
-        var service = new PatientChartAskService(clinical, patients, ai, NullLogger<PatientChartAskService>.Instance);
+        var service = new PatientChartAskService(
+            clinical,
+            patients,
+            schedule,
+            new ChartPrivilegeService(),
+            SignedIn(UserRole.Physician),
+            ai,
+            NullLogger<PatientChartAskService>.Instance);
         var patient = new Patient { Id = 1, FirstName = "Test", LastName = "Patient", PrimaryProvider = "Dr. Smith" };
         return (service, clinical, patient);
+    }
+
+    private static AuthStateService SignedIn(UserRole role)
+    {
+        var auth = new AuthStateService();
+        auth.Login(new User { Id = 1, Username = "tester", FullName = "Test User", Role = role });
+        return auth;
     }
 }

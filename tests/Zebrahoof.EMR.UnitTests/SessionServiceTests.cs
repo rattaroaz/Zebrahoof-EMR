@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Zebrahoof_EMR.Data;
 using Zebrahoof_EMR.Hubs;
@@ -17,7 +18,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -49,7 +50,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -73,7 +74,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var retrieved = await service.GetSessionAsync(Guid.NewGuid());
 
@@ -87,7 +88,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -111,7 +112,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -139,7 +140,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -169,7 +170,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var result = await service.RotateRefreshTokenAsync(Guid.NewGuid());
 
@@ -177,8 +178,36 @@ public class SessionServiceTests
         _ = auditLogger.DidNotReceiveWithAnyArgs().LogAsync(default!, default!, default!, default!, default);
     }
 
-    [Fact(Skip = "FK constraint issue - requires user seeding refactor")]
-    public Task RevokeSessionAsync_RevokesSessionAndNotifies() => Task.CompletedTask;
+    [Fact]
+    public async Task RevokeSessionAsync_RevokesSessionAndNotifies()
+    {
+        await using var context = CreateDbContext();
+        var userId = await SeedTestUserAsync(context);
+        var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+        var (hubContext, hubClients, clientProxy) = CreateHubContext();
+        var auditLogger = Substitute.For<IAuditLogger>();
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
+
+        var session = await service.CreateSessionAsync(
+            userId: userId,
+            deviceFingerprint: "fp",
+            deviceName: "Surface",
+            ipAddress: "10.0.0.1",
+            idleTimeout: TimeSpan.FromMinutes(15),
+            absoluteLifetime: TimeSpan.FromHours(12));
+
+        await service.RevokeSessionAsync(session.Id, "admin_revoke");
+
+        var stored = await context.UserSessions.FindAsync(session.Id);
+        Assert.True(stored!.IsRevoked);
+        await auditLogger.Received(1)
+            .LogAsync("session_revoked", $"session:{session.Id}", "admin_revoke", userId, Arg.Any<CancellationToken>());
+        hubClients.Received(1).Group(session.Id.ToString());
+        await clientProxy.Received(1).SendCoreAsync(
+            "ForceLogout",
+            Arg.Is<object[]>(args => args.Length == 1 && (string)args[0] == "admin_revoke"),
+            Arg.Any<CancellationToken>());
+    }
 
     [Fact]
     public async Task RevokeSessionAsync_DoesNothing_WhenSessionNotFound()
@@ -187,7 +216,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         await service.RevokeSessionAsync(Guid.NewGuid(), "Test revocation");
 
@@ -203,7 +232,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -226,7 +255,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -248,7 +277,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -270,7 +299,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -292,7 +321,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -316,7 +345,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -340,7 +369,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -358,11 +387,42 @@ public class SessionServiceTests
         Assert.Equal(TimeSpan.FromHours(12).Subtract(TimeSpan.FromMinutes(5)), absoluteRemaining);
     }
 
-    [Fact(Skip = "FK constraint issue - requires user seeding refactor")]
-    public Task GetActiveSessionsAsync_ReturnsOnlyActiveSessions() => Task.CompletedTask;
+    [Fact]
+    public async Task GetActiveSessionsAsync_ReturnsOnlyActiveSessions()
+    {
+        await using var context = CreateDbContext();
+        var userId = await SeedTestUserAsync(context);
+        var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+        var (hubContext, _, _) = CreateHubContext();
+        var auditLogger = Substitute.For<IAuditLogger>();
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
-    [Fact(Skip = "FK constraint issue - requires user seeding refactor")]
-    public Task GetActiveSessionCountAsync_ReturnsCorrectCount() => Task.CompletedTask;
+        var active = await service.CreateSessionAsync(userId, "fp-a", "A", "10.0.0.1", TimeSpan.FromMinutes(15), TimeSpan.FromHours(12));
+        var revoked = await service.CreateSessionAsync(userId, "fp-b", "B", "10.0.0.2", TimeSpan.FromMinutes(15), TimeSpan.FromHours(12));
+        await service.RevokeSessionAsync(revoked.Id, "test");
+
+        var sessions = await service.GetActiveSessionsAsync();
+
+        Assert.Contains(sessions, s => s.Id == active.Id);
+        Assert.DoesNotContain(sessions, s => s.Id == revoked.Id);
+    }
+
+    [Fact]
+    public async Task GetActiveSessionCountAsync_ReturnsCorrectCount()
+    {
+        await using var context = CreateDbContext();
+        var userId = await SeedTestUserAsync(context);
+        var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+        var (hubContext, _, _) = CreateHubContext();
+        var auditLogger = Substitute.For<IAuditLogger>();
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
+
+        await service.CreateSessionAsync(userId, "fp-a", "A", "10.0.0.1", TimeSpan.FromMinutes(15), TimeSpan.FromHours(12));
+        var extra = await service.CreateSessionAsync(userId, "fp-b", "B", "10.0.0.2", TimeSpan.FromMinutes(15), TimeSpan.FromHours(12));
+        await service.RevokeSessionAsync(extra.Id, "test");
+
+        Assert.Equal(1, await service.GetActiveSessionCountAsync());
+    }
 
     [Fact]
     public async Task GetActiveSessionInfosAsync_ReturnsSessionInfos()
@@ -371,7 +431,7 @@ public class SessionServiceTests
         var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
         var (hubContext, hubClients, clientProxy) = CreateHubContext();
         var auditLogger = Substitute.For<IAuditLogger>();
-        var service = new SessionService(context, auditLogger, timeProvider, hubContext);
+        var service = new SessionService(context, auditLogger, timeProvider, hubContext, NullLogger<SessionService>.Instance);
 
         var session = await service.CreateSessionAsync(
             userId: "Admin",
@@ -410,18 +470,19 @@ public class SessionServiceTests
         return context;
     }
 
-    private static async Task SeedTestUserAsync(ApplicationDbContext context, string userId)
+    private static async Task<string> SeedTestUserAsync(ApplicationDbContext context)
     {
-        var user = new ApplicationUser 
-        { 
-            Id = userId, 
-            UserName = userId, 
-            NormalizedUserName = userId.ToUpperInvariant(), 
+        var userId = Guid.NewGuid().ToString();
+        context.Users.Add(new ApplicationUser
+        {
+            Id = userId,
+            UserName = $"user-{userId[..8]}",
+            NormalizedUserName = $"USER-{userId[..8]}".ToUpperInvariant(),
             Email = $"{userId}@test.com",
-            IsActive = true 
-        };
-        context.Users.Add(user);
+            IsActive = true
+        });
         await context.SaveChangesAsync();
+        return userId;
     }
 }
 

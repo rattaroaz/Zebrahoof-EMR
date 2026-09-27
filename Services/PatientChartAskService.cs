@@ -11,7 +11,8 @@ public sealed record ChartAskTurn(string UserInput, string AssistantResponse);
 public sealed record ChartAskResult(
     string Answer,
     IReadOnlyList<string> Applied,
-    IReadOnlyList<string> Failed);
+    IReadOnlyList<string> Failed,
+    bool WarnMix = false);
 
 /// <summary>
 /// Chart-level ask/order: the local AI can answer questions and apply structured
@@ -27,17 +28,26 @@ public sealed class PatientChartAskService
 
     private readonly MockClinicalDataService _clinical;
     private readonly MockPatientService _patients;
+    private readonly AskAppointmentActions _schedule;
+    private readonly ChartPrivilegeService _privileges;
+    private readonly AuthStateService _auth;
     private readonly IClinicalAiService _ai;
     private readonly ILogger<PatientChartAskService> _logger;
 
     public PatientChartAskService(
         MockClinicalDataService clinical,
         MockPatientService patients,
+        AskAppointmentActions schedule,
+        ChartPrivilegeService privileges,
+        AuthStateService auth,
         IClinicalAiService ai,
         ILogger<PatientChartAskService> logger)
     {
         _clinical = clinical;
         _patients = patients;
+        _schedule = schedule;
+        _privileges = privileges;
+        _auth = auth;
         _ai = ai;
         _logger = logger;
     }
@@ -52,15 +62,18 @@ public sealed class PatientChartAskService
         var system = BuildSystemPrompt(patient, snapshot);
         var raw = await _ai.ChatAsync(system, history.Select(t => new ChatTurn(t.UserInput, t.AssistantResponse)), userMessage, cancellationToken);
 
+        var roster = await _patients.GetAllPatientsAsync();
+        var warnMix = PatientAskGuard.ShouldWarnInPatientMode(userMessage, roster, patient.Id);
+
         if (string.IsNullOrWhiteSpace(raw) || raw.StartsWith("Error", StringComparison.OrdinalIgnoreCase))
         {
-            return new ChartAskResult(raw ?? "No response from the local AI engine.", [], []);
+            return new ChartAskResult(raw ?? "No response from the local AI engine.", [], [], warnMix);
         }
 
         if (!TryParse(raw, out var parsed, out var parseError) || parsed == null)
         {
             _logger.LogWarning("Chart ask response was not structured JSON: {Error}", parseError);
-            return new ChartAskResult(raw.Trim(), [], []);
+            return await WithScheduleFallbackAsync(raw.Trim(), userMessage, roster, patient.Id, [], [], warnMix);
         }
 
         var applied = new List<string>();
@@ -78,7 +91,57 @@ public sealed class PatientChartAskService
             answer += "\n\nCould not complete:\n- " + string.Join("\n- ", failed);
         }
 
-        return new ChartAskResult(answer, applied, failed);
+        return await WithScheduleFallbackAsync(answer, userMessage, roster, patient.Id, applied, failed, warnMix);
+    }
+
+    private async Task<ChartAskResult> WithScheduleFallbackAsync(
+        string answer,
+        string userMessage,
+        IReadOnlyList<Patient> roster,
+        int patientId,
+        List<string> applied,
+        List<string> failed,
+        bool warnMix)
+    {
+        if (!applied.Any(a => a.StartsWith("Scheduled ", StringComparison.Ordinal))
+            && AskAppointmentActions.LooksLikeScheduleRequest(userMessage))
+        {
+            var scheduled = await _schedule.ScheduleAsync(new ChartAskAction { Op = "add_appointment" }, roster, patientId);
+            RecordScheduleResult(scheduled, applied, failed);
+            if (applied.Count > 0)
+            {
+                answer += "\n\nChanged on this chart:\n- " + applied[^1];
+            }
+            else if (failed.Count > 0)
+            {
+                answer += "\n\nCould not complete:\n- " + failed[^1];
+            }
+        }
+
+        return new ChartAskResult(answer, applied, failed, warnMix);
+    }
+
+    private async Task<string> ScheduleAsync(Patient patient, ChartAskAction action)
+    {
+        return await _schedule.ScheduleAsync(action, [patient], patient.Id);
+    }
+
+    private Task<string> CancelAppointmentAsync(int patientId, ChartAskAction action) =>
+        _schedule.CancelAsync(patientId, action);
+
+    private Task<string> RescheduleAppointmentAsync(Patient patient, ChartAskAction action) =>
+        _schedule.RescheduleAsync(patient, action);
+
+    private static void RecordScheduleResult(string summary, List<string> applied, List<string> failed)
+    {
+        if (summary.StartsWith("skip:", StringComparison.OrdinalIgnoreCase))
+        {
+            failed.Add(summary[5..].Trim());
+        }
+        else
+        {
+            applied.Add(summary);
+        }
     }
 
     public async Task ApplyActionsAsync(
@@ -118,6 +181,18 @@ public sealed class PatientChartAskService
         if (changed)
         {
             _clinical.NotifyPatientDataChanged(patient.Id);
+            _logger.LogInformation(
+                "Chart ask applied {AppliedCount} change(s) for patient {PatientId}",
+                applied.Count,
+                patient.Id);
+        }
+
+        if (failed.Count > 0)
+        {
+            _logger.LogWarning(
+                "Chart ask could not complete {FailedCount} action(s) for patient {PatientId}",
+                failed.Count,
+                patient.Id);
         }
     }
 
@@ -145,7 +220,19 @@ public sealed class PatientChartAskService
 
     private async Task<string> ApplyOneAsync(Patient patient, ChartAskAction action)
     {
-        var op = action.Op.Trim().ToLowerInvariant().Replace('-', '_');
+        var op = ChartPrivilegeService.Normalize(action.Op);
+        var gate = _privileges.Evaluate(_auth.CurrentUser?.Role, op);
+        if (!gate.Allowed)
+        {
+            _logger.LogWarning(
+                "Chart ask denied for {Op} on patient {PatientId} by {Role}: {Reason}",
+                op,
+                patient.Id,
+                _auth.CurrentUser?.Role,
+                gate.Message);
+            return $"skip: {gate.Message}";
+        }
+
         return op switch
         {
             "add_problem" => await AddProblemAsync(patient.Id, action),
@@ -157,16 +244,27 @@ public sealed class PatientChartAskService
             "prescribe" => await PrescribeAsync(patient.Id, action),
             "refill" => await RefillAsync(patient.Id, action),
             "add_allergy" => await AddAllergyAsync(patient.Id, action),
+            "update_allergy" => await UpdateAllergyAsync(patient.Id, action),
             "remove_allergy" or "resolve_allergy" => await RemoveAllergyAsync(patient.Id, action),
             "add_vitals" => await AddVitalsAsync(patient.Id, action),
             "add_note" => await AddNoteAsync(patient.Id, action),
+            "update_note" => await UpdateNoteAsync(patient.Id, action),
+            "delete_note" => await DeleteNoteAsync(patient.Id, action),
             "add_immunization" => await AddImmunizationAsync(patient.Id, action),
             "order" or "order_lab" or "order_imaging" => await OrderAsync(patient, action),
+            "add_referral" => await AddReferralAsync(patient, action),
             "add_care_team" => await AddCareTeamAsync(patient.Id, action),
             "create_task" => await CreateTaskAsync(patient, action),
             "send_message" => await SendMessageAsync(patient, action),
+            "acknowledge_alert" => await AcknowledgeAlertAsync(patient.Id, action),
             "update_demographics" => await UpdateDemographicsAsync(patient, action),
+            "add_emergency_contact" => await AddEmergencyContactAsync(patient.Id, action),
+            "update_insurance" => await UpdateInsuranceAsync(patient.Id, action),
             "update_encounter" => await UpdateEncounterAsync(patient.Id, action),
+            "add_appointment" or "schedule" or "schedule_appointment" =>
+                await ScheduleAsync(patient, action),
+            "cancel_appointment" => await CancelAppointmentAsync(patient.Id, action),
+            "reschedule_appointment" => await RescheduleAppointmentAsync(patient, action),
             _ => $"skip: unknown action '{action.Op}'"
         };
     }
@@ -339,6 +437,34 @@ public sealed class PatientChartAskService
         return $"Added allergy {allergen}";
     }
 
+    private async Task<string> UpdateAllergyAsync(int patientId, ChartAskAction action)
+    {
+        var allergen = action.Allergen ?? action.Name;
+        if (string.IsNullOrWhiteSpace(allergen))
+        {
+            return "skip: allergy name required";
+        }
+
+        var allergies = await _clinical.GetAllergiesByPatientAsync(patientId);
+        var match = allergies.FirstOrDefault(a => a.Allergen.Equals(allergen, StringComparison.OrdinalIgnoreCase));
+        if (match == null)
+        {
+            return $"skip: no allergy matching '{allergen}'";
+        }
+
+        await _clinical.RemoveAllergyAsync(patientId, match.Allergen);
+        await _clinical.AddAllergyAsync(new Allergy
+        {
+            PatientId = patientId,
+            Allergen = match.Allergen,
+            Reaction = action.Reaction ?? match.Reaction,
+            Severity = string.IsNullOrWhiteSpace(action.Severity) ? match.Severity : ParseEnum(action.Severity, match.Severity),
+            Status = string.IsNullOrWhiteSpace(action.Status) ? match.Status : ParseEnum(action.Status, match.Status),
+            OnsetDate = ParseDate(action.OnsetDate) ?? match.OnsetDate
+        });
+        return $"Updated allergy {match.Allergen}";
+    }
+
     private async Task<string> RemoveAllergyAsync(int patientId, ChartAskAction action)
     {
         var allergen = action.Allergen ?? action.Name;
@@ -387,6 +513,40 @@ public sealed class PatientChartAskService
             Plan = action.Plan ?? action.Notes
         });
         return "Added clinical note";
+    }
+
+    private async Task<string> UpdateNoteAsync(int patientId, ChartAskAction action)
+    {
+        var notes = await _clinical.GetPatientNotesAsync(patientId);
+        var note = notes.FirstOrDefault();
+        if (note == null)
+        {
+            return "skip: no note to update";
+        }
+
+        if (!string.IsNullOrWhiteSpace(action.ChiefComplaint)) note.ChiefComplaint = action.ChiefComplaint;
+        if (!string.IsNullOrWhiteSpace(action.History)) note.HistoryOfPresentIllness = action.History;
+        if (!string.IsNullOrWhiteSpace(action.Assessment)) note.Assessment = action.Assessment;
+        if (!string.IsNullOrWhiteSpace(action.Plan) || !string.IsNullOrWhiteSpace(action.Notes))
+        {
+            note.Plan = action.Plan ?? action.Notes;
+        }
+
+        await _clinical.UpdateNoteAsync(note);
+        return "Updated latest clinical note";
+    }
+
+    private async Task<string> DeleteNoteAsync(int patientId, ChartAskAction action)
+    {
+        var notes = await _clinical.GetPatientNotesAsync(patientId);
+        var note = notes.FirstOrDefault();
+        if (note == null)
+        {
+            return "skip: no note to delete";
+        }
+
+        var deleted = await _clinical.DeleteNoteAsync(note.Id);
+        return deleted ? "Deleted latest clinical note" : "skip: could not delete note";
     }
 
     private async Task<string> AddImmunizationAsync(int patientId, ChartAskAction action)
@@ -442,6 +602,28 @@ public sealed class PatientChartAskService
             }
         ]);
         return $"Ordered {spec.Name}";
+    }
+
+    private async Task<string> AddReferralAsync(Patient patient, ChartAskAction action)
+    {
+        var specialty = action.Specialty ?? action.Name ?? action.Category;
+        if (string.IsNullOrWhiteSpace(specialty))
+        {
+            return "skip: referral needs a specialty";
+        }
+
+        await _clinical.CreateReferralOrderAsync(new ReferralOrder
+        {
+            PatientId = patient.Id,
+            Specialty = specialty.Trim(),
+            ReferToProvider = action.AssignedTo ?? action.ToName,
+            ReferToOrganization = action.Organization,
+            Reason = action.Reason ?? action.Indication ?? action.Notes ?? "Clinical referral",
+            Priority = action.Priority ?? "Routine",
+            ClinicalHistory = action.History,
+            OrderingProvider = action.Prescriber ?? patient.PrimaryProvider ?? "Ordering clinician"
+        });
+        return $"Ordered referral to {specialty}";
     }
 
     private async Task<string> AddCareTeamAsync(int patientId, ChartAskAction action)
@@ -502,6 +684,57 @@ public sealed class PatientChartAskService
             Category = MessageCategory.ClinicalQuestion
         });
         return $"Sent inbox message '{subject}'";
+    }
+
+    private async Task<string> AcknowledgeAlertAsync(int patientId, ChartAskAction action)
+    {
+        var title = action.Title ?? action.Name;
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return "skip: alert title required";
+        }
+
+        var alert = await _clinical.AcknowledgeAlertByTitleAsync(patientId, title);
+        return alert == null ? $"skip: no open alert matching '{title}'" : $"Acknowledged alert '{alert.Title}'";
+    }
+
+    private async Task<string> AddEmergencyContactAsync(int patientId, ChartAskAction action)
+    {
+        if (string.IsNullOrWhiteSpace(action.Name))
+        {
+            return "skip: emergency contact needs a name";
+        }
+
+        await _clinical.AddEmergencyContactAsync(new EmergencyContact
+        {
+            PatientId = patientId,
+            Name = action.Name.Trim(),
+            Relationship = action.Role ?? action.Category ?? "Contact",
+            Phone = action.Phone,
+            Email = action.Email,
+            IsPrimary = action.IsPrimary ?? false
+        });
+        return $"Added emergency contact {action.Name}";
+    }
+
+    private async Task<string> UpdateInsuranceAsync(int patientId, ChartAskAction action)
+    {
+        var payer = action.InsuranceName ?? action.Name ?? action.Organization;
+        if (string.IsNullOrWhiteSpace(payer))
+        {
+            return "skip: insurance needs a payer name";
+        }
+
+        await _clinical.UpsertInsuranceAsync(new Insurance
+        {
+            PatientId = patientId,
+            PayerName = payer.Trim(),
+            PlanName = action.Title ?? action.Category ?? string.Empty,
+            MemberId = action.Subject ?? string.Empty,
+            GroupNumber = action.Details,
+            IsPrimary = action.IsPrimary ?? true
+        });
+        return $"Updated insurance {payer}";
     }
 
     private async Task<string> UpdateDemographicsAsync(Patient patient, ChartAskAction action)
@@ -606,8 +839,9 @@ public sealed class PatientChartAskService
 
     private static string BuildSystemPrompt(Patient patient, string snapshot) =>
         $$"""
-        You are the on-machine clinical assistant for Zebrahoof EMR. The clinician is looking at {{patient.FullName}}'s chart.
-        You may answer questions AND change this patient's record when they ask or order something.
+        You are the on-machine clinical assistant for Zebrahoof EMR in patient mode.
+        The open chart is {{patient.FullName}} (id {{patient.Id}}, MRN {{patient.MRN}}). Answer and act on this patient by default.
+        If the user asks about a different patient, you may answer, but do not apply chart actions to anyone except {{patient.FullName}}.
 
         Respond with JSON only (no markdown fences). Schema:
         {
@@ -617,9 +851,12 @@ public sealed class PatientChartAskService
 
         When they only ask a question, return actions: [].
         When they ask you to change, order, add, remove, prescribe, refill, document, or message, emit the matching actions.
-        Use only these ops: add_problem, update_problem, resolve_problem, remove_problem, add_medication, update_medication, discontinue_medication, prescribe, refill, add_allergy, remove_allergy, add_vitals, add_note, add_immunization, order, add_care_team, create_task, send_message, update_demographics, update_encounter.
+        Use only these ops: add_problem, update_problem, resolve_problem, remove_problem, add_medication, update_medication, discontinue_medication, prescribe, refill, add_allergy, update_allergy, remove_allergy, add_vitals, add_note, update_note, delete_note, add_immunization, order, add_referral, add_care_team, create_task, send_message, acknowledge_alert, update_demographics, add_emergency_contact, update_insurance, update_encounter, add_appointment, cancel_appointment, reschedule_appointment.
+        You may change any part of this chart the signed-in user is allowed to change. If their role cannot do it, do not pretend you did — the system will refuse and you must tell them.
         Match existing chart items by name. Do not invent ICD codes. Use ISO dates (YYYY-MM-DD) when you include dates.
         For orders, put the study or panel in "name" (e.g. CBC, BMP, chest x-ray, EKG).
+        For add_appointment, set scheduledAt (ISO datetime) when the user gives a time; omit it to use the next open clinic slot. Never say you scheduled someone unless you emit add_appointment.
+        History and uploaded documents are display or file workflows in the UI and cannot be changed here.
 
         CURRENT CHART:
         {{snapshot}}
@@ -736,4 +973,12 @@ public sealed class ChartAskAction
     public string? ZipCode { get; set; }
     public string? PrimaryProvider { get; set; }
     public string? InsuranceName { get; set; }
+    public string? ScheduledAt { get; set; }
+    public string? DateTime { get; set; }
+    public string? Time { get; set; }
+    public int? DurationMinutes { get; set; }
+    public string? Provider { get; set; }
+    public string? VisitType { get; set; }
+    public int? PatientId { get; set; }
+    public string? PatientName { get; set; }
 }

@@ -5,10 +5,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Zebrahoof_EMR</RootNamespace>
-    <Version>0.3.1</Version>
+    <Version>0.4.0</Version>
     <AssemblyName>$(AssemblyName.Replace(' ', '_'))</AssemblyName>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
-    <DefaultItemExcludes>$(DefaultItemExcludes);tests\**\*;tests/**</DefaultItemExcludes>
+    <!-- Web SDK globs the project tree as Content. Exclude generated/test output so
+         leftover artifacts/ cannot nest inside bin and fail CopyFilesToOutputDirectory. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tests\**\*;tests/**;artifacts\**\*;artifacts/**;StrykerOutput\**\*;StrykerOutput/**;TestResults\**\*;CoverageReports\**\*;MutationReports\**\*;Logs\**\*;Logs/**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

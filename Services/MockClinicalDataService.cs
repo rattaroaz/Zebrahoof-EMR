@@ -147,11 +147,57 @@ public class MockClinicalDataService
             await HydrateOrSeedAsync(db, db.LabOrders, _labOrders, cancellationToken);
             await HydrateOrSeedAsync(db, db.ImagingOrders, _imagingOrders, cancellationToken);
             await HydrateOrSeedAsync(db, db.ReferralOrders, _referralOrders, cancellationToken);
+            EnsureDemoPheochromocytomaCase(db);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to hydrate clinical data from database; running with in-memory mock state only.");
         }
+    }
+
+    private void EnsureDemoPheochromocytomaCase(ApplicationDbContext db)
+    {
+        if (_problems.Any(p => p.Name.Contains("Pheochromocytoma", StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        var problem = new Problem
+        {
+            Id = NextId(_problems.Select(p => p.Id)),
+            PatientId = 2,
+            Name = "Pheochromocytoma",
+            IcdCode = "D35.00",
+            OnsetDate = DateTime.Today.AddMonths(-8),
+            Status = ProblemStatus.Active,
+            Severity = "Moderate",
+            Notes = "Adrenal; on alpha blockade"
+        };
+        _problems.Add(problem);
+        db.Problems.Add(problem);
+
+        if (!_encounters.Any(e => e.PatientId == 2 && e.Assessment != null &&
+                                  e.Assessment.Contains("Pheochromocytoma", StringComparison.OrdinalIgnoreCase)))
+        {
+            var encounter = new Encounter
+            {
+                Id = NextId(_encounters.Select(e => e.Id)),
+                PatientId = 2,
+                PatientName = "Jane Smith",
+                DateTime = DateTime.Today.AddDays(-14),
+                VisitType = "Follow-up",
+                Provider = "Dr. Sarah Smith",
+                Location = "Clinic A",
+                Status = EncounterStatus.Signed,
+                ChiefComplaint = "Paroxysmal hypertension, headaches",
+                Assessment = "Pheochromocytoma, clinically stable",
+                Plan = "Endocrine follow-up, continue alpha blockade"
+            };
+            _encounters.Add(encounter);
+            db.Encounters.Add(encounter);
+        }
+
+        db.SaveChanges();
     }
 
     private static async Task HydrateOrSeedAsync<T>(
@@ -247,6 +293,18 @@ public class MockClinicalDataService
 
     public Task<List<Encounter>> GetRecentEncountersAsync(int count = 10) =>
         Task.FromResult(_encounters.OrderByDescending(e => e.DateTime).Take(count).ToList());
+
+    public Task<List<Encounter>> GetAllEncountersAsync() =>
+        Task.FromResult(_encounters.OrderByDescending(e => e.DateTime).ToList());
+
+    public Task<List<Problem>> GetAllProblemsAsync() =>
+        Task.FromResult(_problems.ToList());
+
+    public Task<List<Medication>> GetAllMedicationsAsync() =>
+        Task.FromResult(_medications.ToList());
+
+    public Task<List<Allergy>> GetAllAllergiesAsync() =>
+        Task.FromResult(_allergies.ToList());
 
     // Bulk replace operations used by the AI "Update Records" workflow.
     // PatientRecordUpdateService also writes these directly to the DB inside
@@ -699,9 +757,62 @@ public class MockClinicalDataService
     public Task<List<EmergencyContact>> GetEmergencyContactsByPatientAsync(int patientId) =>
         Task.FromResult(_emergencyContacts.Where(e => e.PatientId == patientId).ToList());
 
+    public Task<EmergencyContact> AddEmergencyContactAsync(EmergencyContact contact)
+    {
+        contact.Id = NextId(_emergencyContacts.Select(e => e.Id));
+        _emergencyContacts.Add(contact);
+        PersistAdd(contact);
+        NotifyPatientDataChanged(contact.PatientId);
+        return Task.FromResult(contact);
+    }
+
     // Insurance
     public Task<List<Insurance>> GetInsurancesByPatientAsync(int patientId) =>
         Task.FromResult(_insurances.Where(i => i.PatientId == patientId).ToList());
+
+    public Task<Insurance> UpsertInsuranceAsync(Insurance insurance)
+    {
+        var existing = _insurances.FirstOrDefault(i =>
+            i.PatientId == insurance.PatientId
+            && (string.Equals(i.PayerName, insurance.PayerName, StringComparison.OrdinalIgnoreCase)
+                || (insurance.IsPrimary && i.IsPrimary)));
+        if (existing == null)
+        {
+            insurance.Id = NextId(_insurances.Select(i => i.Id));
+            _insurances.Add(insurance);
+            PersistAdd(insurance);
+            NotifyPatientDataChanged(insurance.PatientId);
+            return Task.FromResult(insurance);
+        }
+
+        if (!string.IsNullOrWhiteSpace(insurance.PayerName)) existing.PayerName = insurance.PayerName;
+        if (!string.IsNullOrWhiteSpace(insurance.PlanName)) existing.PlanName = insurance.PlanName;
+        if (!string.IsNullOrWhiteSpace(insurance.MemberId)) existing.MemberId = insurance.MemberId;
+        if (!string.IsNullOrWhiteSpace(insurance.GroupNumber)) existing.GroupNumber = insurance.GroupNumber;
+        existing.IsPrimary = insurance.IsPrimary || existing.IsPrimary;
+        PersistUpdate(existing);
+        NotifyPatientDataChanged(existing.PatientId);
+        return Task.FromResult(existing);
+    }
+
+    public Task<ClinicalAlert?> AcknowledgeAlertByTitleAsync(int patientId, string title)
+    {
+        var alert = _alerts.FirstOrDefault(a =>
+            a.PatientId == patientId
+            && !a.IsAcknowledged
+            && (a.Title.Contains(title, StringComparison.OrdinalIgnoreCase)
+                || title.Contains(a.Title, StringComparison.OrdinalIgnoreCase)));
+        if (alert == null)
+        {
+            return Task.FromResult<ClinicalAlert?>(null);
+        }
+
+        alert.IsAcknowledged = true;
+        alert.AcknowledgedAt = DateTime.Now;
+        PersistUpdate(alert);
+        NotifyPatientDataChanged(patientId);
+        return Task.FromResult<ClinicalAlert?>(alert);
+    }
 
     // Imaging
     public Task<List<ImagingStudy>> GetImagingByPatientAsync(int patientId) =>
@@ -798,7 +909,8 @@ public class MockClinicalDataService
             new() { Id = 2, PatientId = 2, PatientName = "Jane Smith", DateTime = today.AddDays(-7), VisitType = "Annual Exam", Provider = "Dr. Sarah Smith", Location = "Clinic A", Status = EncounterStatus.Signed, ChiefComplaint = "Routine physical", Assessment = "Healthy adult", Plan = "Continue preventive care" },
             new() { Id = 3, PatientId = 3, PatientName = "Robert Johnson", DateTime = today.AddDays(-3), VisitType = "Diabetes Management", Provider = "Dr. Sarah Smith", Location = "Clinic A", Status = EncounterStatus.Signed, ChiefComplaint = "A1c review", Assessment = "Diabetes type 2, improved control", Plan = "Adjust insulin dosing" },
             new() { Id = 4, PatientId = 1, PatientName = "John Doe", DateTime = today.AddDays(-60), VisitType = "Sick Visit", Provider = "Dr. Sarah Smith", Location = "Clinic A", Status = EncounterStatus.Signed, ChiefComplaint = "Upper respiratory symptoms", Assessment = "Viral URI", Plan = "Symptomatic treatment" },
-            new() { Id = 5, PatientId = 4, PatientName = "Maria Garcia", DateTime = today.AddDays(-30), VisitType = "New Patient", Provider = "Dr. Sarah Smith", Location = "Clinic A", Status = EncounterStatus.Signed, ChiefComplaint = "Establish care", Assessment = "Healthy adult with mild anxiety", Plan = "Lifestyle modifications" }
+            new() { Id = 5, PatientId = 4, PatientName = "Maria Garcia", DateTime = today.AddDays(-30), VisitType = "New Patient", Provider = "Dr. Sarah Smith", Location = "Clinic A", Status = EncounterStatus.Signed, ChiefComplaint = "Establish care", Assessment = "Healthy adult with mild anxiety", Plan = "Lifestyle modifications" },
+            new() { Id = 6, PatientId = 2, PatientName = "Jane Smith", DateTime = today.AddDays(-14), VisitType = "Follow-up", Provider = "Dr. Sarah Smith", Location = "Clinic A", Status = EncounterStatus.Signed, ChiefComplaint = "Paroxysmal hypertension, headaches", Assessment = "Pheochromocytoma, clinically stable", Plan = "Endocrine follow-up, continue alpha blockade" }
         ];
     }
 
@@ -810,7 +922,8 @@ public class MockClinicalDataService
         new() { Id = 4, PatientId = 3, Name = "Essential Hypertension", IcdCode = "I10", OnsetDate = DateTime.Today.AddYears(-8), Status = ProblemStatus.Active },
         new() { Id = 5, PatientId = 3, Name = "Chronic Kidney Disease Stage 3", IcdCode = "N18.3", OnsetDate = DateTime.Today.AddYears(-2), Status = ProblemStatus.Active, Severity = "Moderate" },
         new() { Id = 6, PatientId = 4, Name = "Generalized Anxiety Disorder", IcdCode = "F41.1", OnsetDate = DateTime.Today.AddMonths(-6), Status = ProblemStatus.Active, Severity = "Mild" },
-        new() { Id = 7, PatientId = 5, Name = "Asthma, mild intermittent", IcdCode = "J45.20", OnsetDate = DateTime.Today.AddYears(-5), Status = ProblemStatus.Active }
+        new() { Id = 7, PatientId = 5, Name = "Asthma, mild intermittent", IcdCode = "J45.20", OnsetDate = DateTime.Today.AddYears(-5), Status = ProblemStatus.Active },
+        new() { Id = 8, PatientId = 2, Name = "Pheochromocytoma", IcdCode = "D35.00", OnsetDate = DateTime.Today.AddMonths(-8), Status = ProblemStatus.Active, Severity = "Moderate", Notes = "Adrenal; on alpha blockade" }
     ];
 
     private static List<Medication> GenerateMockMedications() =>

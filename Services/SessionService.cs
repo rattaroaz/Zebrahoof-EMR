@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Zebrahoof_EMR.Data;
 using Zebrahoof_EMR.Hubs;
 using Zebrahoof_EMR.Models;
@@ -13,17 +14,20 @@ public class SessionService
     private readonly IAuditLogger _auditLogger;
     private readonly TimeProvider _timeProvider;
     private readonly IHubContext<SessionHub> _hubContext;
+    private readonly ILogger<SessionService> _logger;
 
     public SessionService(
         ApplicationDbContext dbContext,
         IAuditLogger auditLogger,
         TimeProvider timeProvider,
-        IHubContext<SessionHub> hubContext)
+        IHubContext<SessionHub> hubContext,
+        ILogger<SessionService> logger)
     {
         _dbContext = dbContext;
         _auditLogger = auditLogger;
         _timeProvider = timeProvider;
         _hubContext = hubContext;
+        _logger = logger;
     }
 
     public async Task<UserSession> CreateSessionAsync(
@@ -63,6 +67,7 @@ public class SessionService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _auditLogger.LogAsync("session_created", $"session:{session.Id}", deviceName, userId, cancellationToken);
+        _logger.LogInformation("Created session {SessionId} for user {UserId}", session.Id, userId);
 
         return session;
     }
@@ -147,6 +152,17 @@ public class SessionService
         await _dbContext.SaveChangesAsync(cancellationToken);
 
         await _auditLogger.LogAsync("session_revoked", $"session:{sessionId}", reason, session.UserId, cancellationToken);
+        _logger.LogInformation("Revoked session {SessionId} for user {UserId}: {Reason}", sessionId, session.UserId, reason);
+
+        try
+        {
+            await _hubContext.Clients.Group(sessionId.ToString())
+                .SendAsync("ForceLogout", reason, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to notify session {SessionId} of revocation", sessionId);
+        }
     }
 
     public async Task<UserSession?> ValidateRefreshTokenAsync(Guid sessionId, string refreshToken, CancellationToken cancellationToken = default)

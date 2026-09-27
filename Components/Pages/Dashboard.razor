@@ -1,5 +1,6 @@
 @page "/"
 @page "/dashboard"
+@implements IDisposable
 @inject AuthStateService AuthState
 @inject MockAppointmentService AppointmentService
 @inject MockTaskService TaskService
@@ -308,12 +309,26 @@
 
     protected override async Task OnInitializedAsync()
     {
+        AppointmentService.Changed += OnAppointmentsChanged;
+        await LoadDashboardAsync();
+    }
+
+    private async Task LoadDashboardAsync()
+    {
         _todaysAppointments = await AppointmentService.GetTodaysAppointmentsAsync();
         _pendingTasks = await TaskService.GetPendingTasksAsync();
         _unreadMessages = await MessageService.GetUnreadMessagesAsync();
         _recentInteractions = await ClinicalDataService.GetRecentInteractionsAsync(5);
         _clinicalAlerts = await ClinicalDataService.GetUnacknowledgedAlertsAsync();
     }
+
+    private void OnAppointmentsChanged() => _ = InvokeAsync(async () =>
+    {
+        _todaysAppointments = await AppointmentService.GetTodaysAppointmentsAsync();
+        StateHasChanged();
+    });
+
+    public void Dispose() => AppointmentService.Changed -= OnAppointmentsChanged;
 
     private void HandleAlertClick(ClinicalAlert alert)
     {

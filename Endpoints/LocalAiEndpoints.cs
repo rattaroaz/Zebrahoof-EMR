@@ -47,11 +47,13 @@ public static class LocalAiEndpoints
 
     private static async Task<IResult> Install(
         [FromServices] LocalAiEngineService engine,
+        [FromServices] LocalAiLibraryCatalogService catalog,
         [FromBody] LocalAiActionRequest? request,
         CancellationToken cancellationToken)
     {
         try
         {
+            EnsureOfferedOnThisMachine(engine, catalog, request?.Model);
             await engine.InstallAndPrepareAsync(request?.Model, cancellationToken);
             return Results.Ok(engine.GetSnapshot());
         }
@@ -90,11 +92,13 @@ public static class LocalAiEndpoints
 
     private static async Task<IResult> Pull(
         [FromServices] LocalAiEngineService engine,
+        [FromServices] LocalAiLibraryCatalogService catalog,
         [FromBody] LocalAiActionRequest? request,
         CancellationToken cancellationToken)
     {
         try
         {
+            EnsureOfferedOnThisMachine(engine, catalog, request?.Model);
             await engine.PullModelAsync(request?.Model, cancellationToken);
             return Results.Ok(engine.GetSnapshot());
         }
@@ -128,11 +132,15 @@ public static class LocalAiEndpoints
         [FromServices] LocalAiLibraryCatalogService catalog,
         CancellationToken cancellationToken)
     {
-        var snap = await catalog.EnsureFreshAsync(cancellationToken);
-        var hw = engine.ProbeHardware();
+        await catalog.EnsureFreshAsync(cancellationToken);
+        var status = await engine.RefreshStatusAsync(cancellationToken);
+        var hw = status.Hardware ?? engine.ProbeHardware();
+        var installed = engine.GetKnownInstalledModels();
+        var snap = catalog.GetOfferedForHardware(hw, LocalAiEnginePaths.MergeTags(installed, [engine.EffectiveModel]));
         var models = snap.Models.Select(m =>
         {
             var fit = LocalAiModels.Assess(m, hw);
+            var onDisk = LocalAiEngineService.ModelIsPresent(installed, m.Id);
             return new
             {
                 m.Id,
@@ -145,6 +153,7 @@ public static class LocalAiEndpoints
                 m.MinVramGb,
                 m.ParameterBillion,
                 m.Reasoning,
+                installed = onDisk,
                 fit = fit.Kind.ToString(),
                 fitTitle = fit.Title,
                 fitDetail = fit.Detail
@@ -153,11 +162,36 @@ public static class LocalAiEndpoints
         return Results.Ok(new
         {
             hardware = hw,
-            suggested = LocalAiModels.SuggestDefault(hw, snap.Models).Id,
+            inUse = engine.EffectiveModel,
+            suggested = engine.EffectiveModel,
             pulledAtUtc = snap.PulledAtUtc,
             fromLiveLibrary = snap.FromLiveLibrary,
+            maxPerFamily = LocalAiModels.MaxEnginesPerFamily,
+            modelsDirectory = status.ModelsDirectory,
+            installedModels = installed,
             models
         });
+    }
+
+    private static void EnsureOfferedOnThisMachine(
+        LocalAiEngineService engine,
+        LocalAiLibraryCatalogService catalog,
+        string? modelId)
+    {
+        if (string.IsNullOrWhiteSpace(modelId))
+        {
+            return;
+        }
+
+        var hw = engine.ProbeHardware();
+        var keep = LocalAiEnginePaths.MergeTags(engine.GetKnownInstalledModels(), [engine.EffectiveModel]);
+        if (LocalAiModels.IsOfferedOnThisMachine(modelId, catalog.Models, hw, keep))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"{modelId} is not among the {LocalAiModels.MaxEnginesPerFamily} strongest models in its family that will run on this PC.");
     }
 }
 

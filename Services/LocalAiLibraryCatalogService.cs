@@ -90,6 +90,22 @@ public sealed class LocalAiLibraryCatalogService
     public LocalAiModelChoice? Find(string? id) => LocalAiModels.Find(id, Models);
 
     /// <summary>
+    /// Full library cache, then only the top runnable engines per family for this PC.
+    /// </summary>
+    public LocalAiCatalogSnapshot GetOfferedForHardware(
+        LocalAiHardwareSnapshot hw,
+        IEnumerable<string>? alwaysIncludeIds = null)
+    {
+        var current = GetSnapshot();
+        var models = LocalAiModels.SelectTopRunnablePerFamily(current.Models, hw, alwaysIncludeIds: alwaysIncludeIds);
+        return current with
+        {
+            Models = models,
+            Families = LocalAiLibraryParser.FamiliesOf(models)
+        };
+    }
+
+    /// <summary>
     /// Uses the cached library when a live pull happened within the last week.
     /// Otherwise fetches https://ollama.com/library and writes a new cache.
     /// </summary>

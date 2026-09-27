@@ -187,6 +187,34 @@ public class LocalAiLibraryTests
     }
 
     [Fact]
+    public void GetOfferedForHardware_CapsEachFamilyAtFiveRunnable()
+    {
+        var cacheDir = Path.Combine(Path.GetTempPath(), "zebrahoof-ai-lib-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(cacheDir);
+        var cachePath = Path.Combine(cacheDir, "library-catalog.json");
+        var models = string.Join(",", Enumerable.Range(1, 8).Select(i =>
+            $"{{\"id\":\"qwen:{i}b\",\"family\":\"Qwen\",\"displayName\":\"{i}B\",\"description\":\"n\",\"downloadGb\":1,\"minRamGb\":2,\"recommendedRamGb\":4,\"minVramGb\":1,\"parameterBillion\":{i},\"reasoning\":false}}"));
+        File.WriteAllText(cachePath, $"{{\"pulledAtUtc\":\"2026-08-28T18:00:00+00:00\",\"sourceUrl\":\"https://ollama.com/library\",\"models\":[{models}]}}");
+        using var http = new HttpClient(new CountingHandler());
+        var service = new LocalAiLibraryCatalogService(http, cachePath, new FixedClock(new DateTimeOffset(2026, 8, 29, 12, 0, 0, TimeSpan.Zero)));
+        var hw = new LocalAiHardwareSnapshot
+        {
+            TotalRamGb = 32,
+            AvailableRamGb = 20,
+            CpuCores = 8,
+            FreeDiskGb = 400,
+            DiskRoot = "C:\\"
+        };
+
+        var offered = service.GetOfferedForHardware(hw);
+
+        Assert.Equal(5, offered.Models.Count);
+        Assert.Contains(offered.Models, m => m.Id == "qwen:8b");
+        Assert.DoesNotContain(offered.Models, m => m.Id == "qwen:1b");
+        Assert.Equal(new[] { "Qwen" }, offered.Families);
+    }
+
+    [Fact]
     public void FamilyAndSizeHelpers()
     {
         Assert.Equal("Qwen", LocalAiLibraryParser.FamilyFromName("qwen3.8-flash-next"));

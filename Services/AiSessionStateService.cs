@@ -1,21 +1,13 @@
 namespace Zebrahoof_EMR.Services;
 
 /// <summary>
-/// Scoped (per-circuit) state tracking which local-AI actions have been performed
-/// for each patient in the current session. State persists across navigations
-/// within the same browser session and resets when the app is reloaded.
+/// Scoped (per-circuit) state for the Update Records workflow.
+/// Persists across navigations in the same browser session.
 /// </summary>
 public class AiSessionStateService
 {
-    private readonly HashSet<int> _documentsSent = new();
     private readonly HashSet<int> _recordsUpdated = new();
     private readonly Dictionary<int, int> _lastKnownDocumentCount = new();
-
-    public bool HaveDocumentsBeenSent(int patientId) => _documentsSent.Contains(patientId);
-
-    public void MarkDocumentsSent(int patientId) => _documentsSent.Add(patientId);
-
-    public void ResetDocumentsSent(int patientId) => _documentsSent.Remove(patientId);
 
     public bool HaveRecordsBeenUpdated(int patientId) => _recordsUpdated.Contains(patientId);
 

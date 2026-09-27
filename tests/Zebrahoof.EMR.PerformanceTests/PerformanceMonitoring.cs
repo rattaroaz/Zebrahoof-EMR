@@ -122,7 +122,7 @@ public class PerformanceMonitoring : IClassFixture<WebApplicationFactory<Program
             "/api/patients",
             "/api/patients/search?q=test",
             "/api/patients/1",
-            "/appointments"
+            "/schedule"
         };
 
         foreach (var endpoint in endpoints)
@@ -147,9 +147,10 @@ public class PerformanceMonitoring : IClassFixture<WebApplicationFactory<Program
                         successCount++;
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
                     stopwatch.Stop();
+                    _output.WriteLine($"GET {endpoint} failed: {ex.Message}");
                 }
                 finally
                 {
@@ -238,7 +239,7 @@ public class PerformanceMonitoring : IClassFixture<WebApplicationFactory<Program
             ["/api/patients"] = new PerformanceTarget { MaxResponseTime = 500, MaxP95ResponseTime = 1000, MinSuccessRate = 98.0 },
             ["/api/patients/search?q=test"] = new PerformanceTarget { MaxResponseTime = 800, MaxP95ResponseTime = 1500, MinSuccessRate = 95.0 },
             ["/api/patients/1"] = new PerformanceTarget { MaxResponseTime = 300, MaxP95ResponseTime = 600, MinSuccessRate = 98.0 },
-            ["/appointments"] = new PerformanceTarget { MaxResponseTime = 1800, MaxP95ResponseTime = 2500, MinSuccessRate = 90.0 }
+            ["/schedule"] = new PerformanceTarget { MaxResponseTime = 1800, MaxP95ResponseTime = 2500, MinSuccessRate = 90.0 }
         };
     }
 }
