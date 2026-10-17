@@ -83,7 +83,6 @@ else
     private bool _blockedHasUnsaved;
     private string _openedElsewhere = "another patient";
     private int? _openedElsewhereId;
-    private bool _holding;
     private bool _subscribed;
     private bool _claiming;
 
@@ -96,9 +95,35 @@ else
 
     protected override void OnParametersSet()
     {
-        if (_claimedFor != PatientId)
+        if (_claimedFor == PatientId)
         {
-            _phase = Phase.Checking;
+            return;
+        }
+
+        _phase = Phase.Checking;
+        SwitchSameCircuit();
+    }
+
+    /// <summary>
+    /// Runs during render, before a disposed chart releases, so A to B on this circuit is one lock.
+    /// </summary>
+    private void SwitchSameCircuit()
+    {
+        var userId = string.IsNullOrEmpty(_userId) ? Circuit.UserId : _userId;
+        if (string.IsNullOrEmpty(userId))
+        {
+            return;
+        }
+
+        _userId = userId;
+        var name = string.IsNullOrWhiteSpace(PatientName) ? $"patient {PatientId}" : PatientName!;
+        var decision = Registry.Switch(userId, Circuit.Id, PatientId, name);
+        if (decision.Status == ChartOpenStatus.Granted
+            && Edits.HasUnsavedWork
+            && Edits.PatientId is int edited
+            && edited != PatientId)
+        {
+            Edits.Discard();
         }
     }
 
@@ -148,32 +173,19 @@ else
             return;
         }
 
-        var decision = Registry.TryOpen(_userId, Circuit.Id, patientId, _requestedName);
-        var unsavedOnOther = Edits.HasUnsavedWork && Edits.PatientId is int edited && edited != patientId;
+        var decision = Registry.Switch(_userId, Circuit.Id, patientId, _requestedName);
         _claimedFor = patientId;
-        if (decision.Status == ChartOpenStatus.Blocked || unsavedOnOther)
+        if (decision.Status == ChartOpenStatus.Blocked)
         {
             _phase = Phase.Blocked;
-            _blockedName = decision.Status == ChartOpenStatus.Blocked
-                ? decision.OpenPatientName ?? Edits.PatientName ?? "another patient"
-                : Edits.PatientName ?? "the current patient";
-            _blockedPatientId = decision.Status == ChartOpenStatus.Blocked
-                ? decision.OpenPatientId
-                : Edits.PatientId;
-            _blockedHasUnsaved = decision.OpenChartHasUnsavedWork || unsavedOnOther;
-            _holding = decision.Status == ChartOpenStatus.Granted;
-            if (decision.Status == ChartOpenStatus.Granted)
-            {
-                Registry.Release(_userId, Circuit.Id);
-                _holding = false;
-            }
-
+            _blockedName = decision.OpenPatientName ?? "another patient";
+            _blockedPatientId = decision.OpenPatientId;
+            _blockedHasUnsaved = decision.OpenChartHasUnsavedWork;
             AppState.SelectPatient(null);
         }
         else
         {
             _phase = Phase.Open;
-            _holding = true;
             AppState.SelectPatient(patient);
             Registry.SetUnsaved(_userId, Circuit.Id, Edits.HasUnsavedWork);
             if (_auditedFor != patientId)
@@ -196,7 +208,6 @@ else
         Edits.Discard();
         Registry.ConfirmSwitch(_userId, Circuit.Id, PatientId, _requestedName);
         _phase = Phase.Open;
-        _holding = true;
         _ = FinishGrantedAsync();
     }
 
@@ -247,7 +258,6 @@ else
         _ = InvokeAsync(() =>
         {
             _phase = Phase.Closed;
-            _holding = false;
             _openedElsewhere = notice.OpenedPatientName;
             _openedElsewhereId = notice.OpenedPatientId;
             _claimedFor = -1;
@@ -265,10 +275,23 @@ else
             _subscribed = false;
         }
 
-        if (!string.IsNullOrEmpty(_userId))
+        var userId = string.IsNullOrEmpty(_userId) ? Circuit.UserId : _userId;
+        if (string.IsNullOrEmpty(userId) || _claimedFor <= 0)
         {
-            Registry.Release(_userId, Circuit.Id);
-            _holding = false;
+            return;
+        }
+
+        var circuitId = Circuit.Id;
+        var patientId = _claimedFor;
+        Registry.BeginHandoff(userId, circuitId, patientId);
+        var context = SynchronizationContext.Current;
+        if (context != null)
+        {
+            context.Post(_ => Registry.CommitHandoff(userId, circuitId, patientId), null);
+        }
+        else
+        {
+            Registry.CommitHandoff(userId, circuitId, patientId);
         }
     }
 }

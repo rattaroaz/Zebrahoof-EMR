@@ -49,6 +49,53 @@ public class ActivePatientRegistryTests
     }
 
     [Fact]
+    public void SameTab_AtoB_DoesNotPrompt_WhileASecondBrowserHoldingADoes()
+    {
+        var registry = new ActivePatientRegistry();
+
+        var opened = registry.Switch("physician", "tab", 1, "John Doe");
+        var moved = registry.Switch("physician", "tab", 2, "Jane Smith");
+
+        Assert.Equal(ChartOpenStatus.Granted, opened.Status);
+        Assert.Equal(ChartOpenStatus.Granted, moved.Status);
+        Assert.Equal((2, "Jane Smith"), registry.Current("physician"));
+
+        registry.Release("physician", "tab", onlyIfPatientId: 1);
+        Assert.Equal((2, "Jane Smith"), registry.Current("physician"));
+        registry.Release("physician", "tab");
+
+        var browser1 = registry.Switch("physician", "browser-1", 1, "John Doe");
+        var browser2 = registry.Switch("physician", "browser-2", 2, "Jane Smith");
+
+        Assert.Equal(ChartOpenStatus.Granted, browser1.Status);
+        Assert.Equal(ChartOpenStatus.Blocked, browser2.Status);
+        Assert.Equal("John Doe", browser2.OpenPatientName);
+        Assert.Equal((1, "John Doe"), registry.Current("physician"));
+    }
+
+    [Fact]
+    public void SameCircuitHandoff_StaysClaimedUntilThatCircuitSwitches_AndBlocksAnotherBrowser()
+    {
+        var registry = new ActivePatientRegistry();
+        registry.Switch("physician", "tab", 1, "John Doe");
+        registry.BeginHandoff("physician", "tab", 1);
+
+        var other = registry.Switch("physician", "browser-2", 3, "Robert Johnson");
+        Assert.Equal(ChartOpenStatus.Blocked, other.Status);
+        Assert.Equal((1, "John Doe"), registry.Current("physician"));
+
+        var moved = registry.Switch("physician", "tab", 2, "Jane Smith");
+        Assert.Equal(ChartOpenStatus.Granted, moved.Status);
+        registry.CommitHandoff("physician", "tab", 1);
+        Assert.Equal((2, "Jane Smith"), registry.Current("physician"));
+
+        registry.Switch("nurse", "tab-n", 4, "Ada");
+        registry.BeginHandoff("nurse", "tab-n", 4);
+        registry.CommitHandoff("nurse", "tab-n", 4);
+        Assert.Null(registry.Current("nurse"));
+    }
+
+    [Fact]
     public void SamePatient_CanStayOpen_OnTwoCircuits()
     {
         var registry = new ActivePatientRegistry();

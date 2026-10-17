@@ -23,7 +23,9 @@ public sealed record ChartClosedNotice(
 
 /// <summary>
 /// One open patient per signed-in user, across tabs, browsers, and devices.
-/// Same patient may be open in several circuits. A different patient is refused until the user confirms a switch.
+/// Same patient may be open in several circuits.
+/// Moving to another patient on the same circuit is one locked switch.
+/// A different circuit holding a patient must confirm before the chart changes.
 /// </summary>
 public sealed class ActivePatientRegistry
 {
@@ -33,29 +35,56 @@ public sealed class ActivePatientRegistry
     public event Action<ChartClosedNotice>? ChartClosed;
 
     public ChartOpenDecision TryOpen(string userId, string circuitId, int patientId, string patientName)
+        => Switch(userId, circuitId, patientId, patientName);
+
+    /// <summary>
+    /// Claims <paramref name="patientId"/> for <paramref name="circuitId"/>.
+    /// When that circuit is the only holder, replacing the open patient happens inside this call.
+    /// When a different circuit holds a patient, the slot is left unchanged and the caller must prompt.
+    /// </summary>
+    public ChartOpenDecision Switch(string userId, string circuitId, int patientId, string patientName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(userId);
         ArgumentException.ThrowIfNullOrWhiteSpace(circuitId);
 
         lock (_gate)
         {
-            if (!_byUser.TryGetValue(userId, out var slot) || slot.Circuits.Count == 0)
+            var held = _byUser.TryGetValue(userId, out var slot)
+                && (slot!.Circuits.Count > 0 || slot.HandoffCircuitId != null);
+            if (!held)
             {
-                slot = new Slot(patientId, patientName);
-                slot.Circuits[circuitId] = false;
-                _byUser[userId] = slot;
-                return new ChartOpenDecision(ChartOpenStatus.Granted, patientId, patientName, false);
+                var created = new Slot(patientId, patientName);
+                created.Circuits[circuitId] = false;
+                _byUser[userId] = created;
+                return Granted(patientId, patientName);
             }
+
+            var thisCircuitHolds = slot!.Circuits.ContainsKey(circuitId)
+                || string.Equals(slot.HandoffCircuitId, circuitId, StringComparison.Ordinal);
+            var otherCircuitHolds = slot.Circuits.Keys.Any(id => !string.Equals(id, circuitId, StringComparison.Ordinal))
+                || (slot.HandoffCircuitId != null && !string.Equals(slot.HandoffCircuitId, circuitId, StringComparison.Ordinal));
 
             if (slot.PatientId == patientId)
             {
+                ClearHandoff(slot, circuitId);
                 slot.Circuits.TryAdd(circuitId, false);
                 if (!string.IsNullOrWhiteSpace(patientName))
                 {
                     slot.PatientName = patientName;
                 }
 
-                return new ChartOpenDecision(ChartOpenStatus.Granted, patientId, slot.PatientName, false);
+                return Granted(slot.PatientId, slot.PatientName);
+            }
+
+            if (thisCircuitHolds && !otherCircuitHolds)
+            {
+                slot.PatientId = patientId;
+                slot.PatientName = patientName;
+                slot.HandoffCircuitId = null;
+                slot.HandoffPatientId = null;
+                slot.Circuits.Clear();
+                slot.Circuits[circuitId] = false;
+                return Granted(patientId, patientName);
             }
 
             return new ChartOpenDecision(
@@ -63,6 +92,60 @@ public sealed class ActivePatientRegistry
                 slot.PatientId,
                 slot.PatientName,
                 slot.Circuits.Values.Any(unsaved => unsaved));
+        }
+    }
+
+    /// <summary>
+    /// Drops this circuit's hold without opening a gap another circuit can take, until <see cref="CommitHandoff"/>
+    /// or until the same circuit <see cref="Switch"/>es to the next patient.
+    /// </summary>
+    public void BeginHandoff(string userId, string circuitId, int patientId)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(circuitId))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (!_byUser.TryGetValue(userId, out var slot) || slot.PatientId != patientId)
+            {
+                return;
+            }
+
+            if (!slot.Circuits.Remove(circuitId))
+            {
+                return;
+            }
+
+            if (slot.Circuits.Count == 0)
+            {
+                slot.HandoffCircuitId = circuitId;
+                slot.HandoffPatientId = patientId;
+            }
+        }
+    }
+
+    public void CommitHandoff(string userId, string circuitId, int patientId)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(circuitId))
+        {
+            return;
+        }
+
+        lock (_gate)
+        {
+            if (!_byUser.TryGetValue(userId, out var slot))
+            {
+                return;
+            }
+
+            if (slot.HandoffCircuitId == circuitId
+                && slot.HandoffPatientId == patientId
+                && slot.Circuits.Count == 0)
+            {
+                _byUser.Remove(userId);
+            }
         }
     }
 
@@ -136,7 +219,7 @@ public sealed class ActivePatientRegistry
         }
     }
 
-    public void Release(string userId, string circuitId)
+    public void Release(string userId, string circuitId, int? onlyIfPatientId = null)
     {
         if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(circuitId))
         {
@@ -150,11 +233,34 @@ public sealed class ActivePatientRegistry
                 return;
             }
 
+            if (onlyIfPatientId is int patientId && slot.PatientId != patientId)
+            {
+                return;
+            }
+
             slot.Circuits.Remove(circuitId);
-            if (slot.Circuits.Count == 0)
+            if (string.Equals(slot.HandoffCircuitId, circuitId, StringComparison.Ordinal))
+            {
+                slot.HandoffCircuitId = null;
+                slot.HandoffPatientId = null;
+            }
+
+            if (slot.Circuits.Count == 0 && slot.HandoffCircuitId == null)
             {
                 _byUser.Remove(userId);
             }
+        }
+    }
+
+    private static ChartOpenDecision Granted(int patientId, string patientName)
+        => new(ChartOpenStatus.Granted, patientId, patientName, false);
+
+    private static void ClearHandoff(Slot slot, string circuitId)
+    {
+        if (string.Equals(slot.HandoffCircuitId, circuitId, StringComparison.Ordinal))
+        {
+            slot.HandoffCircuitId = null;
+            slot.HandoffPatientId = null;
         }
     }
 
@@ -162,7 +268,8 @@ public sealed class ActivePatientRegistry
     {
         lock (_gate)
         {
-            if (!_byUser.TryGetValue(userId, out var slot) || slot.Circuits.Count == 0)
+            if (!_byUser.TryGetValue(userId, out var slot)
+                || (slot.Circuits.Count == 0 && slot.HandoffCircuitId == null))
             {
                 return null;
             }
@@ -176,5 +283,7 @@ public sealed class ActivePatientRegistry
         public int PatientId { get; set; } = patientId;
         public string PatientName { get; set; } = patientName;
         public Dictionary<string, bool> Circuits { get; } = new(StringComparer.Ordinal);
+        public string? HandoffCircuitId { get; set; }
+        public int? HandoffPatientId { get; set; }
     }
 }
