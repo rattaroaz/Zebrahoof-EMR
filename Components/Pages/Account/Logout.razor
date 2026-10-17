@@ -4,6 +4,7 @@
 @inject SignInManager<ApplicationUser> SignInManager
 @inject NavigationManager Navigation
 @inject IAuditLogger AuditLogger
+@inject ClinicSignOut SignOut
 
 <PageTitle>Signing Out - Zebrahoof EMR</PageTitle>
 
@@ -22,7 +23,9 @@
         {
             try
             {
-                await AuditLogger.LogAsync("Logout", "Authentication", null, SignInManager.Context.User?.Identity?.Name);
+                var user = SignInManager.Context.User;
+                SignOut.ForgetCharts(user);
+                await AuditLogger.LogAsync("Logout", "Authentication", null, user?.Identity?.Name);
                 await SignInManager.SignOutAsync();
             }
             catch

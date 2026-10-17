@@ -119,8 +119,7 @@ builder.Services.ConfigureApplicationCookie(options =>
                     authLog?.LogWarning(
                         "Cookie principal rejected: absolute session maximum (12h) exceeded for user id {UserId}",
                         context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
-                    context.HttpContext.RequestServices.GetService<PatientChartCache>()?.ClearUser(
-                        context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Principal?.Identity?.Name);
+                    context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
                     context.RejectPrincipal();
                     await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
                     return;
@@ -138,8 +137,7 @@ builder.Services.ConfigureApplicationCookie(options =>
                         "Cookie principal rejected: idle timeout ({IdleMinutes}m) exceeded for user id {UserId}",
                         idleWindow.TotalMinutes,
                         context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
-                    context.HttpContext.RequestServices.GetService<PatientChartCache>()?.ClearUser(
-                        context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Principal?.Identity?.Name);
+                    context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
                     context.RejectPrincipal();
                     await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
                     return;
@@ -228,6 +226,7 @@ builder.Services.AddScoped<AskAiCoordinator>();
 builder.Services.Configure<ChartCacheOptions>(builder.Configuration.GetSection(ChartCacheOptions.SectionName));
 builder.Services.AddSingleton<IPatientChartLoader, ClinicalChartLoader>();
 builder.Services.AddSingleton<PatientChartCache>();
+builder.Services.AddSingleton<ClinicSignOut>();
 builder.Services.AddScoped<OpenChartView>();
 builder.Services.AddHostedService<PatientChartCacheMaintenance>();
 builder.Services.AddSingleton<NotificationService>();

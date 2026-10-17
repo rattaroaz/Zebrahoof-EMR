@@ -106,11 +106,11 @@ public static class AccountEndpoints
         AuthSyncService authSyncService,
         IAuditLogger audit,
         ILoggerFactory loggerFactory,
-        PatientChartCache charts)
+        ClinicSignOut signOut)
     {
         var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Auth.Account");
         var userId = EndpointAuditHelper.ResolveUserId(context);
-        charts.ClearUser(userId);
+        signOut.ForgetCharts(userId);
         log.LogInformation("User logout for user id {UserId} (session cookies cleared)", userId ?? "(anonymous)");
         await EndpointAuditHelper.AuditAsync(audit, context, "logout", "auth:login");
         await signInManager.SignOutAsync();
