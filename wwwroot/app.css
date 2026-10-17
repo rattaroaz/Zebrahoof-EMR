@@ -600,12 +600,32 @@ textarea:focus-visible,
 }
 
 .mud-text-secondary,
-.prior-note-text {
+.prior-note-text,
+.mud-secondary-text,
+.mud-tertiary-text {
     color: #424242 !important;
+}
+
+.mud-input-root.mud-disabled input,
+.mud-input-root.mud-disabled textarea,
+.mud-input-root.mud-disabled .mud-input-slot,
+.mud-input > input:disabled,
+.mud-input > textarea:disabled,
+textarea:disabled,
+input:disabled,
+.mud-disabled .mud-input-slot {
+    color: #424242 !important;
+    -webkit-text-fill-color: #424242 !important;
+    opacity: 1;
 }
 
 .inbox-timestamp {
     color: #424242 !important;
+}
+
+.notes-virtual-list {
+    height: min(70vh, 900px);
+    overflow-y: auto;
 }
 
 .schedule-appointment-card.status-inprogress,

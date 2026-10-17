@@ -188,7 +188,13 @@ builder.Services.AddHostedService<PlaywrightTestUserSeeder>();
 
 // Add MudBlazor services
 builder.Services.AddMudServices();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    // Notice a dropped browser in about 12s instead of the 30s default.
+    // ClientTimeoutInterval must be at least twice KeepAliveInterval.
+    options.KeepAliveInterval = TimeSpan.FromSeconds(5);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(12);
+});
 
 // Add Blazor services
 builder.Services.AddRazorComponents()

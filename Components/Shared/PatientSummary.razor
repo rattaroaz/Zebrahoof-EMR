@@ -81,12 +81,14 @@ else
                                 <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
                                                Size="Size.Small"
                                                title="@($"Open {def.Label} tab")"
+                                               aria-label="@($"Open {def.Label} tab")"
                                                OnClick="@(() => OpenTab(windowKey))"
                                                @onmousedown:stopPropagation="true" />
                             }
                             <MudIconButton Icon="@Icons.Material.Filled.Close"
                                            Size="Size.Small"
                                            title="Remove window"
+                                           aria-label="@($"Remove {def.Label} window")"
                                            OnClick="@(() => RemoveWindowAsync(windowKey))"
                                            @onmousedown:stopPropagation="true" />
                         </CardHeaderActions>

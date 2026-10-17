@@ -1,4 +1,7 @@
 @inject MockClinicalDataService ClinicalDataService
+@inject PatientDialogTracker Dialogs
+@inject ISnackbar Snackbar
+@implements IDisposable
 
 <MudCard Elevation="2">
     <MudCardHeader>
@@ -6,7 +9,7 @@
             <MudText Typo="Typo.h6">Vital Signs History</MudText>
         </CardHeaderContent>
         <CardHeaderActions>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenRecord">
                 Record Vitals
             </MudButton>
         </CardHeaderActions>
@@ -65,15 +68,72 @@
     </MudCardContent>
 </MudCard>
 
+<MudDialog @bind-Visible="_showDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Record Vitals</MudText>
+    </TitleContent>
+    <DialogContent>
+        <PatientSafetyBanner PatientId="PatientId" />
+        <MudNumericField @bind-Value="_systolic" Label="Systolic BP" Class="mt-2" />
+        <MudNumericField @bind-Value="_diastolic" Label="Diastolic BP" Class="mt-2" />
+        <MudNumericField @bind-Value="_heartRate" Label="Heart rate" Class="mt-2" />
+        <MudNumericField T="decimal?" @bind-Value="_temperature" Label="Temperature °F" Class="mt-2" />
+        <MudNumericField @bind-Value="_respiratoryRate" Label="Respiratory rate" Class="mt-2" />
+        <MudNumericField @bind-Value="_oxygen" Label="SpO2 %" Class="mt-2" />
+        <MudNumericField T="decimal?" @bind-Value="_weight" Label="Weight (lbs)" Class="mt-2" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     [Parameter, EditorRequired]
     public int PatientId { get; set; }
 
     private List<VitalSigns> _vitals = new();
+    private bool _showDialog;
+    private int? _systolic = 120;
+    private int? _diastolic = 80;
+    private int? _heartRate = 72;
+    private decimal? _temperature = 98.6m;
+    private int? _respiratoryRate = 16;
+    private int? _oxygen = 98;
+    private decimal? _weight;
+    private IDisposable? _dialogLease;
+
+    protected override void OnInitialized() => _dialogLease = Dialogs.TrackInline(CloseDialog);
 
     protected override async Task OnParametersSetAsync()
     {
         _vitals = await ClinicalDataService.GetVitalsByPatientAsync(PatientId);
+    }
+
+    public void Dispose() => _dialogLease?.Dispose();
+
+    private void CloseDialog() => _showDialog = false;
+
+    private void OpenRecord() => _showDialog = true;
+
+    private async Task Save()
+    {
+        await ClinicalDataService.AddVitalsAsync(new VitalSigns
+        {
+            PatientId = PatientId,
+            RecordedAt = DateTime.Now,
+            RecordedBy = "Dr. Sarah Smith",
+            SystolicBP = _systolic,
+            DiastolicBP = _diastolic,
+            HeartRate = _heartRate,
+            Temperature = _temperature,
+            RespiratoryRate = _respiratoryRate,
+            OxygenSaturation = _oxygen,
+            Weight = _weight
+        });
+        CloseDialog();
+        _vitals = await ClinicalDataService.GetVitalsByPatientAsync(PatientId);
+        Snackbar.Add("Vitals recorded", Severity.Success);
     }
 
     private bool IsBPAbnormal(VitalSigns v) => v.SystolicBP > 140 || v.DiastolicBP > 90;

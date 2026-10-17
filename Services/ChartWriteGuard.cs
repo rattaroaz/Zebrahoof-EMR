@@ -5,10 +5,16 @@ public sealed class ChartNotHeldException : InvalidOperationException
 {
     public const string RefusalMessage = "This chart is no longer open on this screen. The change was not saved.";
 
-    public ChartNotHeldException()
+    public ChartNotHeldException(string? openedPatientName = null, int? openedPatientId = null)
         : base(RefusalMessage)
     {
+        OpenedPatientName = string.IsNullOrWhiteSpace(openedPatientName) ? null : openedPatientName;
+        OpenedPatientId = openedPatientId;
     }
+
+    public string? OpenedPatientName { get; }
+
+    public int? OpenedPatientId { get; }
 }
 
 /// <summary>
@@ -59,6 +65,7 @@ public sealed class ChartWriteGuard
             return;
         }
 
-        throw new ChartNotHeldException();
+        var holder = _registry.Current(call.Value.UserId);
+        throw new ChartNotHeldException(holder?.PatientName, holder?.PatientId);
     }
 }

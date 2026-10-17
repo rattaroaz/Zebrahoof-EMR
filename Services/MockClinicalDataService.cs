@@ -648,6 +648,21 @@ public class MockClinicalDataService
         return Task.FromResult(allergy);
     }
 
+    public Task<Allergy?> UpdateAllergyAsync(int patientId, int allergyId, Action<Allergy> mutate)
+    {
+        RequireChart(patientId);
+        var allergy = _allergies.FirstOrDefault(a => a.Id == allergyId && a.PatientId == patientId);
+        if (allergy == null)
+        {
+            return Task.FromResult<Allergy?>(null);
+        }
+
+        mutate(allergy);
+        PersistUpdate(allergy);
+        NotifyPatientDataChanged(patientId);
+        return Task.FromResult<Allergy?>(allergy);
+    }
+
     public Task<bool> RemoveAllergyAsync(int patientId, string allergen)
     {
         RequireChart(patientId);

@@ -9,6 +9,7 @@
 @inject ChartEditTracker Edits
 @inject NavigationTrail Trail
 @inject PatientDialogTracker Dialogs
+@inject IJSRuntime JS
 
 @if (_phase == Phase.Closed)
 {
@@ -230,18 +231,47 @@ else
         await InvokeAsync(StateHasChanged);
     }
 
-    private void CancelSwitch()
+    private async Task CancelSwitch()
     {
         var back = Trail.PreviousPath;
         var blockedChart = _blockedPatientId is int id && back != null
             && back.Contains($"/patients/{id}", StringComparison.OrdinalIgnoreCase);
-        if (string.IsNullOrEmpty(back) || blockedChart)
+        if (!string.IsNullOrEmpty(back) && !blockedChart)
         {
-            Navigation.NavigateTo("/dashboard");
+            Navigation.NavigateTo(back);
             return;
         }
 
-        Navigation.NavigateTo(back);
+        string? referrer = null;
+        try
+        {
+            referrer = await JS.InvokeAsync<string?>("zebrahoofSameOriginReferrer");
+        }
+        catch (JSException)
+        {
+        }
+
+        var referrerIsBlockedChart = _blockedPatientId is int blockedId && referrer != null
+            && referrer.Contains($"/patients/{blockedId}", StringComparison.OrdinalIgnoreCase);
+        if (!string.IsNullOrEmpty(referrer) && !referrerIsBlockedChart)
+        {
+            Navigation.NavigateTo(referrer);
+            return;
+        }
+
+        var wentBack = false;
+        try
+        {
+            wentBack = await JS.InvokeAsync<bool>("zebrahoofGoBack");
+        }
+        catch (JSException)
+        {
+        }
+
+        if (!wentBack)
+        {
+            Navigation.NavigateTo("/dashboard");
+        }
     }
 
     private void OnEditsChanged()
@@ -264,12 +294,30 @@ else
         {
             Edits.Discard();
             Dialogs.CloseAll();
-            await Task.Delay(50);
+            StateHasChanged();
+            await Task.Yield();
+            try
+            {
+                await JS.InvokeVoidAsync("zebrahoofDismissChartDialogs");
+            }
+            catch (JSException)
+            {
+            }
+
+            await Task.Delay(40);
             _phase = Phase.Closed;
             _openedElsewhere = notice.OpenedPatientName;
             _openedElsewhereId = notice.OpenedPatientId;
             _claimedFor = -1;
             AppState.SelectPatient(null);
+            try
+            {
+                await JS.InvokeVoidAsync("zebrahoofDismissChartDialogs");
+            }
+            catch (JSException)
+            {
+            }
+
             StateHasChanged();
         });
     }

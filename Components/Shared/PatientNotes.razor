@@ -37,9 +37,8 @@
             }
             else
             {
-                <MudStack Spacing="3">
-                    @foreach (var note in _notes.OrderByDescending(n => n.CreatedAt))
-                    {
+                <div class="notes-virtual-list" data-testid="notes-list">
+                    <Virtualize Items="_notes" Context="note" OverscanCount="2" ItemSize="160">
                         <MudPaper Elevation="1" Class="pa-4">
                             <MudStack Spacing="2">
                                 <!-- Note Header -->
@@ -53,15 +52,18 @@
                                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
                                         @if (note.Status == NoteStatus.InProgress)
                                         {
-                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" 
+                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                          aria-label="Edit note"
                                                           OnClick="@(() => EditNote(note))" title="Edit Note" />
-                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" 
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                                          aria-label="Delete note"
                                                           OnClick="@(() => DeleteNote(note))" title="Delete Note" />
                                         }
                                         @if (note.Status == NoteStatus.InProgress && CanSignNote())
                                         {
-                                            <MudIconButton Icon="@Icons.Material.Filled.HowToReg" Size="Size.Small" 
+                                            <MudIconButton Icon="@Icons.Material.Filled.HowToReg" Size="Size.Small"
                                                           Color="Color.Primary"
+                                                          aria-label="Sign note"
                                                           OnClick="@(() => SignNote(note))" title="Sign Note" />
                                         }
                                     </MudStack>
@@ -118,8 +120,8 @@
                                 </MudButton>
                             </MudStack>
                         </MudPaper>
-                    }
-                </MudStack>
+                    </Virtualize>
+                </div>
             }
         </MudCardContent>
     </MudCard>
@@ -138,7 +140,8 @@
 
     private async Task LoadNotes()
     {
-        _notes = await ClinicalDataService.GetPatientNotesAsync(PatientId);
+        var notes = await ClinicalDataService.GetPatientNotesAsync(PatientId);
+        _notes = notes.OrderByDescending(note => note.CreatedAt).ToList();
     }
 
     private void NavigateToTreeView()

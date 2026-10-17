@@ -1,0 +1,44 @@
+@inject PatientDialogTracker Dialogs
+@inject IJSRuntime JS
+
+<MudPaper Class="pa-6 my-2" Elevation="2" data-testid="chart-closed">
+    <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
+        This chart was closed because you opened @_openedName elsewhere.
+    </MudAlert>
+    <MudText Class="my-3">No chart data is open on this screen. The change was not saved.</MudText>
+    @if (Exception.OpenedPatientId is int)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Leave">
+            Go to @_openedName
+        </MudButton>
+    }
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired]
+    public ChartNotHeldException Exception { get; set; } = null!;
+
+    [Parameter]
+    public EventCallback<ChartNotHeldException> OnLeave { get; set; }
+
+    private string _openedName => string.IsNullOrWhiteSpace(Exception.OpenedPatientName)
+        ? "another patient"
+        : Exception.OpenedPatientName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Dialogs.CloseAll();
+        try
+        {
+            await JS.InvokeVoidAsync("zebrahoofDismissChartDialogs");
+        }
+        catch (JSException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private Task Leave() => OnLeave.InvokeAsync(Exception);
+}

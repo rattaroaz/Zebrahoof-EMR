@@ -16,7 +16,7 @@
 
 <MudLayout>
         <MudAppBar Elevation="1" Dense="true" Color="Color.Surface">
-            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" aria-label="Open navigation" OnClick="@ToggleDrawer" />
             <MudImage Src="images/logo.svg" Alt="Zebrahoof EMR" Height="32" Class="mr-2" />
             <MudText Typo="Typo.h6" Class="mr-4 app-wordmark">Zebrahoof EMR</MudText>
             
@@ -56,12 +56,13 @@
             </MudMenu>
             
             <MudBadge Content="@_unreadMessages" Color="Color.Error" Overlap="true" Visible="@(_unreadMessages > 0)" Class="mx-2">
-                <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" Href="/inbox" />
+                <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" Href="/inbox" aria-label="Inbox notifications" />
             </MudBadge>
             
             <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" 
                            Color="Color.Inherit" 
                            OnClick="@ToggleDarkMode" 
+                           aria-label="@(_isDarkMode ? "Switch to light mode" : "Switch to dark mode")"
                            title="@(_isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode")" />
             
             <ProfileMenu />
@@ -102,8 +103,12 @@
     {
         PaletteLight = new PaletteLight()
         {
-            Primary = "#1976D2",
-            Secondary = "#00796B",
+            Primary = "#0D47A1",
+            Secondary = "#00695C",
+            Tertiary = "#004D40",
+            TertiaryContrastText = "#FFFFFF",
+            TextPrimary = "#212121",
+            TextSecondary = "#424242",
             AppbarBackground = "#FFFFFF",
             AppbarText = "#424242",
             Background = "#F5F5F5",

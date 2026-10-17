@@ -1,4 +1,6 @@
 @inject MockClinicalDataService ClinicalDataService
+@inject PatientDialogTracker Dialogs
+@inject ISnackbar Snackbar
 @implements IDisposable
 
 <MudCard Elevation="2">
@@ -7,7 +9,7 @@
             <MudText Typo="Typo.h6">Allergies</MudText>
         </CardHeaderContent>
         <CardHeaderActions>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="OpenAdd">
                 Add Allergy
             </MudButton>
         </CardHeaderActions>
@@ -49,8 +51,8 @@
                     </MudTd>
                     <MudTd DataLabel="Onset">@(context.OnsetDate?.ToString("MM/dd/yyyy") ?? "Unknown")</MudTd>
                     <MudTd>
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="@($"Edit {context.Allergen}")" OnClick="@(() => OpenEdit(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" aria-label="@($"Remove {context.Allergen}")" OnClick="@(() => Remove(context))" />
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -58,11 +60,40 @@
     </MudCardContent>
 </MudCard>
 
+<MudDialog @bind-Visible="_showDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editingId == null ? "Add Allergy" : "Edit Allergy")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <PatientSafetyBanner PatientId="PatientId" />
+        <MudTextField @bind-Value="_allergen" Label="Allergen" Required="true" Class="mt-2" />
+        <MudTextField @bind-Value="_reaction" Label="Reaction" Class="mt-2" />
+        <MudSelect @bind-Value="_severity" Label="Severity" Class="mt-2">
+            @foreach (var severity in Enum.GetValues<AllergySeverity>())
+            {
+                <MudSelectItem Value="@severity">@severity</MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     [Parameter, EditorRequired]
     public int PatientId { get; set; }
 
     private List<Allergy> _allergies = new();
+    private bool _showDialog;
+    private int? _editingId;
+    private string _allergen = string.Empty;
+    private string? _reaction;
+    private AllergySeverity _severity = AllergySeverity.Moderate;
+    private IDisposable? _dialogLease;
+
+    protected override void OnInitialized() => _dialogLease = Dialogs.TrackInline(CloseDialog);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -81,6 +112,66 @@
     public void Dispose()
     {
         ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        _dialogLease?.Dispose();
+    }
+
+    private void CloseDialog() => _showDialog = false;
+
+    private void OpenAdd()
+    {
+        _editingId = null;
+        _allergen = string.Empty;
+        _reaction = null;
+        _severity = AllergySeverity.Moderate;
+        _showDialog = true;
+    }
+
+    private void OpenEdit(Allergy allergy)
+    {
+        _editingId = allergy.Id;
+        _allergen = allergy.Allergen;
+        _reaction = allergy.Reaction;
+        _severity = allergy.Severity;
+        _showDialog = true;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_allergen))
+        {
+            return;
+        }
+
+        if (_editingId is int id)
+        {
+            await ClinicalDataService.UpdateAllergyAsync(PatientId, id, allergy =>
+            {
+                allergy.Allergen = _allergen.Trim();
+                allergy.Reaction = _reaction;
+                allergy.Severity = _severity;
+            });
+        }
+        else
+        {
+            await ClinicalDataService.AddAllergyAsync(new Allergy
+            {
+                PatientId = PatientId,
+                Allergen = _allergen.Trim(),
+                Reaction = _reaction,
+                Severity = _severity,
+                Status = AllergyStatus.Active,
+                OnsetDate = DateTime.Today
+            });
+        }
+
+        CloseDialog();
+        Snackbar.Add("Allergy saved", Severity.Success);
+    }
+
+    private async Task Remove(Allergy allergy)
+    {
+        await ClinicalDataService.RemoveAllergyAsync(PatientId, allergy.Allergen);
+        Snackbar.Add($"{allergy.Allergen} removed", Severity.Info);
     }
 
     private Color GetSeverityColor(AllergySeverity severity) => severity switch

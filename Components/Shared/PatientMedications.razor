@@ -2,6 +2,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject ChartEditTracker Edits
+@inject PatientDialogTracker Dialogs
 @implements IDisposable
 
 <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">
@@ -568,17 +569,20 @@
     }
 
     private IDisposable? _editScope;
+    private IDisposable? _dialogLease;
 
     public void Dispose()
     {
         ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
         Edits.DiscardRequested -= CloseEditingDialogs;
+        _dialogLease?.Dispose();
         _editScope?.Dispose();
     }
 
     protected override void OnInitialized()
     {
         Edits.DiscardRequested += CloseEditingDialogs;
+        _dialogLease = Dialogs.TrackInline(CloseEditingDialogs);
     }
 
     private void CloseEditingDialogs()
@@ -591,7 +595,6 @@
         _showEditMedicationDialog = false;
         _editScope?.Dispose();
         _editScope = null;
-        _ = InvokeAsync(StateHasChanged);
     }
 
     private void TrackEdit()
@@ -684,20 +687,12 @@
 
         var medName = _selectedMedication.Name;
         
-        try
-        {
-            await ClinicalDataService.OrderRefillAsync(
-                PatientId,
-                _selectedMedication.Id,
-                "Dr. Sarah Smith",
-                _refillDaysSupply
-            );
-        }
-        catch (ChartNotHeldException ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Error);
-            return;
-        }
+        await ClinicalDataService.OrderRefillAsync(
+            PatientId,
+            _selectedMedication.Id,
+            "Dr. Sarah Smith",
+            _refillDaysSupply
+        );
 
         await LoadData();
         CloseRefillDialog();
@@ -865,6 +860,7 @@
 
     private void OnMedicationSelected(MedicationCatalog? medication)
     {
+        _newPrescription.SelectedMedication = medication;
         if (medication != null)
         {
             _newPrescription.MedicationName = medication.Name;

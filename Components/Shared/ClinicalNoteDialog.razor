@@ -259,13 +259,15 @@
 
             MudDialog.Close(DialogResult.Ok(note));
         }
+        catch (ChartNotHeldException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to save clinical note for patient {PatientId} (edit: {IsEdit}, noteId: {NoteId})",
                 PatientId, IsEdit, note?.Id);
-            _saveError = ex is ChartNotHeldException
-                ? ChartNotHeldException.RefusalMessage
-                : "The note could not be saved.";
+            _saveError = "The note could not be saved.";
         }
     }
 

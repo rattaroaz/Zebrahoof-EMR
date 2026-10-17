@@ -41,3 +41,29 @@ window.zebrahoofScrollTabs = function (element, delta) {
     if (!element) return;
     element.scrollBy({ left: delta, behavior: 'smooth' });
 };
+
+window.zebrahoofDismissChartDialogs = function () {
+    document.querySelectorAll('.mud-dialog-container, .mud-overlay-dialog').forEach(function (el) {
+        el.remove();
+    });
+};
+
+window.zebrahoofSameOriginReferrer = function () {
+    try {
+        if (!document.referrer) return null;
+        var url = new URL(document.referrer);
+        if (url.origin !== location.origin) return null;
+        if (url.pathname === location.pathname && url.search === location.search) return null;
+        return url.pathname + url.search;
+    } catch (e) {
+        return null;
+    }
+};
+
+window.zebrahoofGoBack = function () {
+    if (window.history.length > 1) {
+        window.history.back();
+        return true;
+    }
+    return false;
+};

@@ -234,6 +234,50 @@ public class PatientContextRouteTests
         Assert.DoesNotContain(crumbs, c => c.Text.Contains("Jane") || c.Text.Contains("John"));
     }
 
+    [Fact]
+    public async Task RefusedWrite_NamesTheChartThatStayedOpen()
+    {
+        var registry = new ActivePatientRegistry();
+        var clinical = new MockClinicalDataService(null, NullLogger<MockClinicalDataService>.Instance, new ChartWriteGuard(registry));
+        registry.Switch("physician", "tab-b", 2, "Jane Smith");
+
+        using (CircuitCall.Push("physician", "tab-a"))
+        {
+            var allergy = await Assert.ThrowsAsync<ChartNotHeldException>(() => clinical.AddAllergyAsync(new Allergy
+            {
+                PatientId = 1,
+                Allergen = "Peanuts"
+            }));
+            Assert.Equal(ChartNotHeldException.RefusalMessage, allergy.Message);
+            Assert.Equal("Jane Smith", allergy.OpenedPatientName);
+            Assert.Equal(2, allergy.OpenedPatientId);
+
+            await Assert.ThrowsAsync<ChartNotHeldException>(() => clinical.AddProblemAsync(new Problem
+            {
+                PatientId = 1,
+                Name = "Stale problem"
+            }));
+            await Assert.ThrowsAsync<ChartNotHeldException>(() => clinical.AddVitalsAsync(new VitalSigns
+            {
+                PatientId = 1,
+                SystolicBP = 180
+            }));
+        }
+
+        Assert.DoesNotContain(await clinical.GetAllergiesByPatientAsync(1), item => item.Allergen == "Peanuts");
+        Assert.DoesNotContain(await clinical.GetProblemsByPatientAsync(1), item => item.Name == "Stale problem");
+    }
+
+    [Fact]
+    public void DialogTracker_CloseAll_RunsEveryInlineCloser()
+    {
+        var tracker = new PatientDialogTracker();
+        var closed = 0;
+        using var lease = tracker.TrackInline(() => closed++);
+        tracker.CloseAll();
+        Assert.Equal(1, closed);
+    }
+
     [Theory]
     [InlineData("/patients/3/summary", 3)]
     [InlineData("/patients/12", 12)]

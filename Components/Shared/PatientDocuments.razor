@@ -9,6 +9,7 @@
 @inject ILogger<PatientDocuments> Logger
 @inject ChartWriteGuard ChartWrites
 @inject ChartEditTracker Edits
+@inject PatientDialogTracker Dialogs
 @implements IDisposable
 
 @* Patient Documents - Scanned documents, forms, etc. *@
@@ -220,21 +221,24 @@
     private byte[]? _uploadFileBytes;
     private bool _isSavingUpload;
 
+    private IDisposable? _dialogLease;
+
     protected override void OnInitialized()
     {
         Edits.DiscardRequested += CloseDocumentDialogs;
+        _dialogLease = Dialogs.TrackInline(CloseDocumentDialogs);
     }
 
     public void Dispose()
     {
         Edits.DiscardRequested -= CloseDocumentDialogs;
+        _dialogLease?.Dispose();
     }
 
     private void CloseDocumentDialogs()
     {
         _showEditDialog = false;
         _showUploadDialog = false;
-        _ = InvokeAsync(StateHasChanged);
     }
 
     protected override async Task OnParametersSetAsync()
