@@ -7,6 +7,8 @@
 @inject AppStateService AppState
 @inject MockPatientService PatientService
 @inject ChartEditTracker Edits
+@inject NavigationTrail Trail
+@inject PatientDialogTracker Dialogs
 
 @if (_phase == Phase.Closed)
 {
@@ -230,13 +232,16 @@ else
 
     private void CancelSwitch()
     {
-        if (_blockedPatientId is int id)
+        var back = Trail.PreviousPath;
+        var blockedChart = _blockedPatientId is int id && back != null
+            && back.Contains($"/patients/{id}", StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrEmpty(back) || blockedChart)
         {
-            Navigation.NavigateTo($"/patients/{id}/summary");
+            Navigation.NavigateTo("/dashboard");
             return;
         }
 
-        Navigation.NavigateTo("/patients");
+        Navigation.NavigateTo(back);
     }
 
     private void OnEditsChanged()
@@ -255,8 +260,11 @@ else
             return;
         }
 
-        _ = InvokeAsync(() =>
+        _ = InvokeAsync(async () =>
         {
+            Edits.Discard();
+            Dialogs.CloseAll();
+            await Task.Delay(50);
             _phase = Phase.Closed;
             _openedElsewhere = notice.OpenedPatientName;
             _openedElsewhereId = notice.OpenedPatientId;

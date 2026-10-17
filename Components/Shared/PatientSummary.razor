@@ -423,9 +423,13 @@ else
                                 </div>
                                 <MudText Typo="Typo.body2" Class="@(lab.IsAbnormal ? "lab-abnormal" : null)">
                                     @lab.Value @lab.Units
-                                    @if (lab.IsAbnormal)
+                                    @if (lab.IsCritical)
                                     {
-                                        <span> @LabValueFlag.Marker(lab.Value, lab.ReferenceRange)</span>
+                                        <span>&nbsp;Critical</span>
+                                    }
+                                    else if (lab.IsAbnormal)
+                                    {
+                                        <span>&nbsp;@LabValueFlag.Marker(lab.Value, lab.ReferenceRange)</span>
                                     }
                                 </MudText>
                             </div>
@@ -626,7 +630,7 @@ else
                     {
                         <MudListItem>
                             <MudText Typo="Typo.body2">@(string.IsNullOrWhiteSpace(note.ChiefComplaint) ? "Note" : note.ChiefComplaint)</MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">@note.AuthorName • @note.CreatedAt.ToString("MM/dd/yyyy")</MudText>
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary prior-note-text">@note.AuthorName • @ClinicTime.Format(note.CreatedAt, "MM/dd/yyyy h:mm tt")</MudText>
                         </MudListItem>
                     }
                 </MudList>

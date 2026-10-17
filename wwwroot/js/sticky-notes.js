@@ -36,3 +36,8 @@ window.stickyNoteDrag = {
         document.addEventListener('mouseup', onMouseUp);
     }
 };
+
+window.zebrahoofScrollTabs = function (element, delta) {
+    if (!element) return;
+    element.scrollBy({ left: delta, behavior: 'smooth' });
+};

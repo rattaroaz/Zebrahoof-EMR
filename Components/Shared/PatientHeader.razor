@@ -1,5 +1,6 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
+@inject PatientDialogTracker Dialogs
 
 <div class="patient-banner-sticky" data-testid="patient-banner">
     <MudPaper Elevation="1" Class="patient-banner px-3 py-2 mb-2">
@@ -61,7 +62,7 @@
             ["IsEdit"] = false
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true };
-        await DialogService.ShowAsync<ClinicalNoteDialog>("New Clinical Note", parameters, options);
+        Dialogs.Track(await DialogService.ShowAsync<ClinicalNoteDialog>("New Clinical Note", parameters, options));
     }
 
     private async Task ShowOrderDialog()
@@ -73,7 +74,7 @@
             { x => x.InitialFilter, OrderCatalogFilter.All }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true };
-        await DialogService.ShowAsync<OrderEntryDialog>("Order tests", parameters, options);
+        Dialogs.Track(await DialogService.ShowAsync<OrderEntryDialog>("Order tests", parameters, options));
     }
 
     private async Task ShowAppointments()
@@ -81,6 +82,7 @@
         var parameters = new DialogParameters { ["PatientId"] = Patient.Id };
         var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true };
         var dialog = await DialogService.ShowAsync<PatientAppointmentsDialog>("Appointments", parameters, options);
+        Dialogs.Track(dialog);
         var result = await dialog.Result;
         if (result is { Canceled: false } && result.Data?.ToString() == "schedule")
         {

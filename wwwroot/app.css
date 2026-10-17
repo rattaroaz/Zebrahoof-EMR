@@ -393,11 +393,33 @@ textarea:focus-visible,
     padding-top: 48px;
 }
 
+.chart-tabs-wrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+}
+
+.chart-tab-scroll {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #424242;
+    border-radius: 4px;
+    background: #FFFFFF;
+    color: #212121;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
 .chart-nav-tabs {
+    flex: 1 1 auto;
     flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
     max-width: 100%;
+    scroll-behavior: smooth;
 }
 
 .chart-tab-btn {
@@ -558,6 +580,43 @@ textarea:focus-visible,
 
 .ask-ai-appbar {
     white-space: nowrap;
+}
+
+.mud-nav-link.active {
+    background-color: #0D47A1 !important;
+    color: #FFFFFF !important;
+}
+
+.mud-nav-link.active .mud-nav-link-text,
+.mud-nav-link.active .mud-icon-root,
+.mud-nav-link.active .mud-typography {
+    color: #FFFFFF !important;
+}
+
+.chart-breadcrumbs .mud-link,
+.chart-breadcrumbs .mud-typography,
+.chart-breadcrumbs .mud-icon-root {
+    color: #0D47A1 !important;
+}
+
+.mud-text-secondary,
+.prior-note-text {
+    color: #424242 !important;
+}
+
+.inbox-timestamp {
+    color: #424242 !important;
+}
+
+.schedule-appointment-card.status-inprogress,
+.schedule-week-appointment.status-inprogress {
+    background-color: #E8F0FE !important;
+    color: #0D47A1 !important;
+}
+
+.schedule-appointment-card.status-inprogress .mud-typography,
+.schedule-week-appointment.status-inprogress .mud-typography {
+    color: #0D47A1 !important;
 }
 
 .inbox-row-action {

@@ -46,7 +46,11 @@
                     <MudTd DataLabel="Result">
                         <span class="@(context.IsAbnormal ? "lab-abnormal" : null)">
                             @context.Value
-                            @if (context.IsAbnormal)
+                            @if (context.IsCritical)
+                            {
+                                <span>&nbsp;Critical</span>
+                            }
+                            else if (context.IsAbnormal)
                             {
                                 <span>&nbsp;@LabValueFlag.Marker(context.Value, context.ReferenceRange)</span>
                             }

@@ -25,7 +25,9 @@
 
     @* Chart Navigation Tabs *@
     <MudPaper Elevation="1" Class="mb-2 pa-1">
-        <div class="chart-nav-tabs" data-testid="chart-tabs">
+        <div class="chart-tabs-wrap">
+            <button type="button" class="chart-tab-scroll" aria-label="Scroll chart tabs left" @onclick="ScrollTabsLeft">‹</button>
+            <div class="chart-nav-tabs" data-testid="chart-tabs" @ref="_tabStrip">
             @foreach (var tab in _orderedTabs)
             {
                 <div class="draggable-tab @(_dragOverTab == tab.Key ? "drag-over" : "") @(_draggingTab == tab.Key ? "dragging" : "")"
@@ -43,6 +45,8 @@
                                Class="chart-tab-btn">@tab.Label</MudButton>
                 </div>
             }
+            </div>
+            <button type="button" class="chart-tab-scroll" aria-label="Scroll chart tabs right" @onclick="ScrollTabsRight">›</button>
         </div>
     </MudPaper>
 
@@ -110,6 +114,7 @@
 
 @code {
     private PatientStickyNoteCard? _patientNoteCard;
+    private ElementReference _tabStrip;
     [Parameter, EditorRequired]
     public Patient Patient { get; set; } = null!;
 
@@ -163,6 +168,22 @@
         {
             await LoadTabOrderAsync();
             StateHasChanged();
+        }
+    }
+
+    private async Task ScrollTabsLeft() => await ScrollTabs(-220);
+
+    private async Task ScrollTabsRight() => await ScrollTabs(220);
+
+    private async Task ScrollTabs(int delta)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("zebrahoofScrollTabs", _tabStrip, delta);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Chart tab strip could not scroll");
         }
     }
 

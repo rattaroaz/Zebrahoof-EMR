@@ -197,10 +197,17 @@ builder.Services.AddRazorComponents()
 // Add mock data services
 builder.Services.AddSingleton<AuthStateService>();
 builder.Services.AddScoped<AppStateService>();
-builder.Services.AddSingleton<ActivePatientRegistry>();
+builder.Services.Configure<ChartLockOptions>(builder.Configuration.GetSection(ChartLockOptions.Section));
+builder.Services.AddSingleton<TimeProvider>(_ => TimeProvider.System);
+builder.Services.AddSingleton(sp => new ActivePatientRegistry(
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<IOptions<ChartLockOptions>>().Value.DisconnectGraceSeconds));
+builder.Services.AddSingleton<ChartWriteGuard>();
 builder.Services.AddScoped<CircuitScope>();
 builder.Services.AddScoped<CircuitHandler, ChartCircuitHandler>();
 builder.Services.AddScoped<ChartEditTracker>();
+builder.Services.AddScoped<NavigationTrail>();
+builder.Services.AddScoped<PatientDialogTracker>();
 builder.Services.AddScoped<AskAiCoordinator>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddScoped<StickyNoteService>();

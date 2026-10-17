@@ -7,6 +7,7 @@
 @inject MockClinicalDataService ClinicalData
 @inject DashboardAskSession DashboardAskSession
 @inject AskAiCoordinator AskAi
+@inject NavigationTrail Trail
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -149,6 +150,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _ = Trail.PreviousPath;
         AuthState.OnAuthStateChanged += OnStateChangedHandler;
         AppState.OnStateChanged += OnStateChangedHandler;
         ClinicalData.InboxChanged += OnInboxDataChanged;

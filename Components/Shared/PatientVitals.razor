@@ -40,10 +40,13 @@
                     <MudTd DataLabel="HR">@context.HeartRate</MudTd>
                     <MudTd DataLabel="Temp">
                         <span class="@(VitalThresholds.IsTemperatureAbnormal(context.Temperature ?? 0) ? "lab-abnormal" : null)">
-                            @context.Temperature
                             @if (VitalThresholds.TemperatureMarker(context.Temperature ?? 0) is string tempFlag)
                             {
-                                <span> @tempFlag</span>
+                                @($"{context.Temperature}\u00A0{tempFlag}")
+                            }
+                            else
+                            {
+                                @context.Temperature
                             }
                         </span>
                     </MudTd>

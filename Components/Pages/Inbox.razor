@@ -81,7 +81,7 @@
                                     <text> (@_selectedMessage.FromRole)</text>
                                 }
                             </MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Tertiary">@_selectedMessage.SentAt.ToString("f")</MudText>
+                            <MudText Typo="Typo.caption" Class="inbox-timestamp">@_selectedMessage.SentAt.ToString("f")</MudText>
                         </MudStack>
                     </CardHeaderContent>
                     <CardHeaderActions>
@@ -409,7 +409,7 @@
                                 </MudStack>
                             </MudStack>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@msg.FromName</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Tertiary">@msg.SentAt.ToString("MM/dd HH:mm")</MudText>
+                            <MudText Typo="Typo.caption" Class="inbox-timestamp">@msg.SentAt.ToString("MM/dd HH:mm")</MudText>
                         </MudStack>
                     </MudListItem>
                 }

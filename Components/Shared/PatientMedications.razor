@@ -52,16 +52,16 @@
                         <MudTd DataLabel="Pharmacy">@context.Pharmacy</MudTd>
                         <MudTd>
                             <MudTooltip Text="Edit Medication">
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Secondary" OnClick="@(() => OpenEditMedicationDialog(context))" />
+                                <MudIconButton aria-label="Edit medication" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Secondary" OnClick="@(() => OpenEditMedicationDialog(context))" />
                             </MudTooltip>
                             <MudTooltip Text="Order Refill">
-                                <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Color="Color.Primary" OnClick="@(() => OrderRefill(context))" />
+                                <MudIconButton aria-label="Order refill" Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Color="Color.Primary" OnClick="@(() => OrderRefill(context))" />
                             </MudTooltip>
                             <MudTooltip Text="View History">
-                                <MudIconButton Icon="@Icons.Material.Filled.History" Size="Size.Small" OnClick="@(() => ViewMedicationHistory(context))" />
+                                <MudIconButton aria-label="View medication history" Icon="@Icons.Material.Filled.History" Size="Size.Small" OnClick="@(() => ViewMedicationHistory(context))" />
                             </MudTooltip>
                             <MudTooltip Text="Discontinue">
-                                <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" OnClick="@(() => DiscontinueMedication(context))" />
+                                <MudIconButton aria-label="Discontinue medication" Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" OnClick="@(() => DiscontinueMedication(context))" />
                             </MudTooltip>
                         </MudTd>
                     </RowTemplate>
@@ -443,6 +443,7 @@
         </MudText>
     </TitleContent>
     <DialogContent>
+        <PatientSafetyBanner PatientId="PatientId" />
         <MudForm @ref="_editMedicationForm" @bind-IsValid="_editMedicationFormValid">
             <MudGrid>
                 <MudItem xs="12">
@@ -584,8 +585,13 @@
     {
         _showPrescribeDialog = false;
         _showRefillDialog = false;
+        _showDiscontinueDialog = false;
+        _showHistoryDialog = false;
+        _showAddToListDialog = false;
+        _showEditMedicationDialog = false;
         _editScope?.Dispose();
         _editScope = null;
+        _ = InvokeAsync(StateHasChanged);
     }
 
     private void TrackEdit()
@@ -678,12 +684,20 @@
 
         var medName = _selectedMedication.Name;
         
-        await ClinicalDataService.OrderRefillAsync(
-            PatientId,
-            _selectedMedication.Id,
-            "Dr. Sarah Smith",
-            _refillDaysSupply
-        );
+        try
+        {
+            await ClinicalDataService.OrderRefillAsync(
+                PatientId,
+                _selectedMedication.Id,
+                "Dr. Sarah Smith",
+                _refillDaysSupply
+            );
+        }
+        catch (ChartNotHeldException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            return;
+        }
 
         await LoadData();
         CloseRefillDialog();

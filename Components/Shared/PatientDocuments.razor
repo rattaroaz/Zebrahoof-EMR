@@ -7,6 +7,9 @@
 @inject ApplicationDbContext Db
 @inject NotificationService NotificationService
 @inject ILogger<PatientDocuments> Logger
+@inject ChartWriteGuard ChartWrites
+@inject ChartEditTracker Edits
+@implements IDisposable
 
 @* Patient Documents - Scanned documents, forms, etc. *@
 
@@ -217,6 +220,23 @@
     private byte[]? _uploadFileBytes;
     private bool _isSavingUpload;
 
+    protected override void OnInitialized()
+    {
+        Edits.DiscardRequested += CloseDocumentDialogs;
+    }
+
+    public void Dispose()
+    {
+        Edits.DiscardRequested -= CloseDocumentDialogs;
+    }
+
+    private void CloseDocumentDialogs()
+    {
+        _showEditDialog = false;
+        _showUploadDialog = false;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         if (_loadedPatientId == PatientId)
@@ -314,6 +334,7 @@
 
     private async Task SaveUploadedDocument()
     {
+        ChartWrites.Ensure(PatientId);
         if (_uploadForm is not null)
         {
             await _uploadForm.Validate();
@@ -437,6 +458,7 @@
 
     private async Task SaveDocumentEdits()
     {
+        ChartWrites.Ensure(PatientId);
         if (_editForm is not null)
         {
             await _editForm.Validate();
@@ -491,6 +513,7 @@
 
     private async Task DeleteDocument(Document document)
     {
+        ChartWrites.Ensure(PatientId);
         try
         {
             var persisted = await Db.Documents.FirstOrDefaultAsync(d => d.Id == document.Id);

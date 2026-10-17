@@ -16,6 +16,10 @@
     </TitleContent>
     <DialogContent>
         <PatientSafetyBanner PatientId="@(PatientId > 0 ? PatientId : note.PatientId)" />
+        @if (!string.IsNullOrEmpty(_saveError))
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@_saveError</MudAlert>
+        }
         <MudStack Spacing="4" Class="pa-2">
             @if (IsViewOnly)
             {
@@ -32,7 +36,7 @@
                         </MudItem>
                         <MudItem xs="12" md="6">
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">Created</MudText>
-                            <MudText Typo="Typo.body2">@note.CreatedAt.ToString("MMM dd, yyyy HH:mm")</MudText>
+                            <MudText Typo="Typo.body2">@ClinicTime.Format(note.CreatedAt, "MMM dd, yyyy h:mm tt")</MudText>
                         </MudItem>
                         <MudItem xs="12" md="6">
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">Status</MudText>
@@ -150,6 +154,7 @@
     private ClinicalNote note = new();
     private bool signNote = false;
     private IDisposable? _editScope;
+    private string? _saveError;
 
     protected override void OnInitialized()
     {
@@ -258,7 +263,9 @@
         {
             Logger.LogError(ex, "Failed to save clinical note for patient {PatientId} (edit: {IsEdit}, noteId: {NoteId})",
                 PatientId, IsEdit, note?.Id);
-            // TODO: Show user-friendly snackbar via injected NotificationService (add @inject if needed)
+            _saveError = ex is ChartNotHeldException
+                ? ChartNotHeldException.RefusalMessage
+                : "The note could not be saved.";
         }
     }
 

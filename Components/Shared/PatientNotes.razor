@@ -70,12 +70,12 @@
                                 <!-- Note Metadata -->
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
                                     <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                        By @note.AuthorName on @note.CreatedAt.ToString("MMM dd, yyyy HH:mm")
+                                        By @note.AuthorName on @ClinicTime.Format(note.CreatedAt, "MMM dd, yyyy h:mm tt")
                                     </MudText>
                                     @if (note.SignedAt.HasValue)
                                     {
                                         <MudText Typo="Typo.caption" Color="Color.Success">
-                                            ✓ Signed on @note.SignedAt?.ToString("MMM dd, yyyy HH:mm")
+                                            ✓ Signed on @(note.SignedAt is DateTime signedAt ? ClinicTime.Format(signedAt, "MMM dd, yyyy h:mm tt") : "")
                                         </MudText>
                                     }
                                 </MudStack>
