@@ -48,6 +48,19 @@ public class ChartSignOutAndBenchmarkTests
     }
 
     [Fact]
+    public async Task SeedLongitudinalChart_SecondCallDoesNotDuplicate()
+    {
+        var clinical = new MockClinicalDataService();
+        var first = clinical.SeedLongitudinalChart(5, years: 6);
+        var notes = await clinical.GetPatientNotesAsync(5);
+        var second = clinical.SeedLongitudinalChart(5, years: 6);
+
+        Assert.Equal(157, first.Notes);
+        Assert.Equal(first, second);
+        Assert.Equal(157, notes.Count(n => n.Id >= 800_000));
+    }
+
+    [Fact]
     public async Task LongitudinalChart_ColdOpenLoadsYearsOfData_WarmOpenDoesNot()
     {
         var patients = CreatePatients();

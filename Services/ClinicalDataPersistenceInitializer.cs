@@ -31,6 +31,16 @@ public class ClinicalDataPersistenceInitializer : IHostedService
         {
             _logger.LogError(ex, "Clinical data hydration failed; the in-memory mock chart will still be available.");
         }
+
+        // After hydration. A database that already has chart rows replaces the
+        // in-memory lists, so seeding any earlier is wiped on the next start.
+        if (string.Equals(Environment.GetEnvironmentVariable("ZH_BENCH"), "1", StringComparison.Ordinal))
+        {
+            var seeded = _clinicalData.SeedLongitudinalChart(5, years: 6);
+            _logger.LogInformation(
+                "ZH_BENCH 6-year chart for patient 5: {Notes} notes, {Labs} labs, {Vitals} vitals, {Medications} meds, {Encounters} encounters",
+                seeded.Notes, seeded.Labs, seeded.Vitals, seeded.Medications, seeded.Encounters);
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

@@ -2257,6 +2257,17 @@ public class MockClinicalDataService
     /// </summary>
     public (int Notes, int Labs, int Vitals, int Medications, int Encounters) SeedLongitudinalChart(int patientId, int years)
     {
+        var already = _notes.Count(n => n.PatientId == patientId && n.Id >= 800_000);
+        if (already > 0)
+        {
+            return (
+                already,
+                _labResults.Count(l => l.PatientId == patientId && l.Id >= 1_000_000),
+                _vitals.Count(v => v.PatientId == patientId && v.Id >= 800_000),
+                _medications.Count(m => m.PatientId == patientId && m.Id >= 700_000),
+                _encounters.Count(e => e.PatientId == patientId && e.Id >= 800_000));
+        }
+
         var start = new DateTime(2019, 1, 7, 14, 30, 0, DateTimeKind.Utc);
         var end = start.AddYears(years);
         var labNames = new[]
