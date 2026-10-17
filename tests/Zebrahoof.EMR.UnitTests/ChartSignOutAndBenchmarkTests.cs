@@ -61,6 +61,20 @@ public class ChartSignOutAndBenchmarkTests
     }
 
     [Fact]
+    public async Task SeedLongitudinalChart_DoesNotDuplicateAnEditedMedication()
+    {
+        var clinical = new MockClinicalDataService();
+        await clinical.AddMedicationToListAsync(5, "Sertraline", "50 mg", "Oral", "Daily", "Dr. Sarah Smith", null, "edited");
+
+        clinical.SeedLongitudinalChart(5, years: 6);
+        clinical.SeedLongitudinalChart(5, years: 6);
+
+        var meds = await clinical.GetMedicationsByPatientAsync(5);
+        Assert.Equal(1, meds.Count(med => string.Equals(med.Name, "Sertraline", StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(meds, med => med.Name == "Sertraline" && med.Dose == "50 mg");
+    }
+
+    [Fact]
     public void BenchmarkSeed_RunsOnlyInDevelopmentWhenTheFlagIsSet()
     {
         Assert.True(ClinicalDataPersistenceInitializer.ShouldSeedBenchmarkChart(isDevelopment: true, flag: "1"));

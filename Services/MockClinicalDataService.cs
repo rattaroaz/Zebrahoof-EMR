@@ -2358,8 +2358,17 @@ public class MockClinicalDataService
         }
 
         var medNames = new[] { "Lisinopril", "Atorvastatin", "Metformin", "Amlodipine", "Hydrochlorothiazide", "Levothyroxine", "Omeprazole", "Aspirin", "Vitamin D", "Sertraline" };
+        var addedMeds = 0;
         foreach (var name in medNames)
         {
+            var alreadyListed = _medications.Any(med =>
+                med.PatientId == patientId
+                && string.Equals(med.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (alreadyListed)
+            {
+                continue;
+            }
+
             _medications.Add(new Medication
             {
                 Id = 700_000 + _medications.Count,
@@ -2373,8 +2382,9 @@ public class MockClinicalDataService
                 IsLongTerm = true,
                 Prescriber = "Dr. Sarah Smith"
             });
+            addedMeds++;
         }
 
-        return (notes, labs, vitals, medNames.Length, encounters);
+        return (notes, labs, vitals, addedMeds, encounters);
     }
 }
