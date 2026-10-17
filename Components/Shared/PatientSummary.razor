@@ -421,8 +421,12 @@ else
                                     <MudText Typo="Typo.body2">@lab.TestName</MudText>
                                     <MudText Typo="Typo.caption" Class="mud-text-secondary">@lab.CollectedAt.ToString("MM/dd/yyyy")</MudText>
                                 </div>
-                                <MudText Typo="Typo.body2" Color="@(lab.IsAbnormal ? Color.Error : Color.Default)" Style="@(lab.IsCritical ? "font-weight: bold;" : "")">
+                                <MudText Typo="Typo.body2" Class="@(lab.IsAbnormal ? "lab-abnormal" : null)">
                                     @lab.Value @lab.Units
+                                    @if (lab.IsAbnormal)
+                                    {
+                                        <span> @LabValueFlag.Marker(lab.Value, lab.ReferenceRange)</span>
+                                    }
                                 </MudText>
                             </div>
                         </MudListItem>
@@ -484,10 +488,17 @@ else
                     @foreach (var encounter in _encounters.Take(4))
                     {
                         <MudTimelineItem Size="Size.Small" Color="@(encounter.Status == EncounterStatus.Signed ? Color.Success : Color.Warning)">
-                            <MudText Typo="Typo.body2">@encounter.VisitType</MudText>
-                            <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                @encounter.DateTime.ToString("MM/dd/yyyy") • @encounter.Provider
-                            </MudText>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <div>
+                                    <MudText Typo="Typo.body2">@encounter.VisitType</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @encounter.DateTime.ToString("MM/dd/yyyy") • @encounter.Provider
+                                    </MudText>
+                                </div>
+                                <MudButton Variant="Variant.Outlined" Size="Size.Small" Href="@($"/encounter/{encounter.Id}")" data-testid="open-encounter">
+                                    Open encounter
+                                </MudButton>
+                            </MudStack>
                         </MudTimelineItem>
                     }
                 </MudTimeline>

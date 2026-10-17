@@ -39,12 +39,7 @@ public class MockPatientService
     public async Task<List<Patient>> SearchPatientsAsync(string searchTerm)
     {
         await EnsureHydratedAsync();
-        return _patients.Where(p =>
-            p.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-            p.MRN.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-            (p.Phone?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (p.Email?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
-        ).ToList();
+        return _patients.Where(p => PatientSearch.Matches(p, searchTerm)).ToList();
     }
 
     public async Task<Patient> AddPatientAsync(Patient patient)

@@ -587,6 +587,8 @@ public class InboxMessage
     public bool IsRead { get; set; }
     public bool IsFlagged { get; set; }
     public bool IsUrgent { get; set; }
+    public bool IsAcknowledged { get; set; }
+    public DateTime? AcknowledgedAt { get; set; }
     public int? ParentMessageId { get; set; }
     public MessageStatus Status { get; set; }
 }

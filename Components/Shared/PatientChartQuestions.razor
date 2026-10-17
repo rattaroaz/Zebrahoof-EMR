@@ -5,19 +5,10 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject ILogger<PatientChartQuestions> Logger
+@inject AskAiCoordinator AskAi
+@implements IDisposable
 
-@if (!AskSession.IsOpen(Patient.Id))
-{
-    <div class="chart-ask-launcher">
-        <MudTooltip Text="Ask about this patient">
-            <button type="button" class="chart-ask-launcher-btn" @onclick="Open" aria-label="Ask AI">
-                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" />
-                <span>Ask AI</span>
-            </button>
-        </MudTooltip>
-    </div>
-}
-else
+@if (AskSession.IsOpen(Patient.Id))
 {
     <div class="chart-ask-panel" role="dialog" aria-label="Ask AI">
         <div class="chart-ask-header">
@@ -152,6 +143,13 @@ else
             // Panel may have closed before scroll.
         }
     }
+
+    protected override void OnInitialized()
+    {
+        AskAi.OpenRequested += Open;
+    }
+
+    public void Dispose() => AskAi.OpenRequested -= Open;
 
     private void Open() => AskSession.SetOpen(Patient.Id, true);
 

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -195,7 +196,12 @@ builder.Services.AddRazorComponents()
 
 // Add mock data services
 builder.Services.AddSingleton<AuthStateService>();
-builder.Services.AddSingleton<AppStateService>();
+builder.Services.AddScoped<AppStateService>();
+builder.Services.AddSingleton<ActivePatientRegistry>();
+builder.Services.AddScoped<CircuitScope>();
+builder.Services.AddScoped<CircuitHandler, ChartCircuitHandler>();
+builder.Services.AddScoped<ChartEditTracker>();
+builder.Services.AddScoped<AskAiCoordinator>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddScoped<StickyNoteService>();
 builder.Services.AddScoped<PatientStickyNoteService>();

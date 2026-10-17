@@ -5,19 +5,10 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject ILogger<DashboardAsk> Logger
+@inject AskAiCoordinator AskAi
+@implements IDisposable
 
-@if (!AskSession.IsOpen)
-{
-    <div class="chart-ask-launcher">
-        <MudTooltip Text="Ask a general question">
-            <button type="button" class="chart-ask-launcher-btn" @onclick="Open" aria-label="Ask AI">
-                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" />
-                <span>Ask AI</span>
-            </button>
-        </MudTooltip>
-    </div>
-}
-else
+@if (AskSession.IsOpen)
 {
     <div class="chart-ask-panel" role="dialog" aria-label="Ask AI">
         <div class="chart-ask-header">
@@ -152,6 +143,13 @@ else
         {
         }
     }
+
+    protected override void OnInitialized()
+    {
+        AskAi.OpenRequested += Open;
+    }
+
+    public void Dispose() => AskAi.OpenRequested -= Open;
 
     private void Open() => AskSession.IsOpen = true;
 

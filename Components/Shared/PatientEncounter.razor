@@ -8,9 +8,19 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @inject ILogger<PatientEncounter> Logger
+@inject MockClinicalDataService ClinicalData
+@inject NavigationManager Navigation
 
-<MudPaper Elevation="0" Class="pa-4 d-flex flex-column" Style="height: calc(100vh - 250px); max-height: 800px; overflow-y: auto;">
-    <MudStack Spacing="4">
+<MudPaper Elevation="0" Class="pa-3 d-flex flex-column" Style="min-height: 240px;">
+    <MudStack Spacing="3">
+        <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Outlined">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <span>This tab is the AI discussion. The visit workspace is a separate screen.</span>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" data-testid="open-encounter-workspace" OnClick="OpenLatestEncounter">
+                    Open encounter
+                </MudButton>
+            </MudStack>
+        </MudAlert>
         <LocalAiNotReadyAlert Note="Clinical data stays on this machine." />
         @* Current Input Area *@
         <MudPaper Elevation="2" Class="pa-4" id="encounter-top">
@@ -99,6 +109,19 @@
 @code {
     [Parameter, EditorRequired]
     public int PatientId { get; set; }
+
+    private async Task OpenLatestEncounter()
+    {
+        var encounters = await ClinicalData.GetEncountersByPatientAsync(PatientId);
+        var latest = encounters.OrderByDescending(e => e.DateTime).FirstOrDefault();
+        if (latest == null)
+        {
+            Snackbar.Add("No encounter is on file for this patient yet.", Severity.Info);
+            return;
+        }
+
+        Navigation.NavigateTo($"/encounter/{latest.Id}");
+    }
 
     private string _currentInput = string.Empty;
     private bool _isProcessing = false;

@@ -39,9 +39,13 @@
                     </MudTd>
                     <MudTd DataLabel="HR">@context.HeartRate</MudTd>
                     <MudTd DataLabel="Temp">
-                        <MudText Color="@(IsTempAbnormal(context) ? Color.Warning : Color.Default)">
+                        <span class="@(VitalThresholds.IsTemperatureAbnormal(context.Temperature ?? 0) ? "lab-abnormal" : null)">
                             @context.Temperature
-                        </MudText>
+                            @if (VitalThresholds.TemperatureMarker(context.Temperature ?? 0) is string tempFlag)
+                            {
+                                <span> @tempFlag</span>
+                            }
+                        </span>
                     </MudTd>
                     <MudTd DataLabel="RR">@context.RespiratoryRate</MudTd>
                     <MudTd DataLabel="SpO2">
@@ -70,6 +74,5 @@
     }
 
     private bool IsBPAbnormal(VitalSigns v) => v.SystolicBP > 140 || v.DiastolicBP > 90;
-    private bool IsTempAbnormal(VitalSigns v) => v.Temperature > 100.4m;
     private bool IsO2Abnormal(VitalSigns v) => v.OxygenSaturation < 95;
 }

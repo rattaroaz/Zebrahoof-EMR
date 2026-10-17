@@ -1,6 +1,7 @@
 @inject MockClinicalDataService ClinicalDataService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject ChartEditTracker Edits
 @implements IDisposable
 
 <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">
@@ -192,6 +193,7 @@
         </MudText>
     </TitleContent>
     <DialogContent>
+        <PatientSafetyBanner PatientId="PatientId" />
         <MudForm @ref="_prescribeForm" @bind-IsValid="_prescribeFormValid">
             <MudGrid>
                 <MudItem xs="12" md="6">
@@ -271,6 +273,7 @@
         </MudText>
     </TitleContent>
     <DialogContent>
+        <PatientSafetyBanner PatientId="PatientId" />
         @if (_selectedMedication != null)
         {
             <MudStack Spacing="2">
@@ -563,13 +566,37 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private IDisposable? _editScope;
+
     public void Dispose()
     {
         ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        Edits.DiscardRequested -= CloseEditingDialogs;
+        _editScope?.Dispose();
+    }
+
+    protected override void OnInitialized()
+    {
+        Edits.DiscardRequested += CloseEditingDialogs;
+    }
+
+    private void CloseEditingDialogs()
+    {
+        _showPrescribeDialog = false;
+        _showRefillDialog = false;
+        _editScope?.Dispose();
+        _editScope = null;
+    }
+
+    private void TrackEdit()
+    {
+        _editScope?.Dispose();
+        _editScope = Edits.Push(PatientId);
     }
 
     private void OpenPrescribeDialog()
     {
+        TrackEdit();
         _newPrescription = new PrescriptionFormModel
         {
             Prescriber = "Dr. Sarah Smith",
@@ -584,6 +611,8 @@
     {
         _showPrescribeDialog = false;
         _newPrescription = new();
+        _editScope?.Dispose();
+        _editScope = null;
     }
 
     private async Task SubmitPrescription()
@@ -628,6 +657,7 @@
 
     private void OrderRefill(Medication medication)
     {
+        TrackEdit();
         _selectedMedication = medication;
         _refillDaysSupply = medication.DaysSupply ?? 30;
         _refillPharmacy = medication.Pharmacy ?? string.Empty;
@@ -638,6 +668,8 @@
     {
         _showRefillDialog = false;
         _selectedMedication = null;
+        _editScope?.Dispose();
+        _editScope = null;
     }
 
     private async Task SubmitRefill()

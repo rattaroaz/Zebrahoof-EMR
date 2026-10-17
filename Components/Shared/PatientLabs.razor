@@ -44,18 +44,13 @@
                 <RowTemplate>
                     <MudTd DataLabel="Test">@context.TestName</MudTd>
                     <MudTd DataLabel="Result">
-                        <MudText Color="@(context.IsCritical ? Color.Error : context.IsAbnormal ? Color.Warning : Color.Default)"
-                                 Style="@(context.IsCritical ? "font-weight: bold;" : "")">
+                        <span class="@(context.IsAbnormal ? "lab-abnormal" : null)">
                             @context.Value
-                            @if (context.IsCritical)
+                            @if (context.IsAbnormal)
                             {
-                                <MudIcon Icon="@Icons.Material.Filled.PriorityHigh" Size="Size.Small" Color="Color.Error" />
+                                <span>&nbsp;@LabValueFlag.Marker(context.Value, context.ReferenceRange)</span>
                             }
-                            else if (context.IsAbnormal)
-                            {
-                                <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" />
-                            }
-                        </MudText>
+                        </span>
                     </MudTd>
                     <MudTd DataLabel="Units">@(context.Units ?? "—")</MudTd>
                     <MudTd DataLabel="Range">@(context.ReferenceRange ?? "—")</MudTd>

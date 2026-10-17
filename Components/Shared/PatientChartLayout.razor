@@ -14,7 +14,7 @@
     <PatientChartMessages PatientId="Patient.Id" InitialMessageId="InboxMessageId" />
 
     @* Patient Sticky Note Toggle *@
-    <div style="position: fixed; top: 80px; right: 20px; z-index: 9999;">
+    <div class="patient-sticky-toggle">
         <MudTooltip Text="Patient Sticky">
             <MudFab StartIcon="@Icons.Material.Filled.StickyNote2" 
                     Style="background-color: #f8bbd9; color: #000;"
@@ -24,8 +24,8 @@
     </div>
 
     @* Chart Navigation Tabs *@
-    <MudPaper Elevation="1" Class="mb-4 pa-2">
-        <div class="chart-nav-tabs">
+    <MudPaper Elevation="1" Class="mb-2 pa-1">
+        <div class="chart-nav-tabs" data-testid="chart-tabs">
             @foreach (var tab in _orderedTabs)
             {
                 <div class="draggable-tab @(_dragOverTab == tab.Key ? "drag-over" : "") @(_draggingTab == tab.Key ? "dragging" : "")"
@@ -39,7 +39,8 @@
                                Color="@GetButtonColor(tab.Key)" 
                                StartIcon="@tab.Icon" 
                                OnClick="@(() => NavigateToTab(tab.Key))" 
-                               Class="ma-1">@tab.Label</MudButton>
+                               Size="Size.Small"
+                               Class="chart-tab-btn">@tab.Label</MudButton>
                 </div>
             }
         </div>

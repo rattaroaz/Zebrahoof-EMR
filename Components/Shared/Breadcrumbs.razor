@@ -1,9 +1,11 @@
+@implements IDisposable
 @inject NavigationManager Navigation
-@inject AppStateService AppState
+@inject MockPatientService PatientService
+@inject MockClinicalDataService ClinicalData
 
 @if (_items.Count > 1)
 {
-    <MudBreadcrumbs Items="_items" Class="pa-0 mb-4">
+    <MudBreadcrumbs Items="_items" Class="pa-0 mb-1 chart-breadcrumbs">
         <ItemTemplate Context="item">
             @if (string.IsNullOrEmpty(item.Href))
             {
@@ -22,88 +24,57 @@
 
 @code {
     private List<BreadcrumbItem> _items = new();
+    private string? _builtFor;
 
     protected override void OnInitialized()
     {
         Navigation.LocationChanged += OnLocationChanged;
-        AppState.OnStateChanged += OnAppStateChanged;
-        UpdateBreadcrumbs();
+        _ = ReloadAsync();
     }
 
     private async void OnLocationChanged(object? sender, LocationChangedEventArgs args)
     {
-        UpdateBreadcrumbs();
-        await InvokeAsync(StateHasChanged);
+        await ReloadAsync();
     }
 
-    private async void OnAppStateChanged()
+    private async Task ReloadAsync()
     {
-        UpdateBreadcrumbs();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private void UpdateBreadcrumbs()
-    {
-        _items.Clear();
-        _items.Add(new BreadcrumbItem("Home", "/dashboard", icon: Icons.Material.Filled.Home));
-
-        var uri = new Uri(Navigation.Uri);
-        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-
-        var path = "";
-        foreach (var segment in segments)
+        var path = new Uri(Navigation.Uri).AbsolutePath;
+        if (path == _builtFor && _items.Count > 0)
         {
-            path += $"/{segment}";
-            var text = FormatSegment(segment);
-            
-            // Check if this is the last segment
-            if (segment == segments.Last())
+            return;
+        }
+
+        var names = new Dictionary<int, string>();
+        if (PatientRoute.TryParsePatientId(path, out var patientId))
+        {
+            var patient = await PatientService.GetPatientByIdAsync(patientId);
+            if (patient != null)
             {
-                _items.Add(new BreadcrumbItem(text, null, disabled: true));
-            }
-            else
-            {
-                _items.Add(new BreadcrumbItem(text, path));
+                names[patientId] = patient.FullName;
             }
         }
 
-        // Add patient context if available
-        if (AppState.SelectedPatient != null && !uri.AbsolutePath.Contains("patients"))
+        (int PatientId, string Name)? encounterCrumb = null;
+        if (PatientRoute.TryParseEncounterId(path, out var encounterId))
         {
-            _items.Insert(1, new BreadcrumbItem($"Patient: {AppState.SelectedPatient.FullName}", $"/patients/{AppState.SelectedPatient.Id}"));
-        }
-    }
-
-    private string FormatSegment(string segment)
-    {
-        // Handle numeric IDs
-        if (int.TryParse(segment, out _))
-        {
-            return AppState.SelectedPatient?.FullName ?? $"#{segment}";
+            var encounter = await ClinicalData.GetEncounterByIdAsync(encounterId);
+            if (encounter != null)
+            {
+                var patient = await PatientService.GetPatientByIdAsync(encounter.PatientId);
+                encounterCrumb = (encounter.PatientId, patient?.FullName ?? encounter.PatientName);
+            }
         }
 
-        return segment switch
-        {
-            "dashboard" => "Dashboard",
-            "patients" => "Patients",
-            "schedule" => "Schedule",
-            "tasks" => "Tasks",
-            "orders" => "Orders",
-            "inbox" => "Inbox",
-            "patient-messages" => "Patient Messages",
-            "admin" => "Administration",
-            "settings" => "Settings",
-            "templates" => "Templates",
-            "users" => "Users",
-            "profile" => "Profile",
-            "preferences" => "Preferences",
-            _ => System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(segment.Replace("-", " "))
-        };
+        var crumbs = BreadcrumbText.Build(path, id => names.GetValueOrDefault(id), _ => encounterCrumb);
+
+        _items = crumbs.Select(c => new BreadcrumbItem(c.Text, c.Href, disabled: c.Href == null)).ToList();
+        _builtFor = path;
+        await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
     {
         Navigation.LocationChanged -= OnLocationChanged;
-        AppState.OnStateChanged -= OnAppStateChanged;
     }
 }

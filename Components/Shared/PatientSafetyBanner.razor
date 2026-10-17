@@ -1,0 +1,48 @@
+@inject MockPatientService PatientService
+
+@if (_patient != null)
+{
+    <div class="@CssClass" data-testid="patient-safety-banner">
+        <div class="patient-safety-name">@_patient.LastName, @_patient.FirstName</div>
+        <div class="patient-safety-meta">
+            DOB @_patient.DateOfBirth.ToString("MM/dd/yyyy") (@_patient.Age y) · MRN @_patient.MRN
+            · Allergies:
+            @if (_patient.Allergies.Count == 0)
+            {
+                <span class="patient-allergy-none">NKA</span>
+            }
+            else
+            {
+                <span class="patient-allergy-names">@string.Join(", ", _patient.Allergies)</span>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int PatientId { get; set; }
+
+    [Parameter]
+    public Patient? Patient { get; set; }
+
+    [Parameter]
+    public bool Sticky { get; set; }
+
+    private Patient? _patient;
+    private string CssClass => Sticky ? "patient-safety-banner patient-banner-sticky" : "patient-safety-banner";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Patient != null && Patient.Id == (PatientId == 0 ? Patient.Id : PatientId))
+        {
+            _patient = Patient;
+            return;
+        }
+
+        if (PatientId > 0)
+        {
+            _patient = await PatientService.GetPatientByIdAsync(PatientId);
+        }
+    }
+}

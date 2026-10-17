@@ -4,6 +4,7 @@
 @inject MockClinicalDataService ClinicalDataService
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <PageTitle>Inbox - Zebrahoof EMR</PageTitle>
 
@@ -97,11 +98,17 @@
                 </MudCardContent>
                 <MudDivider />
                 <MudCardActions>
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Reply"
+                    @if (_selectedMessage.IsUrgent)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="AcknowledgeSelected">Acknowledge</MudButton>
+                        <MudButton Variant="Variant.Outlined" OnClick="OpenSelectedChart">Open chart</MudButton>
+                        <MudButton Variant="Variant.Outlined" OnClick="OrderForSelected">Order</MudButton>
+                    }
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Reply"
                                OnClick="OpenReplyDialog">
                         Reply
                     </MudButton>
-                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Forward">
+                    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Forward">
                         Forward
                     </MudButton>
                 </MudCardActions>
@@ -264,6 +271,72 @@
         await LoadMessages();
     }
 
+    private async Task AcknowledgeFromList(InboxMessage message)
+    {
+        await ClinicalDataService.AcknowledgeMessageAsync(message.Id);
+        await LoadMessages();
+    }
+
+    private void OpenChartFromList(InboxMessage message)
+    {
+        if (message.PatientId is int id)
+        {
+            Navigation.NavigateTo($"/patients/{id}/summary");
+        }
+    }
+
+    private async Task OrderFromList(InboxMessage message)
+    {
+        if (message.PatientId is not int id)
+        {
+            return;
+        }
+
+        var parameters = new DialogParameters<OrderEntryDialog>
+        {
+            { x => x.PatientId, id },
+            { x => x.PatientName, message.PatientName ?? "Patient" },
+            { x => x.InitialFilter, OrderCatalogFilter.All }
+        };
+        await DialogService.ShowAsync<OrderEntryDialog>("Order", parameters, new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true });
+    }
+
+    private async Task AcknowledgeSelected()
+    {
+        if (_selectedMessage == null)
+        {
+            return;
+        }
+
+        await ClinicalDataService.AcknowledgeMessageAsync(_selectedMessage.Id);
+        await LoadMessages();
+        _selectedMessage = _allMessages.FirstOrDefault(m => m.Id == _selectedMessage.Id);
+    }
+
+    private void OpenSelectedChart()
+    {
+        if (_selectedMessage?.PatientId is int id)
+        {
+            Navigation.NavigateTo($"/patients/{id}/summary");
+        }
+    }
+
+    private async Task OrderForSelected()
+    {
+        if (_selectedMessage?.PatientId is not int id)
+        {
+            return;
+        }
+
+        var parameters = new DialogParameters<OrderEntryDialog>
+        {
+            { x => x.PatientId, id },
+            { x => x.PatientName, _selectedMessage.PatientName ?? "Patient" },
+            { x => x.InitialFilter, OrderCatalogFilter.All }
+        };
+        await DialogService.ShowAsync<OrderEntryDialog>("Order", parameters, new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true });
+    }
+
     private async Task SendNewMessage()
     {
         var message = new InboxMessage
@@ -322,9 +395,12 @@
                                     @(msg.Subject.Length > 35 ? msg.Subject[..35] + "..." : msg.Subject)
                                 </MudText>
                                 <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center">
-                                    @if (msg.IsUrgent)
+                                    @if (msg.IsUrgent && !msg.IsAcknowledged)
                                     {
-                                        <MudIcon Icon="@Icons.Material.Filled.PriorityHigh" Size="Size.Small" Color="Color.Error" />
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Critical</MudChip>
+                                        <button type="button" class="inbox-row-action" @onclick="() => AcknowledgeFromList(msg)" @onclick:stopPropagation="true">Acknowledge</button>
+                                        <button type="button" class="inbox-row-action" @onclick="() => OpenChartFromList(msg)" @onclick:stopPropagation="true">Open chart</button>
+                                        <button type="button" class="inbox-row-action" @onclick="() => OrderFromList(msg)" @onclick:stopPropagation="true">Order</button>
                                     }
                                     @if (msg.IsFlagged)
                                     {

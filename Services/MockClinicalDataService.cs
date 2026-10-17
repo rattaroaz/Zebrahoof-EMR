@@ -1740,14 +1740,32 @@ public class MockClinicalDataService
     }
 
     // Inbox and Messaging Methods
-    public Task<List<InboxMessage>> GetInboxMessagesAsync(string? category = null, bool? unreadOnly = null, bool? flaggedOnly = null, int? patientId = null) =>
-        Task.FromResult(_inboxMessages
+    public Task<List<InboxMessage>> GetInboxMessagesAsync(string? category = null, bool? unreadOnly = null, bool? flaggedOnly = null, int? patientId = null)
+    {
+        var filtered = _inboxMessages
             .Where(m => category == null || m.Category.ToString() == category)
             .Where(m => unreadOnly != true || !m.IsRead)
             .Where(m => flaggedOnly != true || m.IsFlagged)
-            .Where(m => patientId == null || m.PatientId == patientId)
-            .OrderByDescending(m => m.SentAt)
-            .ToList());
+            .Where(m => patientId == null || m.PatientId == patientId);
+        return Task.FromResult(InboxOrdering.Sort(filtered));
+    }
+
+    public Task AcknowledgeMessageAsync(int messageId)
+    {
+        var message = _inboxMessages.FirstOrDefault(m => m.Id == messageId);
+        if (message == null)
+        {
+            return Task.CompletedTask;
+        }
+
+        message.IsAcknowledged = true;
+        message.AcknowledgedAt = DateTime.Now;
+        message.IsRead = true;
+        message.ReadAt ??= DateTime.Now;
+        message.Status = MessageStatus.Completed;
+        InboxChanged?.Invoke();
+        return Task.CompletedTask;
+    }
 
     public Task<InboxMessage?> GetMessageByIdAsync(int messageId) =>
         Task.FromResult(_inboxMessages.FirstOrDefault(m => m.Id == messageId));

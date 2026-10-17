@@ -1,5 +1,8 @@
+@implements IDisposable
 @inject MockClinicalDataService ClinicalDataService
 @inject AuthStateService AuthState
+@inject MockPatientService PatientService
+@inject ChartEditTracker Edits
 @inject ILogger<ClinicalNoteDialog> Logger
 
 <MudDialog>
@@ -12,6 +15,7 @@
         </MudStack>
     </TitleContent>
     <DialogContent>
+        <PatientSafetyBanner PatientId="@(PatientId > 0 ? PatientId : note.PatientId)" />
         <MudStack Spacing="4" Class="pa-2">
             @if (IsViewOnly)
             {
@@ -145,6 +149,7 @@
 
     private ClinicalNote note = new();
     private bool signNote = false;
+    private IDisposable? _editScope;
 
     protected override void OnInitialized()
     {
@@ -192,6 +197,22 @@
         }
 
         Logger.LogDebug("ClinicalNoteDialog ready. NoteId {NoteId} status {Status}", note.Id, note.Status);
+        if (!IsViewOnly)
+        {
+            var id = PatientId > 0 ? PatientId : note.PatientId;
+            _editScope = Edits.Push(id);
+        }
+
+        Edits.DiscardRequested += OnDiscardRequested;
+    }
+
+    private void OnDiscardRequested() => MudDialog.Cancel();
+
+    public void Dispose()
+    {
+        Edits.DiscardRequested -= OnDiscardRequested;
+        _editScope?.Dispose();
+        _editScope = null;
     }
 
     private async Task SaveNote()

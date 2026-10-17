@@ -15,8 +15,19 @@ html, body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-h1:focus {
-    outline: none;
+h1:focus-visible,
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.mud-button-root:focus-visible,
+.mud-icon-button:focus-visible,
+.mud-input-slot:focus-visible,
+.mud-nav-link:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid #0B57D0 !important;
+    outline-offset: 2px;
 }
 
 .valid.modified:not([type=checkbox]) {
@@ -123,9 +134,15 @@ h1:focus {
     pointer-events: none;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1200px) {
     .summary-window-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 1100px) {
+    .app-wordmark {
+        display: none;
     }
 }
 
@@ -370,4 +387,185 @@ h1:focus {
     background: transparent;
     cursor: pointer;
     font: inherit;
+}
+
+.chart-main.mud-main-content {
+    padding-top: 48px;
+}
+
+.chart-nav-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+}
+
+.chart-tab-btn {
+    white-space: nowrap;
+}
+
+.patient-banner-sticky {
+    position: sticky;
+    top: 48px;
+    z-index: 30;
+    background: var(--mud-palette-surface, #fff);
+}
+
+.patient-banner-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+}
+
+.patient-banner-id {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+.patient-banner-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 1.15rem;
+    font-weight: 650;
+    line-height: 1.2;
+}
+
+.patient-banner-meta,
+.patient-safety-meta {
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    color: #3f3f3f;
+}
+
+.patient-banner-actions {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.patient-allergy-names {
+    color: #7F1D1D;
+    font-weight: 700;
+}
+
+.patient-allergy-none {
+    color: #1B5E20;
+    font-weight: 700;
+}
+
+.patient-safety-banner {
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    background: #fff;
+}
+
+.patient-safety-name {
+    font-weight: 700;
+}
+
+.lab-abnormal {
+    color: #7F1D1D;
+    font-weight: 700;
+}
+
+.inbox-critical-label {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: #7F1D1D;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.patient-inbox-strip {
+    background: var(--mud-palette-surface, #fff);
+}
+
+.patient-sticky-toggle {
+    position: fixed;
+    bottom: 16px;
+    left: 72px;
+    z-index: 20;
+}
+
+.global-search {
+    position: relative;
+    min-width: 220px;
+    max-width: 360px;
+    flex: 1 1 220px;
+}
+
+.global-search-menu {
+    position: absolute;
+    z-index: 40;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 320px;
+    overflow: auto;
+}
+
+.global-search-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.global-search-item:hover,
+.global-search-item:focus-visible {
+    background: rgba(25, 118, 210, 0.08);
+}
+
+.global-search-item-name {
+    font-weight: 600;
+}
+
+.global-search-item-meta {
+    font-size: 0.75rem;
+    color: #424242;
+}
+
+.mud-chip.mud-chip-filled.mud-chip-color-warning,
+.mud-chip-filled.mud-chip-color-warning {
+    background-color: #9A3412 !important;
+    color: #FFFFFF !important;
+}
+
+.mud-chip.mud-chip-filled.mud-chip-color-error,
+.mud-chip-filled.mud-chip-color-error {
+    background-color: #B71C1C !important;
+    color: #FFFFFF !important;
+}
+
+.mud-chip.mud-chip-filled.mud-chip-color-success,
+.mud-chip-filled.mud-chip-color-success {
+    background-color: #2E7D32 !important;
+    color: #FFFFFF !important;
+}
+
+.ask-ai-appbar {
+    white-space: nowrap;
+}
+
+.inbox-row-action {
+    border: 1px solid #9A3412;
+    background: #fff;
+    color: #1A1A1A;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    cursor: pointer;
 }

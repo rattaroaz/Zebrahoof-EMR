@@ -1,80 +1,68 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 
-<MudCard Elevation="2" Class="mb-4">
-    <MudCardContent Class="py-3">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="4">
-                <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/patients"))">
-                    Back
-                </MudButton>
-                <MudDivider Vertical="true" FlexItem="true" />
-                <MudAvatar Size="Size.Large" Color="Color.Primary">
-                    @Patient.FirstName[0]@Patient.LastName[0]
-                </MudAvatar>
-                <div>
-                    <MudText Typo="Typo.h5">@Patient.FullName</MudText>
-                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
-                        <strong>MRN:</strong> @Patient.MRN | 
-                        <strong>DOB:</strong> @Patient.DateOfBirth.ToString("MM/dd/yyyy") (@Patient.Age y/o) | 
-                        <strong>Sex:</strong> @Patient.Sex |
-                        <strong>Provider:</strong> @Patient.PrimaryProvider
-                    </MudText>
+<div class="patient-banner-sticky" data-testid="patient-banner">
+    <MudPaper Elevation="1" Class="patient-banner px-3 py-2 mb-2">
+        <div class="patient-banner-row">
+            <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/patients"))">
+                Back
+            </MudButton>
+            <MudAvatar Size="Size.Small" Color="Color.Primary">@Initials</MudAvatar>
+            <div class="patient-banner-id">
+                <div class="patient-banner-name">@Patient.LastName, @Patient.FirstName</div>
+                <div class="patient-banner-meta">
+                    MRN @Patient.MRN · DOB @Patient.DateOfBirth.ToString("MM/dd/yyyy") (@Patient.Age y @SexInitial)
+                    · @Patient.PrimaryProvider
+                    ·
+                    @if (Patient.Allergies.Any())
+                    {
+                        <span class="patient-allergy-names">@string.Join(", ", Patient.Allergies)</span>
+                    }
+                    else
+                    {
+                        <span class="patient-allergy-none">NKA</span>
+                    }
+                    @foreach (var alert in Patient.Alerts)
+                    {
+                        <span class="patient-alert-name"> · @alert</span>
+                    }
                 </div>
-            </MudStack>
-            
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                @* Allergies *@
-                @if (Patient.Allergies.Any())
-                {
-                    <MudTooltip>
-                        <ChildContent>
-                            <MudChip T="string" Color="Color.Error" Icon="@Icons.Material.Filled.Warning" Size="Size.Small">
-                                @Patient.Allergies.Count Allergy(ies)
-                            </MudChip>
-                        </ChildContent>
-                        <TooltipContent>
-                            <MudText Typo="Typo.subtitle2" Class="mb-1">Allergies:</MudText>
-                            @foreach (var allergy in Patient.Allergies)
-                            {
-                                <MudText Typo="Typo.body2">• @allergy</MudText>
-                            }
-                        </TooltipContent>
-                    </MudTooltip>
-                }
-                else
-                {
-                    <MudChip T="string" Color="Color.Success" Icon="@Icons.Material.Filled.Check" Size="Size.Small">NKA</MudChip>
-                }
-
-                @* Alerts *@
-                @foreach (var alert in Patient.Alerts)
-                {
-                    <MudChip T="string" Color="Color.Warning" Icon="@Icons.Material.Filled.Info" Size="Size.Small">@alert</MudChip>
-                }
-                
-                <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
-
-                @* Quick Actions *@
-                <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Science" OnClick="ShowOrderDialog">Order tests</MudButton>
-                    <MudButton StartIcon="@Icons.Material.Filled.NoteAdd">New Note</MudButton>
-                    <MudButton StartIcon="@Icons.Material.Filled.EventAvailable" OnClick="@ShowAppointments">Appointments</MudButton>
-                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Dense="true">
-                        <MudMenuItem Icon="@Icons.Material.Filled.Science" OnClick="ShowOrderDialog">Order tests</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Filled.Print">Print Summary</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Filled.Send">Send Message</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Filled.Assignment">Create Task</MudMenuItem>
-                    </MudMenu>
-                </MudButtonGroup>
-            </MudStack>
-        </MudStack>
-    </MudCardContent>
-</MudCard>
+            </div>
+            <div class="patient-banner-actions">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Science" OnClick="ShowOrderDialog">Order tests</MudButton>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.NoteAdd" OnClick="ShowNewNote" data-testid="banner-new-note">New Note</MudButton>
+                <MudButton Variant="Variant.Outlined" Size="Size.Small" StartIcon="@Icons.Material.Filled.EventAvailable" OnClick="ShowAppointments" data-testid="banner-appointments">Appointments</MudButton>
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true" AriaLabel="More chart actions">
+                    <MudMenuItem Icon="@Icons.Material.Filled.Science" OnClick="ShowOrderDialog">Order tests</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.NoteAdd" OnClick="ShowNewNote">New Note</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Print">Print Summary</MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Send">Send Message</MudMenuItem>
+                </MudMenu>
+            </div>
+        </div>
+    </MudPaper>
+</div>
 
 @code {
     [Parameter, EditorRequired]
     public Patient Patient { get; set; } = null!;
+
+    private string Initials => $"{Patient.FirstName.FirstOrDefault()}{Patient.LastName.FirstOrDefault()}";
+
+    private string SexInitial => Patient.Sex.StartsWith("F", StringComparison.OrdinalIgnoreCase) ? "F"
+        : Patient.Sex.StartsWith("M", StringComparison.OrdinalIgnoreCase) ? "M"
+        : Patient.Sex;
+
+    private async Task ShowNewNote()
+    {
+        var parameters = new DialogParameters
+        {
+            ["PatientId"] = Patient.Id,
+            ["IsEdit"] = false
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true };
+        await DialogService.ShowAsync<ClinicalNoteDialog>("New Clinical Note", parameters, options);
+    }
 
     private async Task ShowOrderDialog()
     {
@@ -84,38 +72,18 @@
             { x => x.PatientName, Patient.FullName },
             { x => x.InitialFilter, OrderCatalogFilter.All }
         };
-
-        var options = new DialogOptions
-        {
-            MaxWidth = MaxWidth.Large,
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true };
         await DialogService.ShowAsync<OrderEntryDialog>("Order tests", parameters, options);
     }
 
     private async Task ShowAppointments()
     {
-        var parameters = new DialogParameters
-        {
-            ["PatientId"] = Patient.Id
-        };
-
-        var options = new DialogOptions
-        {
-            MaxWidth = MaxWidth.Large,
-            FullWidth = true,
-            CloseOnEscapeKey = true
-        };
-
+        var parameters = new DialogParameters { ["PatientId"] = Patient.Id };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true };
         var dialog = await DialogService.ShowAsync<PatientAppointmentsDialog>("Appointments", parameters, options);
         var result = await dialog.Result;
-
-        if (result != null && !result.Canceled && result.Data?.ToString() == "schedule")
+        if (result is { Canceled: false } && result.Data?.ToString() == "schedule")
         {
-            // TODO: Open new appointment dialog
-            // For now, just navigate to the schedule page
             Navigation.NavigateTo("/schedule");
         }
     }
