@@ -10,6 +10,9 @@
 @inject NavigationTrail Trail
 @inject PatientDialogTracker Dialogs
 @inject IJSRuntime JS
+@inject PatientChartCache Cache
+@inject OpenChartView ChartView
+@inject ILogger<PatientChartGate> Logger
 
 @if (_phase == Phase.Closed)
 {
@@ -55,7 +58,23 @@ else if (_phase == Phase.Blocked)
 }
 else if (_phase == Phase.Open)
 {
-    <div data-testid="patient-chart" data-patient-id="@PatientId">
+    <div data-testid="patient-chart"
+         data-patient-id="@PatientId"
+         data-chart-source="@_source"
+         data-chart-load-ms="@_loadMs.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)"
+         data-chart-ready="true">
+        @if (ChartView.Updating)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-1" data-testid="chart-updating">
+                Checking this chart for newer results…
+            </MudAlert>
+        }
+        else if (ChartView.JustUpdated)
+        {
+            <MudAlert Severity="Severity.Success" Dense="true" Class="mb-1" data-testid="chart-updated">
+                This chart was updated from the server.
+            </MudAlert>
+        }
         @ChildContent
     </div>
 }
@@ -88,11 +107,15 @@ else
     private int? _openedElsewhereId;
     private bool _subscribed;
     private bool _claiming;
+    private string _source = "";
+    private double _loadMs;
+    private int _refreshGeneration;
 
     protected override void OnInitialized()
     {
         Registry.ChartClosed += OnChartClosed;
         Edits.Changed += OnEditsChanged;
+        ChartView.Changed += OnChartViewChanged;
         _subscribed = true;
     }
 
@@ -104,6 +127,10 @@ else
         }
 
         _phase = Phase.Checking;
+        _source = "";
+        _loadMs = 0;
+        _refreshGeneration++;
+        ChartView.Clear();
         SwitchSameCircuit();
     }
 
@@ -186,10 +213,10 @@ else
             _blockedPatientId = decision.OpenPatientId;
             _blockedHasUnsaved = decision.OpenChartHasUnsavedWork;
             AppState.SelectPatient(null);
+            ChartView.Clear();
         }
         else
         {
-            _phase = Phase.Open;
             AppState.SelectPatient(patient);
             Registry.SetUnsaved(_userId, Circuit.Id, Edits.HasUnsavedWork);
             if (_auditedFor != patientId)
@@ -197,16 +224,74 @@ else
                 _auditedFor = patientId;
                 await Audit.LogAsync("chart.view", $"patient:{patientId}", $"patientId={patientId}", _userId);
             }
+
+            await PublishChartAsync(patientId);
+            _phase = Phase.Open;
         }
 
         await InvokeAsync(StateHasChanged);
         if (_phase == Phase.Open)
         {
             await RememberOpenChartAsync();
+            if (_source == ChartCacheSource.Cache)
+            {
+                _ = RefreshCachedAsync(patientId);
+            }
         }
     }
 
-    private void ConfirmSwitch()
+    private async Task PublishChartAsync(int patientId)
+    {
+        try
+        {
+            var opened = await Cache.OpenAsync(_userId!, patientId);
+            _source = opened.Source;
+            _loadMs = opened.LoadMilliseconds;
+            ChartView.Publish(opened);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Chart cache could not load patient {PatientId}; the chart will read from the clinical services", patientId);
+            ChartView.Clear();
+            _source = ChartCacheSource.Loader;
+            _loadMs = 0;
+        }
+    }
+
+    private async Task RefreshCachedAsync(int patientId)
+    {
+        var generation = ++_refreshGeneration;
+        ChartView.SetUpdating(true);
+        try
+        {
+            var changed = await Cache.RefreshAsync(_userId!, patientId);
+            if (generation != _refreshGeneration || PatientId != patientId || _phase != Phase.Open)
+            {
+                return;
+            }
+
+            if (changed != null)
+            {
+                _source = ChartCacheSource.Cache;
+                _loadMs = 0;
+                ChartView.Publish(new ChartCacheOpen(changed, ChartCacheSource.Cache, 0), justUpdated: true);
+            }
+            else
+            {
+                ChartView.SetUpdating(false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Background chart refresh failed for patient {PatientId}", patientId);
+            if (generation == _refreshGeneration)
+            {
+                ChartView.SetUpdating(false);
+            }
+        }
+    }
+
+    private async Task ConfirmSwitch()
     {
         if (string.IsNullOrEmpty(_userId))
         {
@@ -215,9 +300,8 @@ else
 
         Edits.Discard();
         Registry.ConfirmSwitch(_userId, Circuit.Id, PatientId, _requestedName);
-        _phase = Phase.Open;
-        _ = FinishGrantedAsync();
-        _ = RememberOpenChartAsync();
+        _phase = Phase.Checking;
+        await FinishGrantedAsync();
     }
 
     private async Task FinishGrantedAsync()
@@ -232,9 +316,17 @@ else
                 _auditedFor = PatientId;
                 await Audit.LogAsync("chart.view", $"patient:{PatientId}", $"patientId={PatientId}", _userId);
             }
+
+            await PublishChartAsync(PatientId);
         }
 
+        _phase = Phase.Open;
         await InvokeAsync(StateHasChanged);
+        await RememberOpenChartAsync();
+        if (_source == ChartCacheSource.Cache && !string.IsNullOrEmpty(_userId))
+        {
+            _ = RefreshCachedAsync(PatientId);
+        }
     }
 
     private async Task CancelSwitch()
@@ -313,6 +405,8 @@ else
         }
     }
 
+    private void OnChartViewChanged() => _ = InvokeAsync(StateHasChanged);
+
     private void OnEditsChanged()
     {
         if (!string.IsNullOrEmpty(_userId))
@@ -341,6 +435,7 @@ else
             _openedElsewhereId = notice.OpenedPatientId;
             _claimedFor = -1;
             AppState.SelectPatient(null);
+            ChartView.Clear();
             StateHasChanged();
         });
     }
@@ -351,6 +446,7 @@ else
         {
             Registry.ChartClosed -= OnChartClosed;
             Edits.Changed -= OnEditsChanged;
+            ChartView.Changed -= OnChartViewChanged;
             _subscribed = false;
         }
 

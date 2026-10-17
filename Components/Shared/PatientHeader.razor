@@ -2,6 +2,7 @@
 @inject IDialogService DialogService
 @inject PatientDialogTracker Dialogs
 @inject MockClinicalDataService ClinicalData
+@inject OpenChartView ChartView
 @implements IDisposable
 
 <div class="patient-banner-sticky" data-testid="patient-banner">
@@ -10,12 +11,12 @@
             <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ArrowBack" Class="patient-banner-back" OnClick="@(() => Navigation.NavigateTo("/patients"))">
                 Back
             </MudButton>
-            <MudAvatar Size="Size.Small" Color="Color.Primary">@Initials</MudAvatar>
+            <MudAvatar Size="Size.Small" Color="Color.Primary">@Initials(Shown)</MudAvatar>
             <div class="patient-banner-id">
-                <div class="patient-banner-name">@Patient.LastName, @Patient.FirstName</div>
+                <div class="patient-banner-name">@Shown.LastName, @Shown.FirstName</div>
                 <div class="patient-banner-meta">
-                    MRN @Patient.MRN · DOB @Patient.DateOfBirth.ToString("MM/dd/yyyy") (@Patient.Age y @SexInitial)
-                    · @Patient.PrimaryProvider
+                    MRN @Shown.MRN · DOB @Shown.DateOfBirth.ToString("MM/dd/yyyy") (@Shown.Age y @SexInitial)
+                    · @Shown.PrimaryProvider
                     ·
                     <span class="patient-allergy-label" data-testid="patient-allergy-label" aria-label="@AllergyLabel">
                         <span class="patient-allergy-caption">Allergies: </span>
@@ -28,7 +29,7 @@
                             <span class="patient-allergy-none">NKA</span>
                         }
                     </span>
-                    @foreach (var alert in Patient.Alerts)
+                    @foreach (var alert in Shown.Alerts)
                     {
                         <span class="patient-alert-name"> · @alert</span>
                     }
@@ -59,10 +60,21 @@
         ? $"Allergies: {string.Join(", ", _allergyNames)}"
         : "Allergies: NKA";
 
+    private Patient Shown =>
+        ChartView.Snapshot is { } snap && snap.PatientId == Patient.Id ? snap.Patient : Patient;
+
+    private static string Initials(Patient patient) => $"{patient.FirstName.FirstOrDefault()}{patient.LastName.FirstOrDefault()}";
+
+    private string SexInitial => Shown.Sex.StartsWith("F", StringComparison.OrdinalIgnoreCase) ? "F"
+        : Shown.Sex.StartsWith("M", StringComparison.OrdinalIgnoreCase) ? "M"
+        : Shown.Sex;
+
     protected override async Task OnParametersSetAsync()
     {
         ClinicalData.PatientDataChanged -= OnPatientDataChanged;
         ClinicalData.PatientDataChanged += OnPatientDataChanged;
+        ChartView.Changed -= OnChartViewChanged;
+        ChartView.Changed += OnChartViewChanged;
         await LoadAllergiesAsync();
     }
 
@@ -87,13 +99,13 @@
         await InvokeAsync(StateHasChanged);
     }
 
-    public void Dispose() => ClinicalData.PatientDataChanged -= OnPatientDataChanged;
+    private void OnChartViewChanged() => _ = InvokeAsync(StateHasChanged);
 
-    private string Initials => $"{Patient.FirstName.FirstOrDefault()}{Patient.LastName.FirstOrDefault()}";
-
-    private string SexInitial => Patient.Sex.StartsWith("F", StringComparison.OrdinalIgnoreCase) ? "F"
-        : Patient.Sex.StartsWith("M", StringComparison.OrdinalIgnoreCase) ? "M"
-        : Patient.Sex;
+    public void Dispose()
+    {
+        ClinicalData.PatientDataChanged -= OnPatientDataChanged;
+        ChartView.Changed -= OnChartViewChanged;
+    }
 
     private async Task ShowNewNote()
     {
