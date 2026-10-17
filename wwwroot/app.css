@@ -469,6 +469,11 @@ textarea:focus-visible,
     gap: 6px;
 }
 
+.patient-allergy-caption {
+    font-weight: 700;
+    color: #212121;
+}
+
 .patient-allergy-names {
     color: #7F1D1D;
     font-weight: 700;
@@ -644,8 +649,28 @@ input:disabled,
 
     .notes-toolbar,
     .mud-appbar,
-    .mud-drawer {
+    .mud-drawer,
+    .mud-navmenu,
+    .mud-breadcrumbs,
+    .chart-breadcrumbs,
+    .patient-banner-actions,
+    .patient-banner-back,
+    .chart-tab-bar,
+    .patient-inbox-strip,
+    .patient-sticky-toggle,
+    .patient-sticky-note,
+    .view-full-note,
+    #blazor-error-ui {
         display: none !important;
+    }
+
+    .mud-layout,
+    .mud-main-content,
+    .chart-main {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: none !important;
     }
 }
 

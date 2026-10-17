@@ -36,49 +36,13 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Date">@context.RecordedAt.ToString("MM/dd/yyyy h:mm tt")</MudTd>
-                    <MudTd DataLabel="BP">
-                        <MudText Color="@((VitalThresholds.SystolicMarker(context.SystolicBP) != null || VitalThresholds.DiastolicMarker(context.DiastolicBP) != null) ? Color.Warning : Color.Default)">
-                            @context.SystolicBP/@context.DiastolicBP
-                            @Flag(VitalThresholds.SystolicMarker(context.SystolicBP), VitalThresholds.DiastolicMarker(context.DiastolicBP))
-                        </MudText>
-                    </MudTd>
-                    <MudTd DataLabel="HR">
-                        @context.HeartRate
-                        @if (VitalThresholds.HeartRateMarker(context.HeartRate) is string hrFlag)
-                        {
-                            <span class="lab-abnormal"> @hrFlag</span>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="Temp">
-                        <span class="@(context.Temperature is decimal temp && VitalThresholds.IsTemperatureAbnormal(temp) ? "lab-abnormal" : null)">
-                            @if (context.Temperature is decimal temperature && VitalThresholds.TemperatureMarker(temperature) is string tempFlag)
-                            {
-                                @($"{temperature}\u00A0{tempFlag}")
-                            }
-                            else
-                            {
-                                @context.Temperature
-                            }
-                        </span>
-                    </MudTd>
-                    <MudTd DataLabel="RR">
-                        @context.RespiratoryRate
-                        @if (VitalThresholds.RespiratoryMarker(context.RespiratoryRate) is string rrFlag)
-                        {
-                            <span class="lab-abnormal"> @rrFlag</span>
-                        }
-                    </MudTd>
-                    <MudTd DataLabel="SpO2">
-                        <MudText Color="@(VitalThresholds.OxygenMarker(context.OxygenSaturation) != null ? Color.Error : Color.Default)">
-                            @context.OxygenSaturation
-                            @if (VitalThresholds.OxygenMarker(context.OxygenSaturation) is string o2Flag)
-                            {
-                                <span> @o2Flag</span>
-                            }
-                        </MudText>
-                    </MudTd>
-                    <MudTd DataLabel="Weight">@context.Weight</MudTd>
-                    <MudTd DataLabel="BMI">@context.BMI</MudTd>
+                    <MudTd DataLabel="BP">@Reading(VitalReadout.BloodPressure(context.SystolicBP, context.DiastolicBP), VitalReadout.BloodPressureFlag(context.SystolicBP, context.DiastolicBP))</MudTd>
+                    <MudTd DataLabel="HR">@Reading(VitalReadout.Format(context.HeartRate), VitalThresholds.HeartRateMarker(context.HeartRate))</MudTd>
+                    <MudTd DataLabel="Temp">@Reading(VitalReadout.Format(context.Temperature), context.Temperature is decimal temperature ? VitalThresholds.TemperatureMarker(temperature) : null)</MudTd>
+                    <MudTd DataLabel="RR">@Reading(VitalReadout.Format(context.RespiratoryRate), VitalThresholds.RespiratoryMarker(context.RespiratoryRate))</MudTd>
+                    <MudTd DataLabel="SpO2">@Reading(VitalReadout.Format(context.OxygenSaturation), VitalThresholds.OxygenMarker(context.OxygenSaturation))</MudTd>
+                    <MudTd DataLabel="Weight">@VitalReadout.Format(context.Weight)</MudTd>
+                    <MudTd DataLabel="BMI">@VitalReadout.Format(context.BMI)</MudTd>
                     <MudTd DataLabel="By">@context.RecordedBy</MudTd>
                 </RowTemplate>
             </MudTable>
@@ -93,25 +57,25 @@
     <DialogContent>
         <PatientSafetyBanner PatientId="PatientId" />
         <MudText Typo="Typo.body2" Color="Color.Error">@_formError</MudText>
-        <MudNumericField @bind-Value="_systolic" Label="Systolic BP (mmHg)" Class="mt-2"
+        <MudNumericField T="int?" Value="_systolic" ValueChanged="OnSystolic" Immediate="true" Label="Systolic BP (mmHg)" Class="mt-2"
                          Error="@(_systolicError != null)" ErrorText="@_systolicError" />
         @FlagLine(VitalThresholds.SystolicMarker(_systolic), "Systolic BP")
-        <MudNumericField @bind-Value="_diastolic" Label="Diastolic BP (mmHg)" Class="mt-2"
+        <MudNumericField T="int?" Value="_diastolic" ValueChanged="OnDiastolic" Immediate="true" Label="Diastolic BP (mmHg)" Class="mt-2"
                          Error="@(_diastolicError != null)" ErrorText="@_diastolicError" />
         @FlagLine(VitalThresholds.DiastolicMarker(_diastolic), "Diastolic BP")
-        <MudNumericField @bind-Value="_heartRate" Label="Heart rate (bpm)" Class="mt-2"
+        <MudNumericField T="int?" Value="_heartRate" ValueChanged="OnHeartRate" Immediate="true" Label="Heart rate (bpm)" Class="mt-2"
                          Error="@(_heartRateError != null)" ErrorText="@_heartRateError" />
         @FlagLine(VitalThresholds.HeartRateMarker(_heartRate), "Heart rate")
-        <MudNumericField T="decimal?" @bind-Value="_temperature" Label="Temperature °F" Class="mt-2"
+        <MudNumericField T="decimal?" Value="_temperature" ValueChanged="OnTemperature" Immediate="true" Label="Temperature °F" Class="mt-2"
                          Error="@(_temperatureError != null)" ErrorText="@_temperatureError" />
         @FlagLine(_temperature is decimal temp ? VitalThresholds.TemperatureMarker(temp) : null, "Temperature")
-        <MudNumericField @bind-Value="_respiratoryRate" Label="Respiratory rate (breaths/min)" Class="mt-2"
+        <MudNumericField T="int?" Value="_respiratoryRate" ValueChanged="OnRespiratoryRate" Immediate="true" Label="Respiratory rate (breaths/min)" Class="mt-2"
                          Error="@(_respiratoryRateError != null)" ErrorText="@_respiratoryRateError" />
         @FlagLine(VitalThresholds.RespiratoryMarker(_respiratoryRate), "Respiratory rate")
-        <MudNumericField @bind-Value="_oxygen" Label="SpO2 %" Class="mt-2"
+        <MudNumericField T="int?" Value="_oxygen" ValueChanged="OnOxygen" Immediate="true" Label="SpO2 %" Class="mt-2"
                          Error="@(_oxygenError != null)" ErrorText="@_oxygenError" />
         @FlagLine(VitalThresholds.OxygenMarker(_oxygen), "SpO2")
-        <MudNumericField T="decimal?" @bind-Value="_weight" Label="Weight (lbs)" Class="mt-2"
+        <MudNumericField T="decimal?" Value="_weight" ValueChanged="OnWeight" Immediate="true" Label="Weight (lbs)" Class="mt-2"
                          Error="@(_weightError != null)" ErrorText="@_weightError" />
     </DialogContent>
     <DialogActions>
@@ -210,11 +174,59 @@
             = _respiratoryRateError = _oxygenError = _weightError = null;
     }
 
-    private static string Flag(string? systolic, string? diastolic)
+    private void OnSystolic(int? value)
     {
-        var flag = systolic ?? diastolic;
-        return flag == null ? "" : " " + flag;
+        _systolic = value;
+        _systolicError = VitalThresholds.SystolicRangeError(value);
     }
+
+    private void OnDiastolic(int? value)
+    {
+        _diastolic = value;
+        _diastolicError = VitalThresholds.DiastolicRangeError(value);
+    }
+
+    private void OnHeartRate(int? value)
+    {
+        _heartRate = value;
+        _heartRateError = VitalThresholds.HeartRateRangeError(value);
+    }
+
+    private void OnTemperature(decimal? value)
+    {
+        _temperature = value;
+        _temperatureError = VitalThresholds.TemperatureRangeError(value);
+    }
+
+    private void OnRespiratoryRate(int? value)
+    {
+        _respiratoryRate = value;
+        _respiratoryRateError = VitalThresholds.RespiratoryRangeError(value);
+    }
+
+    private void OnOxygen(int? value)
+    {
+        _oxygen = value;
+        _oxygenError = VitalThresholds.OxygenRangeError(value);
+    }
+
+    private void OnWeight(decimal? value)
+    {
+        _weight = value;
+        _weightError = VitalThresholds.WeightRangeError(value);
+    }
+
+    private static RenderFragment Reading(string value, string? flag) => builder =>
+    {
+        builder.OpenElement(0, "span");
+        if (!string.IsNullOrEmpty(flag))
+        {
+            builder.AddAttribute(1, "class", "lab-abnormal");
+        }
+
+        builder.AddContent(2, VitalReadout.WithFlag(value, flag));
+        builder.CloseElement();
+    };
 
     private RenderFragment FlagLine(string? marker, string label) => builder =>
     {

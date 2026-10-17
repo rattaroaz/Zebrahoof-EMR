@@ -12,17 +12,41 @@ public sealed class NavigationTrail : IDisposable
     public NavigationTrail(NavigationManager navigation)
     {
         _navigation = navigation;
-        _current = Relative(navigation.Uri);
+        _current = ToRelative(navigation.Uri);
         navigation.LocationChanged += OnLocationChanged;
     }
 
     public string? PreviousPath { get; private set; }
 
+    public static bool IsPatientChart(string? relativePath)
+    {
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return false;
+        }
+
+        var path = relativePath.Split('?', 2)[0].Trim('/');
+        var parts = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            && parts[0].Equals("patients", StringComparison.OrdinalIgnoreCase)
+            && int.TryParse(parts[1], out _);
+    }
+
+    public static string ToRelative(string uri)
+    {
+        if (Uri.TryCreate(uri, UriKind.Absolute, out var absolute))
+        {
+            return absolute.PathAndQuery;
+        }
+
+        return uri.StartsWith('/') ? uri : "/" + uri;
+    }
+
     public void Dispose() => _navigation.LocationChanged -= OnLocationChanged;
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs args)
     {
-        var next = Relative(args.Location);
+        var next = ToRelative(args.Location);
         if (string.Equals(next, _current, StringComparison.OrdinalIgnoreCase))
         {
             return;
@@ -30,15 +54,5 @@ public sealed class NavigationTrail : IDisposable
 
         PreviousPath = _current;
         _current = next;
-    }
-
-    private static string Relative(string uri)
-    {
-        if (Uri.TryCreate(uri, UriKind.Absolute, out var absolute))
-        {
-            return absolute.PathAndQuery;
-        }
-
-        return uri;
     }
 }

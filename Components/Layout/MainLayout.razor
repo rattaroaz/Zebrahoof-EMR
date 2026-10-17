@@ -10,6 +10,7 @@
 @inject NavigationTrail Trail
 @inject AuthenticationStateProvider AuthenticationState
 @inject AuthSyncService AuthSync
+@inject IJSRuntime JS
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -168,6 +169,14 @@
         await RefreshUnreadMessageCountAsync();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await RememberInAppPathAsync(Navigation.Uri);
+        }
+    }
+
     private void OnInboxDataChanged() => _ = InboxUpdateAsync();
 
     private async Task InboxUpdateAsync()
@@ -186,7 +195,31 @@
             DashboardAskSession.IsOpen = false;
         }
 
-        _ = InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(async () =>
+        {
+            await RememberInAppPathAsync(e.Location);
+            StateHasChanged();
+        });
+    }
+
+    private async Task RememberInAppPathAsync(string uri)
+    {
+        var relative = NavigationTrail.ToRelative(uri);
+        if (NavigationTrail.IsPatientChart(relative))
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("zebrahoofRememberInAppPath", relative);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (JSException)
+        {
+        }
     }
 
     private async void OnStateChangedHandler()

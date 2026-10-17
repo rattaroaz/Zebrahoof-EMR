@@ -77,6 +77,52 @@ public class ChartRound3Tests
     }
 
     [Fact]
+    public void PartialVitals_UseADash_AndRememberTheLastValue()
+    {
+        var older = new DateTime(2026, 10, 3, 9, 0, 0);
+        var newer = new DateTime(2026, 10, 17, 14, 17, 0);
+        var vitals = new[]
+        {
+            new VitalSigns
+            {
+                RecordedAt = newer,
+                HeartRate = 118,
+                Temperature = 101.5m,
+                Weight = 177
+            },
+            new VitalSigns
+            {
+                RecordedAt = older,
+                SystolicBP = 128,
+                DiastolicBP = 82,
+                HeartRate = 72,
+                OxygenSaturation = 98,
+                Weight = 185,
+                BMI = 26.5m
+            }
+        };
+
+        Assert.Equal("\u2014", VitalReadout.BloodPressure(null, null));
+        Assert.Equal("\u2014", VitalReadout.Format((int?)null));
+        Assert.Equal("118\u00A0High", VitalReadout.WithFlag("118", "High"));
+
+        var pressure = VitalReadout.Last(vitals,
+            vital => vital.SystolicBP != null || vital.DiastolicBP != null,
+            vital => VitalReadout.BloodPressure(vital.SystolicBP, vital.DiastolicBP),
+            vital => VitalReadout.BloodPressureFlag(vital.SystolicBP, vital.DiastolicBP));
+        Assert.Equal("128/82", pressure?.Value);
+        Assert.Equal(older, pressure?.RecordedAt);
+
+        var heart = VitalReadout.Last(vitals,
+            vital => vital.HeartRate != null,
+            vital => VitalReadout.Format(vital.HeartRate),
+            vital => VitalThresholds.HeartRateMarker(vital.HeartRate));
+        Assert.Equal("118", heart?.Value);
+        Assert.Equal("High", heart?.Flag);
+        Assert.Equal(newer, heart?.RecordedAt);
+    }
+
+    [Fact]
     public async Task ActiveAllergyNames_ComeFromTheAllergyTable()
     {
         var clinical = new MockClinicalDataService();

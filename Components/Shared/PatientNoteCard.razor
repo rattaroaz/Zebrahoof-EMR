@@ -56,7 +56,7 @@
                 }
             </MudText>
         }
-        <MudButton Variant="Variant.Text" Size="Size.Small" OnClick="@(() => OnView.InvokeAsync(Note))">View Full Note</MudButton>
+        <MudButton Variant="Variant.Text" Size="Size.Small" Class="view-full-note" aria-label="@ViewLabel" OnClick="@(() => OnView.InvokeAsync(Note))">View Full Note</MudButton>
     </MudStack>
 </MudPaper>
 
@@ -67,6 +67,16 @@
     [Parameter] public EventCallback<ClinicalNote> OnDelete { get; set; }
     [Parameter] public EventCallback<ClinicalNote> OnSign { get; set; }
     [Parameter] public EventCallback<ClinicalNote> OnView { get; set; }
+
+    private string ViewLabel
+    {
+        get
+        {
+            var title = string.IsNullOrWhiteSpace(Note.ChiefComplaint) ? "Clinical Note" : Note.ChiefComplaint.Trim();
+            var date = ClinicTime.Format(Note.CreatedAt, "MMM dd, yyyy");
+            return $"View full note: {title}, {date}";
+        }
+    }
 
     private static Color StatusColor(NoteStatus status) => status switch
     {

@@ -42,6 +42,22 @@ window.zebrahoofScrollTabs = function (element, delta) {
     element.scrollBy({ left: delta, behavior: 'smooth' });
 };
 
+window.zebrahoofRememberInAppPath = function (path) {
+    try {
+        if (!path || path.charAt(0) !== '/') return;
+        sessionStorage.setItem('zebrahoof.lastInAppPath', path);
+    } catch (e) {
+    }
+};
+
+window.zebrahoofReadInAppPath = function () {
+    try {
+        return sessionStorage.getItem('zebrahoof.lastInAppPath');
+    } catch (e) {
+        return null;
+    }
+};
+
 window.zebrahoofSameOriginReferrer = function () {
     try {
         if (!document.referrer) return null;

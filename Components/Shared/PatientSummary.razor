@@ -115,7 +115,13 @@ else
     private List<Medication> _medications = new();
     private List<Allergy> _allergies = new();
     private List<LabResult> _labs = new();
-    private VitalSigns? _latestVitals;
+    private List<VitalSigns> _vitals = new();
+    private VitalReadout.KnownMeasure? _summaryBp;
+    private VitalReadout.KnownMeasure? _summaryHr;
+    private VitalReadout.KnownMeasure? _summaryTemp;
+    private VitalReadout.KnownMeasure? _summaryOxygen;
+    private VitalReadout.KnownMeasure? _summaryWeight;
+    private VitalReadout.KnownMeasure? _summaryBmi;
     private List<Encounter> _encounters = new();
     private List<RiskScoreEntry> _riskScores = new();
     private List<SimulatedOrderRecord> _orders = new();
@@ -151,7 +157,8 @@ else
         _medications = await ClinicalDataService.GetMedicationListAsync(PatientId);
         _allergies = await ClinicalDataService.GetActiveAllergiesByPatientAsync(PatientId);
         _labs = await ClinicalDataService.GetRecentLabResultsByPatientAsync(PatientId, 5);
-        _latestVitals = await ClinicalDataService.GetLatestVitalsByPatientAsync(PatientId);
+        _vitals = await ClinicalDataService.GetVitalsByPatientAsync(PatientId);
+        ProjectVitals();
         _encounters = await ClinicalDataService.GetEncountersByPatientAsync(PatientId);
         _riskScores = await ClinicalDataService.GetRiskScoresByPatientAsync(PatientId);
         _orders = await ClinicalDataService.GetSimulatedOrdersByPatientAsync(PatientId);
@@ -445,40 +452,90 @@ else
     private RenderFragment VitalsBody => __builder =>
     {
         <MudCardContent>
-            @if (_latestVitals == null)
+            @if (_vitals.Count == 0)
             {
                 <MudAlert Severity="Severity.Info" Dense="true">No vitals recorded</MudAlert>
             }
             else
             {
-                <MudGrid Spacing="2">
+                <MudGrid Spacing="2" data-testid="summary-vitals">
                     <MudItem xs="6">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">Blood Pressure</MudText>
-                        <MudText Typo="Typo.body1">@_latestVitals.SystolicBP/@_latestVitals.DiastolicBP mmHg</MudText>
+                        @KnownMeasure(_summaryBp, "mmHg")
                     </MudItem>
                     <MudItem xs="6">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">Heart Rate</MudText>
-                        <MudText Typo="Typo.body1">@_latestVitals.HeartRate bpm</MudText>
+                        @KnownMeasure(_summaryHr, "bpm")
                     </MudItem>
                     <MudItem xs="6">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">Temperature</MudText>
-                        <MudText Typo="Typo.body1">@_latestVitals.Temperature °F</MudText>
+                        @KnownMeasure(_summaryTemp, "°F")
                     </MudItem>
                     <MudItem xs="6">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">SpO2</MudText>
-                        <MudText Typo="Typo.body1">@_latestVitals.OxygenSaturation%</MudText>
+                        @KnownMeasure(_summaryOxygen, "%")
                     </MudItem>
                     <MudItem xs="6">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">Weight</MudText>
-                        <MudText Typo="Typo.body1">@_latestVitals.Weight lbs</MudText>
+                        @KnownMeasure(_summaryWeight, "lbs")
                     </MudItem>
                     <MudItem xs="6">
                         <MudText Typo="Typo.caption" Class="mud-text-secondary">BMI</MudText>
-                        <MudText Typo="Typo.body1">@_latestVitals.BMI</MudText>
+                        @KnownMeasure(_summaryBmi, "")
                     </MudItem>
                 </MudGrid>
             }
         </MudCardContent>
+    };
+
+    private void ProjectVitals()
+    {
+        _summaryBp = VitalReadout.Last(_vitals,
+            vital => vital.SystolicBP != null || vital.DiastolicBP != null,
+            vital => VitalReadout.BloodPressure(vital.SystolicBP, vital.DiastolicBP),
+            vital => VitalReadout.BloodPressureFlag(vital.SystolicBP, vital.DiastolicBP));
+        _summaryHr = VitalReadout.Last(_vitals,
+            vital => vital.HeartRate != null,
+            vital => VitalReadout.Format(vital.HeartRate),
+            vital => VitalThresholds.HeartRateMarker(vital.HeartRate));
+        _summaryTemp = VitalReadout.Last(_vitals,
+            vital => vital.Temperature != null,
+            vital => VitalReadout.Format(vital.Temperature),
+            vital => vital.Temperature is decimal temperature ? VitalThresholds.TemperatureMarker(temperature) : null);
+        _summaryOxygen = VitalReadout.Last(_vitals,
+            vital => vital.OxygenSaturation != null,
+            vital => VitalReadout.Format(vital.OxygenSaturation),
+            vital => VitalThresholds.OxygenMarker(vital.OxygenSaturation));
+        _summaryWeight = VitalReadout.Last(_vitals,
+            vital => vital.Weight != null,
+            vital => VitalReadout.Format(vital.Weight),
+            vital => null);
+        _summaryBmi = VitalReadout.Last(_vitals,
+            vital => vital.BMI != null,
+            vital => VitalReadout.Format(vital.BMI),
+            vital => null);
+    }
+
+    private static RenderFragment KnownMeasure(VitalReadout.KnownMeasure? known, string unit) => builder =>
+    {
+        if (known is not { } measure)
+        {
+            builder.OpenElement(0, "div");
+            builder.AddAttribute(1, "class", "mud-typography-body1");
+            builder.AddContent(2, VitalReadout.Blank);
+            builder.CloseElement();
+            return;
+        }
+
+        var text = string.IsNullOrEmpty(unit) ? measure.Value : $"{measure.Value} {unit}";
+        builder.OpenElement(0, "div");
+        builder.AddAttribute(1, "class", measure.Flag != null ? "mud-typography-body1 lab-abnormal" : "mud-typography-body1");
+        builder.AddContent(2, VitalReadout.WithFlag(text, measure.Flag));
+        builder.CloseElement();
+        builder.OpenElement(3, "div");
+        builder.AddAttribute(4, "class", "mud-typography-caption mud-text-secondary");
+        builder.AddContent(5, measure.RecordedAt.ToString("MM/dd/yyyy h:mm tt"));
+        builder.CloseElement();
     };
 
     private RenderFragment EncountersBody => __builder =>

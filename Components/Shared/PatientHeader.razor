@@ -7,7 +7,7 @@
 <div class="patient-banner-sticky" data-testid="patient-banner">
     <MudPaper Elevation="1" Class="patient-banner px-3 py-2 mb-2">
         <div class="patient-banner-row">
-            <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@(() => Navigation.NavigateTo("/patients"))">
+            <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.ArrowBack" Class="patient-banner-back" OnClick="@(() => Navigation.NavigateTo("/patients"))">
                 Back
             </MudButton>
             <MudAvatar Size="Size.Small" Color="Color.Primary">@Initials</MudAvatar>
@@ -17,14 +17,17 @@
                     MRN @Patient.MRN · DOB @Patient.DateOfBirth.ToString("MM/dd/yyyy") (@Patient.Age y @SexInitial)
                     · @Patient.PrimaryProvider
                     ·
-                    @if (_allergyNames.Count > 0)
-                    {
-                        <span class="patient-allergy-names">@string.Join(", ", _allergyNames)</span>
-                    }
-                    else
-                    {
-                        <span class="patient-allergy-none">NKA</span>
-                    }
+                    <span class="patient-allergy-label" data-testid="patient-allergy-label" aria-label="@AllergyLabel">
+                        <span class="patient-allergy-caption">Allergies: </span>
+                        @if (_allergyNames.Count > 0)
+                        {
+                            <span class="patient-allergy-names">@string.Join(", ", _allergyNames)</span>
+                        }
+                        else
+                        {
+                            <span class="patient-allergy-none">NKA</span>
+                        }
+                    </span>
                     @foreach (var alert in Patient.Alerts)
                     {
                         <span class="patient-alert-name"> · @alert</span>
@@ -51,6 +54,10 @@
     public Patient Patient { get; set; } = null!;
 
     private List<string> _allergyNames = new();
+
+    private string AllergyLabel => _allergyNames.Count > 0
+        ? $"Allergies: {string.Join(", ", _allergyNames)}"
+        : "Allergies: NKA";
 
     protected override async Task OnParametersSetAsync()
     {
