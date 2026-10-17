@@ -15,7 +15,6 @@
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private DotNetObjectReference<SessionMonitor>? _dotNetRef;
-    private IJSObjectReference? _module;
     private bool _isMonitoring;
     private bool _shouldMonitor;
     private bool _startAttempted;
@@ -48,18 +47,12 @@
         await StartMonitoringAsync();
     }
 
-    private async Task EnsureModuleAsync()
-    {
-        _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sessionMonitor.js");
-    }
-
     private async Task StartMonitoringAsync()
     {
         try
         {
-            await EnsureModuleAsync();
             _dotNetRef = DotNetObjectReference.Create(this);
-            await _module!.InvokeVoidAsync("start", _dotNetRef, SessionCookieHelper.SessionIdCookieName, "/account/refresh");
+            await JS.InvokeVoidAsync("sessionMonitor.start", _dotNetRef, SessionCookieHelper.SessionIdCookieName);
             _isMonitoring = true;
         }
         catch (JSException ex)
@@ -72,10 +65,7 @@
     {
         try
         {
-            if (_module != null)
-            {
-                await _module.InvokeVoidAsync("stop");
-            }
+            await JS.InvokeVoidAsync("sessionMonitor.stop");
         }
         catch (JSException)
         {
@@ -127,18 +117,6 @@
         if (_isMonitoring)
         {
             await StopMonitoringAsync();
-        }
-
-        if (_module != null)
-        {
-            try
-            {
-                await _module.DisposeAsync();
-            }
-            catch
-            {
-                // ignore
-            }
         }
     }
 }
