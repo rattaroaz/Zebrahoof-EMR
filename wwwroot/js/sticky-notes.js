@@ -67,3 +67,30 @@ window.zebrahoofGoBack = function () {
     }
     return false;
 };
+
+// MudTabs draws its own scroll chevrons and does not give them a name.
+(function () {
+    function label(btn) {
+        if (btn.getAttribute('aria-label')) return;
+        var path = btn.querySelector('path[d]');
+        var d = path ? (path.getAttribute('d') || '') : '';
+        btn.setAttribute('aria-label', d.indexOf('15.41') !== -1 ? 'Scroll tabs left' : 'Scroll tabs right');
+    }
+    function scan() {
+        document.querySelectorAll('.mud-tabs-scroll-button button').forEach(label);
+    }
+    function start() {
+        scan();
+        var pending = false;
+        new MutationObserver(function () {
+            if (pending) return;
+            pending = true;
+            requestAnimationFrame(function () {
+                pending = false;
+                scan();
+            });
+        }).observe(document.documentElement, { childList: true, subtree: true });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+    else start();
+})();
