@@ -20,6 +20,7 @@ using Zebrahoof_EMR.Components;
 using Zebrahoof_EMR.Configuration;
 using Zebrahoof_EMR.Data;
 using Zebrahoof_EMR.Endpoints;
+using Zebrahoof_EMR.Helpers;
 using Zebrahoof_EMR.Hubs;
 using Zebrahoof_EMR.Logging;
 using Zebrahoof_EMR.Models;
@@ -75,7 +76,6 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
-const string LastActivityKey = ".zebrahoof_last_activity";
 const string AbsoluteIssuedKey = ".zebrahoof_absolute_issue";
 
 builder.Services.ConfigureApplicationCookie(options =>
@@ -99,7 +99,7 @@ builder.Services.ConfigureApplicationCookie(options =>
                 context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
 
             var nowTicks = DateTimeOffset.UtcNow.Ticks.ToString();
-            context.Properties.Items[LastActivityKey] = nowTicks;
+            context.Properties.Items[AuthCookieIdle.LastActivityKey] = nowTicks;
             context.Properties.Items[AbsoluteIssuedKey] = nowTicks;
             return Task.CompletedTask;
         },
@@ -127,24 +127,25 @@ builder.Services.ConfigureApplicationCookie(options =>
             }
 
             var idleWindow = ResolveIdleWindow(context.Principal);
-            if (items.TryGetValue(LastActivityKey, out var lastActivityTicksString) &&
-                long.TryParse(lastActivityTicksString, out var lastActivityTicks))
+            var decision = AuthCookieIdle.Evaluate(items, now, idleWindow);
+            if (decision == AuthCookieIdleDecision.Expired)
             {
-                var lastActivity = new DateTimeOffset(lastActivityTicks, TimeSpan.Zero);
-                if (now - lastActivity > idleWindow)
-                {
-                    authLog?.LogWarning(
-                        "Cookie principal rejected: idle timeout ({IdleMinutes}m) exceeded for user id {UserId}",
-                        idleWindow.TotalMinutes,
-                        context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
-                    context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
-                    context.RejectPrincipal();
-                    await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
-                    return;
-                }
+                authLog?.LogWarning(
+                    "Cookie principal rejected: idle timeout ({IdleMinutes}m) exceeded for user id {UserId}",
+                    idleWindow.TotalMinutes,
+                    context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
+                context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
+                return;
             }
 
-            items[LastActivityKey] = now.Ticks.ToString();
+            if (decision == AuthCookieIdleDecision.Renew)
+            {
+                // Persist the new last-activity stamp. SlidingExpiration stays off so the 12h absolute cap does not move.
+                context.ShouldRenew = true;
+                await TouchClinicSessionAsync(context.HttpContext);
+            }
         }
     };
 });
@@ -449,6 +450,23 @@ void ConfigureDatabase(DbContextOptionsBuilder options)
     }
 
     options.UseNpgsql(postgresConnection!);
+}
+
+static async Task TouchClinicSessionAsync(HttpContext http)
+{
+    var sessionService = http.RequestServices.GetService<SessionService>();
+    if (sessionService == null)
+    {
+        return;
+    }
+
+    var raw = http.Request.Cookies[SessionCookieHelper.RefreshCookieName];
+    if (!SessionCookieHelper.TryDecode(raw, out var sessionId, out _))
+    {
+        return;
+    }
+
+    await sessionService.UpdateLastSeenAsync(sessionId);
 }
 
 static TimeSpan ResolveIdleWindow(ClaimsPrincipal? principal)

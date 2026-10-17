@@ -3,6 +3,42 @@ import { HubConnectionBuilder, HubConnectionState } from "https://cdn.jsdelivr.n
 let connection;
 let heartbeatInterval;
 let dotNetRef;
+let lastInputAt = 0;
+let reportedInputAt = 0;
+let activityPostedAt = 0;
+let inputWired = false;
+
+function noteUserInput() {
+    lastInputAt = Date.now();
+}
+
+async function postActivity() {
+    const now = Date.now();
+    if (now - activityPostedAt < 60000) {
+        return;
+    }
+    activityPostedAt = now;
+    try {
+        await fetch("/account/activity", { method: "POST", credentials: "same-origin", redirect: "manual" });
+    } catch (err) {
+        console.warn("Activity refresh failed", err);
+    }
+}
+
+function onUserInput() {
+    noteUserInput();
+    postActivity();
+}
+
+function wireUserInput() {
+    if (inputWired) {
+        return;
+    }
+    inputWired = true;
+    ["pointerdown", "keydown", "input"].forEach(type => {
+        document.addEventListener(type, onUserInput, true);
+    });
+}
 
 export async function start(dotNet, sessionIdCookieName, refreshEndpoint) {
     dotNetRef = dotNet;
@@ -41,6 +77,7 @@ export async function start(dotNet, sessionIdCookieName, refreshEndpoint) {
         }
     });
 
+    wireUserInput();
     await connection.start();
     sendHeartbeat();
     heartbeatInterval = setInterval(sendHeartbeat, 30000);
@@ -48,7 +85,9 @@ export async function start(dotNet, sessionIdCookieName, refreshEndpoint) {
     async function sendHeartbeat() {
         try {
             if (connection && connection.state === HubConnectionState.Connected) {
-                await connection.invoke("Heartbeat");
+                const userActive = lastInputAt > reportedInputAt;
+                reportedInputAt = Date.now();
+                await connection.invoke("Heartbeat", userActive);
             }
         } catch (err) {
             console.warn("Heartbeat failed", err);

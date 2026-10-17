@@ -16,6 +16,7 @@ public static class AccountEndpoints
         endpoints.MapPost("/account/logout", HandleLogout);
         endpoints.MapGet("/account/logout", HandleLogout);
         endpoints.MapPost("/account/refresh", HandleRefresh);
+        endpoints.MapPost("/account/activity", HandleActivity);
     }
 
     private static async Task<IResult> HandleLogin(
@@ -154,6 +155,16 @@ public static class AccountEndpoints
         log.LogDebug("Session refresh succeeded for user id {UserId}", session.UserId);
         WriteSessionCookies(context, sessionId, newToken);
         return Results.Ok();
+    }
+
+    private static IResult HandleActivity(HttpContext context)
+    {
+        if (context.User.Identity?.IsAuthenticated != true)
+        {
+            return Results.Unauthorized();
+        }
+
+        return Results.NoContent();
     }
 
     private static string NormalizeReturnUrl(string? returnUrl)

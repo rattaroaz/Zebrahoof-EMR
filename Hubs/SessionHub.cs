@@ -54,7 +54,7 @@ public class SessionHub : Hub
         await base.OnDisconnectedAsync(exception);
     }
 
-    public async Task Heartbeat()
+    public async Task Heartbeat(bool userActive = false)
     {
         var sessionId = GetSessionId();
         if (sessionId == Guid.Empty || await _sessionService.IsIdleExpiredAsync(sessionId))
@@ -68,7 +68,11 @@ public class SessionHub : Hub
             return;
         }
 
-        await _sessionService.UpdateLastSeenAsync(sessionId);
+        if (userActive)
+        {
+            await _sessionService.UpdateLastSeenAsync(sessionId);
+        }
+
         var (idleRemaining, absoluteRemaining) = await _sessionService.GetRemainingTimesAsync(sessionId);
 
         await Clients.Caller.SendAsync("IdleTimeUpdated",
