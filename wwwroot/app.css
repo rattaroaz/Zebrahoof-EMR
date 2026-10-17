@@ -628,6 +628,20 @@ input:disabled,
     overflow-y: auto;
 }
 
+.local-ai-in-use,
+.local-ai-in-use td,
+.local-ai-in-use .mud-typography {
+    background-color: #E8F0FE !important;
+    color: #0D47A1 !important;
+}
+
+.mud-breadcrumbs a,
+.mud-breadcrumbs .mud-typography,
+.mud-breadcrumbs .mud-disabled {
+    color: #424242 !important;
+    opacity: 1 !important;
+}
+
 .schedule-appointment-card.status-inprogress,
 .schedule-week-appointment.status-inprogress {
     background-color: #E8F0FE !important;

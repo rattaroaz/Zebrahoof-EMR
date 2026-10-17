@@ -87,9 +87,10 @@
                     <CardHeaderActions>
                         <MudIconButton Icon="@(_selectedMessage.IsFlagged ? Icons.Material.Filled.Flag : Icons.Material.Outlined.Flag)"
                                        Color="@(_selectedMessage.IsFlagged ? Color.Warning : Color.Default)"
+                                       aria-label="@(_selectedMessage.IsFlagged ? "Unflag message" : "Flag message")"
                                        OnClick="ToggleFlag" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Archive" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Archive" aria-label="Archive message" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" aria-label="Delete message" />
                     </CardHeaderActions>
                 </MudCardHeader>
                 <MudDivider />

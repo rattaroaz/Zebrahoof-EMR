@@ -676,7 +676,7 @@
 
     private string RowClass(CatalogRow row, int _) =>
         IsInUse(row.Model.Id)
-            ? "mud-theme-primary mud-opacity-text"
+            ? "local-ai-in-use"
             : string.Empty;
 
     private static Color FitColor(LocalAiFitKind kind) => kind switch
