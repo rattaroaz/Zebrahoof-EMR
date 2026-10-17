@@ -62,6 +62,19 @@ public class AuthCookieIdleTests
     }
 
     [Fact]
+    public void CircuitTraffic_DoesNotCountAsActivity()
+    {
+        Assert.False(AuthCookieIdle.CountsAsActivity("/_blazor"));
+        Assert.False(AuthCookieIdle.CountsAsActivity("/_blazor/negotiate"));
+        Assert.False(AuthCookieIdle.CountsAsActivity("/_framework/blazor.web.js"));
+        Assert.False(AuthCookieIdle.CountsAsActivity("/_content/MudBlazor/MudBlazor.min.js"));
+        Assert.False(AuthCookieIdle.CountsAsActivity("/hubs/session"));
+        Assert.True(AuthCookieIdle.CountsAsActivity("/account/activity"));
+        Assert.True(AuthCookieIdle.CountsAsActivity("/dashboard"));
+        Assert.True(AuthCookieIdle.CountsAsActivity("/patients"));
+    }
+
+    [Fact]
     public void ActiveSession_StaysSignedInAcrossTwentyMinutes()
     {
         var now = DateTimeOffset.Parse("2026-10-17T12:00:00Z");

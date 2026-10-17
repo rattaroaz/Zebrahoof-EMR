@@ -17,6 +17,8 @@
     private DotNetObjectReference<SessionMonitor>? _dotNetRef;
     private IJSObjectReference? _module;
     private bool _isMonitoring;
+    private bool _shouldMonitor;
+    private bool _startAttempted;
     private double _idleSeconds;
 
     protected override async Task OnParametersSetAsync()
@@ -27,16 +29,23 @@
         }
 
         var state = await AuthenticationStateTask;
-        var isAuthenticated = state.User.Identity?.IsAuthenticated == true;
+        _shouldMonitor = state.User.Identity?.IsAuthenticated == true;
 
-        if (isAuthenticated && !_isMonitoring)
-        {
-            await StartMonitoringAsync();
-        }
-        else if (!isAuthenticated && _isMonitoring)
+        if (!_shouldMonitor && _isMonitoring)
         {
             await StopMonitoringAsync();
         }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_shouldMonitor || _isMonitoring || _startAttempted)
+        {
+            return;
+        }
+
+        _startAttempted = true;
+        await StartMonitoringAsync();
     }
 
     private async Task EnsureModuleAsync()

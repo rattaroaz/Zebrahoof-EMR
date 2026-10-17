@@ -36,6 +36,22 @@ public static class AuthCookieIdle
 
         return AuthCookieIdleDecision.Keep;
     }
+
+    /// <summary>
+    /// Circuit and hub traffic stay up on an idle tab. Counting those requests would slide the window forever.
+    /// </summary>
+    public static bool CountsAsActivity(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return false;
+        }
+
+        return !path.StartsWith("/_blazor", StringComparison.OrdinalIgnoreCase)
+            && !path.StartsWith("/_framework", StringComparison.OrdinalIgnoreCase)
+            && !path.StartsWith("/_content", StringComparison.OrdinalIgnoreCase)
+            && !path.StartsWith("/hubs", StringComparison.OrdinalIgnoreCase);
+    }
 }
 
 public enum AuthCookieIdleDecision

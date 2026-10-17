@@ -127,6 +127,7 @@ builder.Services.ConfigureApplicationCookie(options =>
             }
 
             var idleWindow = ResolveIdleWindow(context.Principal);
+            items.TryGetValue(AuthCookieIdle.LastActivityKey, out var previousActivity);
             var decision = AuthCookieIdle.Evaluate(items, now, idleWindow);
             if (decision == AuthCookieIdleDecision.Expired)
             {
@@ -142,9 +143,20 @@ builder.Services.ConfigureApplicationCookie(options =>
 
             if (decision == AuthCookieIdleDecision.Renew)
             {
-                // Persist the new last-activity stamp. SlidingExpiration stays off so the 12h absolute cap does not move.
-                context.ShouldRenew = true;
-                await TouchClinicSessionAsync(context.HttpContext);
+                if (AuthCookieIdle.CountsAsActivity(context.HttpContext.Request.Path.Value))
+                {
+                    // Persist the new last-activity stamp. SlidingExpiration stays off so the 12h absolute cap does not move.
+                    context.ShouldRenew = true;
+                    await TouchClinicSessionAsync(context.HttpContext);
+                }
+                else if (previousActivity == null)
+                {
+                    items.Remove(AuthCookieIdle.LastActivityKey);
+                }
+                else
+                {
+                    items[AuthCookieIdle.LastActivityKey] = previousActivity;
+                }
             }
         }
     };
@@ -209,6 +221,7 @@ builder.Services.AddRazorComponents()
         options.KeepAliveInterval = TimeSpan.FromSeconds(5);
         options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
     });
+builder.Services.AddCascadingAuthenticationState();
 
 // Add mock data services
 builder.Services.AddScoped<AuthStateService>();
