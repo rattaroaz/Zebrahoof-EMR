@@ -4,6 +4,7 @@
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>Clinical Notes - Zebrahoof EMR</PageTitle>
 
@@ -102,8 +103,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        ChartView.Changed += OnChartViewChanged;
         await LoadNotes();
     }
+
+    private void OnChartViewChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadNotes();
+        StateHasChanged();
+    });
+
+    public void Dispose() => ChartView.Changed -= OnChartViewChanged;
 
     private async Task LoadNotes()
     {

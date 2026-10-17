@@ -1,6 +1,7 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Zebrahoof_EMR.Data;
 using Zebrahoof_EMR.Models;
@@ -226,6 +227,37 @@ public class ChartCacheTests
         await cache.OpenAsync("physician", 1);
         Assert.Equal(2, loader.Calls);
         Assert.Equal(new[] { 1, 1 }, loader.Requested);
+    }
+
+    [Fact]
+    public async Task OpenChartRefresher_RebuildsTheOpenView_AndLeavesTheCacheEmpty()
+    {
+        var loader = new FakeChartLoader { Label = "before" };
+        var cache = CreateCache(loader);
+        var clinical = new MockClinicalDataService();
+        clinical.PatientDataChanged += cache.InvalidatePatient;
+        var view = new OpenChartView();
+        using var refresher = new OpenChartRefresher(
+            clinical, loader, view, NullLogger<OpenChartRefresher>.Instance);
+
+        var opened = await cache.OpenAsync("physician", 4);
+        view.Publish(opened);
+        Assert.Equal("before", view.Snapshot!.Patient.FirstName);
+        Assert.True(cache.TryPeek("physician", 4, out _));
+
+        loader.Label = "Latex";
+        clinical.NotifyPatientDataChanged(4);
+
+        Assert.Equal("Latex", view.Snapshot!.Patient.FirstName);
+        Assert.Equal(ChartCacheSource.Loader, view.Source);
+        Assert.False(cache.TryPeek("physician", 4, out _));
+
+        clinical.NotifyPatientDataChanged(9);
+        Assert.Equal("Latex", view.Snapshot.Patient.FirstName);
+
+        var reopen = await cache.OpenAsync("physician", 4);
+        Assert.Equal(ChartCacheSource.Loader, reopen.Source);
+        Assert.Equal("Latex", reopen.Snapshot.Patient.FirstName);
     }
 
     private static MockPatientService CreatePatients()

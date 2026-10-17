@@ -501,6 +501,8 @@ public class MockClinicalDataService
             {
                 medication = existingMed;
             }
+
+            NotifyPatientDataChanged(patientId);
         }
         
         // Create the prescription record
@@ -595,6 +597,7 @@ public class MockClinicalDataService
         };
         _medications.Add(medication);
         PersistAdd(medication);
+        NotifyPatientDataChanged(patientId);
         return Task.FromResult(medication);
     }
 
@@ -631,6 +634,7 @@ public class MockClinicalDataService
 
         if (await PersistMedicationUpdateAsync(medication))
         {
+            NotifyPatientDataChanged(medication.PatientId);
             return medication;
         }
 
@@ -656,6 +660,7 @@ public class MockClinicalDataService
             medication.Status = MedicationStatus.Discontinued;
             medication.EndDate = DateTime.Today;
             PersistUpdate(medication);
+            NotifyPatientDataChanged(medication.PatientId);
         }
         return Task.CompletedTask;
     }
@@ -969,6 +974,7 @@ public class MockClinicalDataService
         note.CreatedAt = DateTime.UtcNow;
         _notes.Add(note);
         PersistAdd(note);
+        NotifyPatientDataChanged(note.PatientId);
         return Task.FromResult(note);
     }
 
@@ -987,6 +993,7 @@ public class MockClinicalDataService
             existingNote.Status = note.Status;
             existingNote.SignedAt = note.SignedAt;
             PersistUpdate(existingNote);
+            NotifyPatientDataChanged(note.PatientId);
         }
         return Task.FromResult(note);
     }
@@ -999,6 +1006,7 @@ public class MockClinicalDataService
             RequireChart(note.PatientId);
             _notes.Remove(note);
             PersistRemove(note);
+            NotifyPatientDataChanged(note.PatientId);
             return Task.FromResult(true);
         }
         return Task.FromResult(false);

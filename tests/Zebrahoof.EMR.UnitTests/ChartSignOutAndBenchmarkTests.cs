@@ -61,6 +61,16 @@ public class ChartSignOutAndBenchmarkTests
     }
 
     [Fact]
+    public void BenchmarkSeed_RunsOnlyInDevelopmentWhenTheFlagIsSet()
+    {
+        Assert.True(ClinicalDataPersistenceInitializer.ShouldSeedBenchmarkChart(isDevelopment: true, flag: "1"));
+        Assert.False(ClinicalDataPersistenceInitializer.ShouldSeedBenchmarkChart(isDevelopment: false, flag: "1"));
+        Assert.False(ClinicalDataPersistenceInitializer.ShouldSeedBenchmarkChart(isDevelopment: true, flag: null));
+        Assert.False(ClinicalDataPersistenceInitializer.ShouldSeedBenchmarkChart(isDevelopment: true, flag: "0"));
+        Assert.False(ClinicalDataPersistenceInitializer.ShouldSeedBenchmarkChart(isDevelopment: false, flag: null));
+    }
+
+    [Fact]
     public async Task LongitudinalChart_ColdOpenLoadsYearsOfData_WarmOpenDoesNot()
     {
         var patients = CreatePatients();

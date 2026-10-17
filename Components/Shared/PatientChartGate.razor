@@ -12,6 +12,7 @@
 @inject IJSRuntime JS
 @inject PatientChartCache Cache
 @inject OpenChartView ChartView
+@inject OpenChartRefresher ChartRefresher
 @inject ILogger<PatientChartGate> Logger
 
 @if (_phase == Phase.Closed)
@@ -113,6 +114,8 @@ else
 
     protected override void OnInitialized()
     {
+        // Constructing the refresher subscribes this circuit to chart writes.
+        _ = ChartRefresher;
         Registry.ChartClosed += OnChartClosed;
         Edits.Changed += OnEditsChanged;
         ChartView.Changed += OnChartViewChanged;

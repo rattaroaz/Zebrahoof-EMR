@@ -228,12 +228,20 @@
     protected override void OnInitialized()
     {
         Edits.DiscardRequested += CloseDocumentDialogs;
+        ChartView.Changed += OnChartViewChanged;
         _dialogLease = Dialogs.TrackInline(CloseDocumentDialogs);
     }
+
+    private void OnChartViewChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadDocumentsAsync();
+        StateHasChanged();
+    });
 
     public void Dispose()
     {
         Edits.DiscardRequested -= CloseDocumentDialogs;
+        ChartView.Changed -= OnChartViewChanged;
         _dialogLease?.Dispose();
     }
 

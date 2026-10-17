@@ -228,6 +228,7 @@ builder.Services.AddSingleton<IPatientChartLoader, ClinicalChartLoader>();
 builder.Services.AddSingleton<PatientChartCache>();
 builder.Services.AddSingleton<ClinicSignOut>();
 builder.Services.AddScoped<OpenChartView>();
+builder.Services.AddScoped<OpenChartRefresher>();
 builder.Services.AddHostedService<PatientChartCacheMaintenance>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddScoped<StickyNoteService>();
