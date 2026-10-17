@@ -2251,4 +2251,111 @@ public class MockClinicalDataService
             new() { Type = OrderType.Imaging, Name = "ECG", Details = "Baseline cardiac" }
         ], CreatedBy = "Dr. Sarah Smith", CreatedAt = DateTime.Today.AddMonths(-5), IsShared = true, IsActive = true }
     ];
+
+    /// <summary>
+    /// Appends years of visits for a timing run. Not part of the shipped demo seed.
+    /// </summary>
+    public (int Notes, int Labs, int Vitals, int Medications, int Encounters) SeedLongitudinalChart(int patientId, int years)
+    {
+        var start = new DateTime(2019, 1, 7, 14, 30, 0, DateTimeKind.Utc);
+        var end = start.AddYears(years);
+        var labNames = new[]
+        {
+            "WBC", "RBC", "Hemoglobin", "Hematocrit", "Platelets", "MCV", "MCH", "MCHC",
+            "Sodium", "Potassium", "Chloride", "CO2", "BUN", "Creatinine", "Glucose", "Calcium",
+            "AST", "ALT", "Alkaline Phosphatase", "Total Bilirubin", "Albumin", "Total Protein"
+        };
+        var notes = 0;
+        var labs = 0;
+        var vitals = 0;
+        var encounters = 0;
+        var visit = 0;
+        for (var day = start; day < end; day = day.AddDays(14))
+        {
+            visit++;
+            var idBase = 800_000 + visit;
+            _encounters.Add(new Encounter
+            {
+                Id = idBase,
+                PatientId = patientId,
+                PatientName = "Benchmark",
+                DateTime = day,
+                VisitType = "Follow-up",
+                Provider = "Dr. Sarah Smith",
+                Location = "Primary Care",
+                Status = EncounterStatus.Signed,
+                ChiefComplaint = "Hypertension follow-up"
+            });
+            encounters++;
+            _notes.Add(new ClinicalNote
+            {
+                Id = idBase,
+                EncounterId = idBase,
+                PatientId = patientId,
+                AuthorName = "Dr. Sarah Smith",
+                CreatedAt = day,
+                SignedAt = day.AddMinutes(20),
+                Status = NoteStatus.Signed,
+                ChiefComplaint = "Hypertension follow-up",
+                HistoryOfPresentIllness = $"Visit {visit} on {day:yyyy-MM-dd}. Blood pressure reviewed. No chest pain.",
+                Assessment = "Essential hypertension, controlled.",
+                Plan = "Continue lisinopril. Return in two weeks."
+            });
+            notes++;
+            _vitals.Add(new VitalSigns
+            {
+                Id = idBase,
+                PatientId = patientId,
+                EncounterId = idBase,
+                RecordedAt = day,
+                RecordedBy = "MA",
+                Temperature = 98.4m,
+                SystolicBP = 128,
+                DiastolicBP = 78,
+                HeartRate = 72,
+                RespiratoryRate = 16,
+                OxygenSaturation = 98,
+                Weight = 180,
+                Height = 68
+            });
+            vitals++;
+            foreach (var name in labNames)
+            {
+                _labResults.Add(new LabResult
+                {
+                    Id = 1_000_000 + labs,
+                    PatientId = patientId,
+                    TestName = name,
+                    PanelName = name is "WBC" or "Hemoglobin" or "Platelets" ? "CBC" : "CMP",
+                    Value = "1",
+                    Units = "see panel",
+                    ReferenceRange = "normal",
+                    Status = LabResultStatus.Final,
+                    CollectedAt = day,
+                    ResultedAt = day.AddHours(4)
+                });
+                labs++;
+            }
+        }
+
+        var medNames = new[] { "Lisinopril", "Atorvastatin", "Metformin", "Amlodipine", "Hydrochlorothiazide", "Levothyroxine", "Omeprazole", "Aspirin", "Vitamin D", "Sertraline" };
+        foreach (var name in medNames)
+        {
+            _medications.Add(new Medication
+            {
+                Id = 700_000 + _medications.Count,
+                PatientId = patientId,
+                Name = name,
+                Dose = "10 mg",
+                Route = "Oral",
+                Frequency = "Daily",
+                StartDate = start,
+                Status = MedicationStatus.Active,
+                IsLongTerm = true,
+                Prescriber = "Dr. Sarah Smith"
+            });
+        }
+
+        return (notes, labs, vitals, medNames.Length, encounters);
+    }
 }

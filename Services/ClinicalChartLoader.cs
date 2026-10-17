@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Zebrahoof_EMR.Data;
 using Zebrahoof_EMR.Models;
 
 namespace Zebrahoof_EMR.Services;
@@ -10,11 +13,16 @@ public sealed class ClinicalChartLoader : IPatientChartLoader
 {
     private readonly MockPatientService _patients;
     private readonly MockClinicalDataService _clinical;
+    private readonly IServiceScopeFactory? _scopes;
 
-    public ClinicalChartLoader(MockPatientService patients, MockClinicalDataService clinical)
+    public ClinicalChartLoader(
+        MockPatientService patients,
+        MockClinicalDataService clinical,
+        IServiceScopeFactory? scopes = null)
     {
         _patients = patients;
         _clinical = clinical;
+        _scopes = scopes;
     }
 
     public async Task<PatientChartSnapshot?> LoadAsync(int patientId, CancellationToken cancellationToken = default)
@@ -38,6 +46,7 @@ public sealed class ClinicalChartLoader : IPatientChartLoader
         var imaging = await _clinical.GetImagingByPatientAsync(patientId);
         var immunizations = await _clinical.GetImmunizationsByPatientAsync(patientId);
         var careTeam = await _clinical.GetCareTeamByPatientAsync(patientId);
+        var documents = await LoadDocumentsAsync(patientId, cancellationToken);
 
         return new PatientChartSnapshot
         {
@@ -55,9 +64,36 @@ public sealed class ClinicalChartLoader : IPatientChartLoader
             Imaging = imaging,
             Immunizations = immunizations,
             CareTeam = careTeam,
+            Documents = documents,
             LoadedAt = DateTimeOffset.UtcNow,
             Fingerprint = PatientChartSnapshot.BuildFingerprint(
-                patient, problems, medications, allergies, labs, vitals, notes, encounters)
+                patient, problems, medications, allergies, labs, vitals, notes, encounters, documents)
         };
+    }
+
+    private async Task<IReadOnlyList<Document>> LoadDocumentsAsync(int patientId, CancellationToken cancellationToken)
+    {
+        if (_scopes == null)
+        {
+            return Array.Empty<Document>();
+        }
+
+        using var scope = _scopes.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        return await db.Documents.AsNoTracking()
+            .Where(d => d.PatientId == patientId)
+            .OrderByDescending(d => d.Date)
+            .Select(d => new Document
+            {
+                Id = d.Id,
+                PatientId = d.PatientId,
+                Name = d.Name,
+                Category = d.Category,
+                Type = d.Type,
+                Date = d.Date,
+                UploadedBy = d.UploadedBy,
+                FileName = d.FileName
+            })
+            .ToListAsync(cancellationToken);
     }
 }

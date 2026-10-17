@@ -10,6 +10,8 @@
 @inject ChartWriteGuard ChartWrites
 @inject ChartEditTracker Edits
 @inject PatientDialogTracker Dialogs
+@inject OpenChartView ChartView
+@inject MockClinicalDataService ClinicalData
 @implements IDisposable
 
 @* Patient Documents - Scanned documents, forms, etc. *@
@@ -254,6 +256,12 @@
 
     private async Task LoadDocumentsAsync()
     {
+        if (ChartView.Snapshot is { } snap && snap.PatientId == PatientId)
+        {
+            _documents = snap.Documents.ToList();
+            return;
+        }
+
         _documents = await Db.Documents
             .AsNoTracking()
             .Where(d => d.PatientId == PatientId)
@@ -385,6 +393,7 @@
             });
 
             NotificationService.ShowSuccess("Document uploaded");
+            ClinicalData.NotifyPatientDataChanged(PatientId);
             _showUploadDialog = false;
         }
         catch (Exception ex)
@@ -497,6 +506,7 @@
                 _editingDocument.Name = newName;
                 _editingDocument.Category = newCategory;
                 NotificationService.ShowSuccess("Document updated");
+                ClinicalData.NotifyPatientDataChanged(PatientId);
             }
         }
         catch (Exception ex)
@@ -525,6 +535,7 @@
             {
                 Db.Documents.Remove(persisted);
                 await Db.SaveChangesAsync();
+                ClinicalData.NotifyPatientDataChanged(PatientId);
             }
 
             _documents.Remove(document);

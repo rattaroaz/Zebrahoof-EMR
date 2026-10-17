@@ -1,4 +1,5 @@
 @inject MockClinicalDataService ClinicalDataService
+@inject OpenChartView ChartView
 @inject AuthStateService AuthState
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
@@ -106,6 +107,12 @@
 
     private async Task LoadNotes()
     {
+        if (ChartView.Snapshot is { } snap && snap.PatientId == PatientId)
+        {
+            _notes = snap.Notes.OrderByDescending(note => note.CreatedAt).ToList();
+            return;
+        }
+
         var notes = await ClinicalDataService.GetPatientNotesAsync(PatientId);
         _notes = notes.OrderByDescending(note => note.CreatedAt).ToList();
     }

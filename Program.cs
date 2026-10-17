@@ -286,6 +286,14 @@ var slowRequestWarningMs = builder.Configuration.GetValue("Serilog:SlowRequestWa
 
 var app = builder.Build();
 
+if (string.Equals(Environment.GetEnvironmentVariable("ZH_BENCH"), "1", StringComparison.Ordinal))
+{
+    var seeded = app.Services.GetRequiredService<MockClinicalDataService>().SeedLongitudinalChart(5, years: 6);
+    app.Logger.LogInformation(
+        "ZH_BENCH appended a 6-year chart to patient 5: {Notes} notes, {Labs} labs, {Vitals} vitals, {Medications} meds, {Encounters} encounters",
+        seeded.Notes, seeded.Labs, seeded.Vitals, seeded.Medications, seeded.Encounters);
+}
+
 app.UseForwardedHeaders();
 
 // Configure the HTTP request pipeline.

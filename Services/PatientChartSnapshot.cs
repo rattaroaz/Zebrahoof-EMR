@@ -22,6 +22,7 @@ public sealed class PatientChartSnapshot
     public IReadOnlyList<ImagingStudy> Imaging { get; init; } = Array.Empty<ImagingStudy>();
     public IReadOnlyList<Immunization> Immunizations { get; init; } = Array.Empty<Immunization>();
     public IReadOnlyList<CareTeamMember> CareTeam { get; init; } = Array.Empty<CareTeamMember>();
+    public IReadOnlyList<Document> Documents { get; init; } = Array.Empty<Document>();
     public string Fingerprint { get; init; } = "";
     public DateTimeOffset LoadedAt { get; init; }
 
@@ -33,7 +34,8 @@ public sealed class PatientChartSnapshot
         IReadOnlyList<LabResult> labs,
         IReadOnlyList<VitalSigns> vitals,
         IReadOnlyList<ClinicalNote> notes,
-        IReadOnlyList<Encounter> encounters)
+        IReadOnlyList<Encounter> encounters,
+        IReadOnlyList<Document>? documents = null)
     {
         var text = new StringBuilder();
         text.Append(patient.Id).Append('|')
@@ -49,6 +51,11 @@ public sealed class PatientChartSnapshot
         Append(text, vitals.Select(v => $"{v.Id}:{v.RecordedAt.Ticks}:{v.Temperature}:{v.SystolicBP}"));
         Append(text, notes.Select(n => $"{n.Id}:{n.CreatedAt.Ticks}:{n.Status}:{n.ChiefComplaint}"));
         Append(text, encounters.Select(e => $"{e.Id}:{e.Status}:{e.DateTime.Ticks}"));
+        if (documents != null)
+        {
+            Append(text, documents.Select(d => $"{d.Id}:{d.Name}:{d.Category}:{d.Date.Ticks}"));
+        }
+
         return text.ToString();
     }
 
