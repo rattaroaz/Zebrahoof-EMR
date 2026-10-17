@@ -201,7 +201,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 // Add mock data services
-builder.Services.AddSingleton<AuthStateService>();
+builder.Services.AddScoped<AuthStateService>();
 builder.Services.AddScoped<AppStateService>();
 builder.Services.Configure<ChartLockOptions>(builder.Configuration.GetSection(ChartLockOptions.Section));
 builder.Services.AddSingleton<TimeProvider>(_ => TimeProvider.System);

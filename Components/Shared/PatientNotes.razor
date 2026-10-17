@@ -2,6 +2,7 @@
 @inject AuthStateService AuthState
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>Clinical Notes - Zebrahoof EMR</PageTitle>
 
@@ -9,7 +10,11 @@
     <!-- Header with View Toggle -->
     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
         <MudText Typo="Typo.h5">Clinical Notes</MudText>
-        <MudStack Row="true" Spacing="2">
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="notes-toolbar">
+            <MudTextField @bind-Value="_query" Placeholder="Search notes" Label="Search notes" Margin="Margin.Dense"
+                          Immediate="true" Variant="Variant.Outlined" Class="notes-search" />
+            <MudButton Variant="Variant.Outlined" OnClick="ToggleShowAll">@(_showAll ? "Virtual list" : "Show all notes")</MudButton>
+            <MudButton Variant="Variant.Outlined" OnClick="PrintNotes">Print</MudButton>
             <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.AccountTree" OnClick="@NavigateToTreeView">
                 Tree View
             </MudButton>
@@ -35,91 +40,24 @@
                     </MudButton>
                 </MudStack>
             }
+            else if (_visible.Count == 0)
+            {
+                <MudText Class="pa-4">No notes match that search.</MudText>
+            }
+            else if (_showAll)
+            {
+                <div class="notes-all-list" data-testid="notes-list">
+                    @foreach (var note in _visible)
+                    {
+                        <PatientNoteCard Note="note" CanSign="CanSignNote()" OnEdit="EditNote" OnDelete="DeleteNote" OnSign="SignNote" OnView="ViewNote" />
+                    }
+                </div>
+            }
             else
             {
                 <div class="notes-virtual-list" data-testid="notes-list">
-                    <Virtualize Items="_notes" Context="note" OverscanCount="2" ItemSize="160">
-                        <MudPaper Elevation="1" Class="pa-4">
-                            <MudStack Spacing="2">
-                                <!-- Note Header -->
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                                        <MudChip T="string" Size="Size.Small" Color="@GetNoteStatusColor(note.Status)">
-                                            @note.Status
-                                        </MudChip>
-                                        <MudText Typo="Typo.h6">@(note.ChiefComplaint ?? "Clinical Note")</MudText>
-                                    </MudStack>
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                        @if (note.Status == NoteStatus.InProgress)
-                                        {
-                                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                                          aria-label="Edit note"
-                                                          OnClick="@(() => EditNote(note))" title="Edit Note" />
-                                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
-                                                          aria-label="Delete note"
-                                                          OnClick="@(() => DeleteNote(note))" title="Delete Note" />
-                                        }
-                                        @if (note.Status == NoteStatus.InProgress && CanSignNote())
-                                        {
-                                            <MudIconButton Icon="@Icons.Material.Filled.HowToReg" Size="Size.Small"
-                                                          Color="Color.Primary"
-                                                          aria-label="Sign note"
-                                                          OnClick="@(() => SignNote(note))" title="Sign Note" />
-                                        }
-                                    </MudStack>
-                                </MudStack>
-
-                                <!-- Note Metadata -->
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
-                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
-                                        By @note.AuthorName on @ClinicTime.Format(note.CreatedAt, "MMM dd, yyyy h:mm tt")
-                                    </MudText>
-                                    @if (note.SignedAt.HasValue)
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Success">
-                                            ✓ Signed on @(note.SignedAt is DateTime signedAt ? ClinicTime.Format(signedAt, "MMM dd, yyyy h:mm tt") : "")
-                                        </MudText>
-                                    }
-                                </MudStack>
-
-                                <!-- Chief Complaint -->
-                                @if (!string.IsNullOrEmpty(note.ChiefComplaint))
-                                {
-                                    <MudText Typo="Typo.body2" Class="font-weight-bold">
-                                        Chief Complaint: @note.ChiefComplaint
-                                    </MudText>
-                                }
-
-                                <!-- HPI Preview -->
-                                @if (!string.IsNullOrEmpty(note.HistoryOfPresentIllness))
-                                {
-                                    <MudText Typo="Typo.body2">
-                                        <strong>HPI:</strong> @(note.HistoryOfPresentIllness.Length > 200 ? note.HistoryOfPresentIllness.Substring(0, 200) + "..." : note.HistoryOfPresentIllness)
-                                    </MudText>
-                                }
-
-                                <!-- Assessment and Plan Preview -->
-                                @if (!string.IsNullOrEmpty(note.Assessment) || !string.IsNullOrEmpty(note.Plan))
-                                {
-                                    <MudText Typo="Typo.body2">
-                                        @if (!string.IsNullOrEmpty(note.Assessment))
-                                        {
-                                            <strong>Assessment:</strong> @(note.Assessment.Length > 100 ? note.Assessment.Substring(0, 100) + "..." : note.Assessment)
-                                        }
-                                        @if (!string.IsNullOrEmpty(note.Plan))
-                                        {
-                                            <br />
-                                            <strong>Plan:</strong> @(note.Plan.Length > 100 ? note.Plan.Substring(0, 100) + "..." : note.Plan)
-                                        }
-                                    </MudText>
-                                }
-
-                                <!-- View Full Note Button -->
-                                <MudButton Variant="Variant.Text" Size="Size.Small" @onclick="@(() => ViewNote(note))">
-                                    View Full Note
-                                </MudButton>
-                            </MudStack>
-                        </MudPaper>
+                    <Virtualize Items="_visible" Context="note" OverscanCount="2" ItemSize="160">
+                        <PatientNoteCard Note="note" CanSign="CanSignNote()" OnEdit="EditNote" OnDelete="DeleteNote" OnSign="SignNote" OnView="ViewNote" />
                     </Virtualize>
                 </div>
             }
@@ -132,6 +70,28 @@
     public int PatientId { get; set; }
 
     private List<ClinicalNote>? _notes;
+    private string _query = string.Empty;
+    private bool _showAll;
+
+    private List<ClinicalNote> _visible =>
+        (_notes ?? new List<ClinicalNote>())
+            .Where(note => string.IsNullOrWhiteSpace(_query)
+                || (note.ChiefComplaint?.Contains(_query, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (note.HistoryOfPresentIllness?.Contains(_query, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (note.Assessment?.Contains(_query, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (note.Plan?.Contains(_query, StringComparison.OrdinalIgnoreCase) ?? false)
+                || (note.AuthorName?.Contains(_query, StringComparison.OrdinalIgnoreCase) ?? false))
+            .ToList();
+
+    private void ToggleShowAll() => _showAll = !_showAll;
+
+    private async Task PrintNotes()
+    {
+        _showAll = true;
+        StateHasChanged();
+        await Task.Yield();
+        await JS.InvokeVoidAsync("print");
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -249,15 +209,4 @@
                AuthState.CurrentUser?.Role == UserRole.MedicalAssistant;
     }
 
-    private Color GetNoteStatusColor(NoteStatus status)
-    {
-        return status switch
-        {
-            NoteStatus.InProgress => Color.Warning,
-            NoteStatus.Signed => Color.Success,
-            NoteStatus.Addended => Color.Info,
-            NoteStatus.Cosigned => Color.Primary,
-            _ => Color.Default
-        };
-    }
 }

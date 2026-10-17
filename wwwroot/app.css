@@ -624,8 +624,29 @@ input:disabled,
 }
 
 .notes-virtual-list {
-    height: min(70vh, 900px);
+    height: calc(100vh - 280px);
+    min-height: 280px;
     overflow-y: auto;
+}
+
+.notes-all-list {
+    height: auto;
+    overflow: visible;
+}
+
+@media print {
+    .notes-virtual-list,
+    .notes-all-list {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .notes-toolbar,
+    .mud-appbar,
+    .mud-drawer {
+        display: none !important;
+    }
 }
 
 .local-ai-in-use,

@@ -1,5 +1,6 @@
 @inject MockClinicalDataService ClinicalDataService
 @inject PatientDialogTracker Dialogs
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @implements IDisposable
 
@@ -60,7 +61,8 @@
     </TitleContent>
     <DialogContent>
         <PatientSafetyBanner PatientId="PatientId" />
-        <MudTextField @bind-Value="_name" Label="Problem" Required="true" Class="mt-2" />
+        <MudTextField @bind-Value="_name" Label="Problem" Required="true" Class="mt-2"
+                      Error="@(_nameError != null)" ErrorText="@_nameError" Immediate="true" />
         <MudTextField @bind-Value="_icd" Label="ICD code" Class="mt-2" />
         <MudTextField @bind-Value="_severity" Label="Severity" Class="mt-2" />
         <MudTextField @bind-Value="_notes" Label="Notes" Lines="2" Class="mt-2" />
@@ -80,6 +82,7 @@
     private bool _showDialog;
     private string? _editingName;
     private string _name = string.Empty;
+    private string? _nameError;
     private string? _icd;
     private string? _severity;
     private string? _notes;
@@ -120,6 +123,7 @@
     {
         _editingName = null;
         _name = string.Empty;
+        _nameError = null;
         _icd = null;
         _severity = null;
         _notes = null;
@@ -130,6 +134,7 @@
     {
         _editingName = problem.Name;
         _name = problem.Name;
+        _nameError = null;
         _icd = problem.IcdCode;
         _severity = problem.Severity;
         _notes = problem.Notes;
@@ -140,8 +145,11 @@
     {
         if (string.IsNullOrWhiteSpace(_name))
         {
+            _nameError = "Enter the problem.";
             return;
         }
+
+        _nameError = null;
 
         if (_editingName != null)
         {
@@ -173,6 +181,16 @@
 
     private async Task Resolve(Problem problem)
     {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Resolve problem",
+            $"Mark {problem.Name} as resolved? It stays on the chart with a resolved status.",
+            yesText: "Resolve",
+            cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
         await ClinicalDataService.UpdateProblemAsync(PatientId, problem.Name, item =>
         {
             item.Status = ProblemStatus.Resolved;

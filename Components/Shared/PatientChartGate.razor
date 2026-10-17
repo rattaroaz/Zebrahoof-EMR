@@ -259,19 +259,7 @@ else
             return;
         }
 
-        var wentBack = false;
-        try
-        {
-            wentBack = await JS.InvokeAsync<bool>("zebrahoofGoBack");
-        }
-        catch (JSException)
-        {
-        }
-
-        if (!wentBack)
-        {
-            Navigation.NavigateTo("/dashboard");
-        }
+        Navigation.NavigateTo("/dashboard");
     }
 
     private void OnEditsChanged()
@@ -296,28 +284,12 @@ else
             Dialogs.CloseAll();
             StateHasChanged();
             await Task.Yield();
-            try
-            {
-                await JS.InvokeVoidAsync("zebrahoofDismissChartDialogs");
-            }
-            catch (JSException)
-            {
-            }
-
             await Task.Delay(40);
             _phase = Phase.Closed;
             _openedElsewhere = notice.OpenedPatientName;
             _openedElsewhereId = notice.OpenedPatientId;
             _claimedFor = -1;
             AppState.SelectPatient(null);
-            try
-            {
-                await JS.InvokeVoidAsync("zebrahoofDismissChartDialogs");
-            }
-            catch (JSException)
-            {
-            }
-
             StateHasChanged();
         });
     }

@@ -1,5 +1,4 @@
 @inject PatientDialogTracker Dialogs
-@inject IJSRuntime JS
 
 <MudPaper Class="pa-6 my-2" Elevation="2" data-testid="chart-closed">
     <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
@@ -25,20 +24,7 @@
         ? "another patient"
         : Exception.OpenedPatientName;
 
-    protected override async Task OnInitializedAsync()
-    {
-        Dialogs.CloseAll();
-        try
-        {
-            await JS.InvokeVoidAsync("zebrahoofDismissChartDialogs");
-        }
-        catch (JSException)
-        {
-        }
-        catch (InvalidOperationException)
-        {
-        }
-    }
+    protected override void OnInitialized() => Dialogs.CloseAll();
 
     private Task Leave() => OnLeave.InvokeAsync(Exception);
 }

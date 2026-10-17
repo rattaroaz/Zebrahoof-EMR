@@ -1,5 +1,6 @@
 @inject MockClinicalDataService ClinicalDataService
 @inject PatientDialogTracker Dialogs
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @implements IDisposable
 
@@ -66,7 +67,8 @@
     </TitleContent>
     <DialogContent>
         <PatientSafetyBanner PatientId="PatientId" />
-        <MudTextField @bind-Value="_allergen" Label="Allergen" Required="true" Class="mt-2" />
+        <MudTextField @bind-Value="_allergen" Label="Allergen" Required="true" Class="mt-2"
+                      Error="@(_allergenError != null)" ErrorText="@_allergenError" Immediate="true" />
         <MudTextField @bind-Value="_reaction" Label="Reaction" Class="mt-2" />
         <MudSelect @bind-Value="_severity" Label="Severity" Class="mt-2">
             @foreach (var severity in Enum.GetValues<AllergySeverity>())
@@ -89,6 +91,7 @@
     private bool _showDialog;
     private int? _editingId;
     private string _allergen = string.Empty;
+    private string? _allergenError;
     private string? _reaction;
     private AllergySeverity _severity = AllergySeverity.Moderate;
     private IDisposable? _dialogLease;
@@ -121,6 +124,7 @@
     {
         _editingId = null;
         _allergen = string.Empty;
+        _allergenError = null;
         _reaction = null;
         _severity = AllergySeverity.Moderate;
         _showDialog = true;
@@ -130,6 +134,7 @@
     {
         _editingId = allergy.Id;
         _allergen = allergy.Allergen;
+        _allergenError = null;
         _reaction = allergy.Reaction;
         _severity = allergy.Severity;
         _showDialog = true;
@@ -139,8 +144,11 @@
     {
         if (string.IsNullOrWhiteSpace(_allergen))
         {
+            _allergenError = "Enter the allergen.";
             return;
         }
+
+        _allergenError = null;
 
         if (_editingId is int id)
         {
@@ -170,6 +178,16 @@
 
     private async Task Remove(Allergy allergy)
     {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Remove allergy",
+            $"Remove {allergy.Allergen} from this chart? This cannot be undone.",
+            yesText: "Remove",
+            cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
         await ClinicalDataService.RemoveAllergyAsync(PatientId, allergy.Allergen);
         Snackbar.Add($"{allergy.Allergen} removed", Severity.Info);
     }

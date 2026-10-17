@@ -8,6 +8,8 @@
 @inject DashboardAskSession DashboardAskSession
 @inject AskAiCoordinator AskAi
 @inject NavigationTrail Trail
+@inject AuthenticationStateProvider AuthenticationState
+@inject AuthSyncService AuthSync
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -156,6 +158,9 @@
     protected override async Task OnInitializedAsync()
     {
         _ = Trail.PreviousPath;
+        var state = await AuthenticationState.GetAuthenticationStateAsync();
+        await AuthSync.BindCircuitAsync(state.User);
+        AuthenticationState.AuthenticationStateChanged += OnAuthenticationChanged;
         AuthState.OnAuthStateChanged += OnStateChangedHandler;
         AppState.OnStateChanged += OnStateChangedHandler;
         ClinicalData.InboxChanged += OnInboxDataChanged;
@@ -189,6 +194,13 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private async void OnAuthenticationChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        await AuthSync.BindCircuitAsync(state.User);
+        await InvokeAsync(StateHasChanged);
+    }
+
     private async Task RefreshUnreadMessageCountAsync()
     {
         _unreadMessages = await ClinicalData.GetUnreadMessageCountAsync();
@@ -205,6 +217,7 @@
 
     public void Dispose()
     {
+        AuthenticationState.AuthenticationStateChanged -= OnAuthenticationChanged;
         AuthState.OnAuthStateChanged -= OnStateChangedHandler;
         AppState.OnStateChanged -= OnStateChangedHandler;
         ClinicalData.InboxChanged -= OnInboxDataChanged;

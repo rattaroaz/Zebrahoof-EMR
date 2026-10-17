@@ -42,12 +42,6 @@ window.zebrahoofScrollTabs = function (element, delta) {
     element.scrollBy({ left: delta, behavior: 'smooth' });
 };
 
-window.zebrahoofDismissChartDialogs = function () {
-    document.querySelectorAll('.mud-dialog-container, .mud-overlay-dialog').forEach(function (el) {
-        el.remove();
-    });
-};
-
 window.zebrahoofSameOriginReferrer = function () {
     try {
         if (!document.referrer) return null;
@@ -71,10 +65,14 @@ window.zebrahoofGoBack = function () {
 // MudTabs draws its own scroll chevrons and does not give them a name.
 (function () {
     function label(btn) {
-        if (btn.getAttribute('aria-label')) return;
-        var path = btn.querySelector('path[d]');
-        var d = path ? (path.getAttribute('d') || '') : '';
-        btn.setAttribute('aria-label', d.indexOf('15.41') !== -1 ? 'Scroll tabs left' : 'Scroll tabs right');
+        if (btn.getAttribute('aria-label') && btn.getAttribute('aria-label').indexOf('Scroll tabs') !== 0) return;
+        var d = '';
+        btn.querySelectorAll('path[d]').forEach(function (path) {
+            var value = path.getAttribute('d') || '';
+            if (value.indexOf('M0 0h24') === -1) d = value;
+        });
+        var left = d.indexOf('15.41') !== -1 || d.indexOf('10.83') !== -1;
+        btn.setAttribute('aria-label', left ? 'Scroll tabs left' : 'Scroll tabs right');
     }
     function scan() {
         document.querySelectorAll('.mud-tabs-scroll-button button').forEach(label);

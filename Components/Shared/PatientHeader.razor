@@ -1,6 +1,8 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 @inject PatientDialogTracker Dialogs
+@inject MockClinicalDataService ClinicalData
+@implements IDisposable
 
 <div class="patient-banner-sticky" data-testid="patient-banner">
     <MudPaper Elevation="1" Class="patient-banner px-3 py-2 mb-2">
@@ -15,9 +17,9 @@
                     MRN @Patient.MRN · DOB @Patient.DateOfBirth.ToString("MM/dd/yyyy") (@Patient.Age y @SexInitial)
                     · @Patient.PrimaryProvider
                     ·
-                    @if (Patient.Allergies.Any())
+                    @if (_allergyNames.Count > 0)
                     {
-                        <span class="patient-allergy-names">@string.Join(", ", Patient.Allergies)</span>
+                        <span class="patient-allergy-names">@string.Join(", ", _allergyNames)</span>
                     }
                     else
                     {
@@ -47,6 +49,38 @@
 @code {
     [Parameter, EditorRequired]
     public Patient Patient { get; set; } = null!;
+
+    private List<string> _allergyNames = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ClinicalData.PatientDataChanged -= OnPatientDataChanged;
+        ClinicalData.PatientDataChanged += OnPatientDataChanged;
+        await LoadAllergiesAsync();
+    }
+
+    private async Task LoadAllergiesAsync()
+    {
+        var allergies = await ClinicalData.GetActiveAllergiesByPatientAsync(Patient.Id);
+        _allergyNames = allergies
+            .Select(allergy => allergy.Allergen)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private async void OnPatientDataChanged(int patientId)
+    {
+        if (patientId != Patient.Id)
+        {
+            return;
+        }
+
+        await LoadAllergiesAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => ClinicalData.PatientDataChanged -= OnPatientDataChanged;
 
     private string Initials => $"{Patient.FirstName.FirstOrDefault()}{Patient.LastName.FirstOrDefault()}";
 

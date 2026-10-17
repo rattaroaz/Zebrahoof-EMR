@@ -821,7 +821,8 @@
             if (!_editMedicationFormValid) return;
         }
 
-        await ClinicalDataService.UpdateMedicationAsync(
+        var medicationName = _editMedicationModel.MedicationName;
+        var updated = await ClinicalDataService.UpdateMedicationAsync(
             _editMedicationModel.MedicationId,
             _editMedicationModel.Dose,
             _editMedicationModel.Route,
@@ -833,10 +834,15 @@
             _editMedicationModel.DaysSupply,
             _editMedicationModel.IsHighRisk
         );
+        if (updated == null)
+        {
+            Snackbar.Add($"{medicationName} was not saved.", Severity.Error);
+            return;
+        }
 
         await LoadData();
         CloseEditMedicationDialog();
-        Snackbar.Add($"{_editMedicationModel.MedicationName} updated successfully", Severity.Success);
+        Snackbar.Add($"{medicationName} updated successfully", Severity.Success);
     }
 
     public Task<IEnumerable<MedicationCatalog>> SearchMedications(string value, CancellationToken token = default)
