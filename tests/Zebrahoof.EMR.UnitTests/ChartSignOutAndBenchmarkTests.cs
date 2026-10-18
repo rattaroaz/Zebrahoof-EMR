@@ -22,7 +22,10 @@ public class ChartSignOutAndBenchmarkTests
         var loader = new CountingLoader();
         var cache = CreateCache(loader);
         var registry = new ActivePatientRegistry();
-        var signOut = new ClinicSignOut(cache, registry);
+        var drafts = new NoteDraftService();
+        drafts.Save("physician", 2, new NoteDraft { ChiefComplaint = "kept" });
+        drafts.Save("nurse", 2, new NoteDraft { ChiefComplaint = "other" });
+        var signOut = new ClinicSignOut(cache, registry, drafts);
         var physician = new ClaimsPrincipal(new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, "Physician"),
@@ -37,6 +40,8 @@ public class ChartSignOutAndBenchmarkTests
 
         signOut.ForgetCharts(physician);
 
+        Assert.Null(drafts.Get("physician", 2));
+        Assert.Equal("other", drafts.Get("nurse", 2)!.ChiefComplaint);
         Assert.False(cache.TryPeek("Physician", 1, out _));
         Assert.Null(registry.Current("Physician"));
         Assert.True(cache.TryPeek("Nurse", 1, out _));

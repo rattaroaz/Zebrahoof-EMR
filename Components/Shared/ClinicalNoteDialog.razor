@@ -21,6 +21,12 @@
         {
             <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@_saveError</MudAlert>
         }
+        @if (_draftRestored)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2" data-testid="draft-restored">
+                Draft restored
+            </MudAlert>
+        }
         <MudStack Spacing="4" Class="pa-2">
             @if (IsViewOnly)
             {
@@ -58,7 +64,7 @@
             
             <MudGrid>
                 <MudItem xs="12">
-                    <MudTextField @bind-Value="note.ChiefComplaint" @bind-Value:after="PersistDraft"
+                    <MudTextField @bind-Value="note.ChiefComplaint" @bind-Value:after="QueueDraftSave"
                                   Label="Chief Complaint" 
                                   Variant="Variant.Outlined" 
                                   Required="true"
@@ -68,7 +74,7 @@
                 </MudItem>
             </MudGrid>
 
-            <MudTextField @bind-Value="note.HistoryOfPresentIllness" @bind-Value:after="PersistDraft"
+            <MudTextField @bind-Value="note.HistoryOfPresentIllness" @bind-Value:after="QueueDraftSave"
                           Label="History of Present Illness" 
                           Variant="Variant.Outlined" 
                           Lines="4" 
@@ -77,7 +83,7 @@
                           Immediate="true"
                           Class="@(@IsViewOnly ? "dark-disabled-text" : "")" />
 
-            <MudTextField @bind-Value="note.ReviewOfSystems" @bind-Value:after="PersistDraft"
+            <MudTextField @bind-Value="note.ReviewOfSystems" @bind-Value:after="QueueDraftSave"
                           Label="Review of Systems" 
                           Variant="Variant.Outlined" 
                           Lines="3" 
@@ -85,7 +91,7 @@
                           Immediate="true"
                           Class="@(@IsViewOnly ? "dark-disabled-text" : "")" />
 
-            <MudTextField @bind-Value="note.PhysicalExam" @bind-Value:after="PersistDraft"
+            <MudTextField @bind-Value="note.PhysicalExam" @bind-Value:after="QueueDraftSave"
                           Label="Physical Examination" 
                           Variant="Variant.Outlined" 
                           Lines="4" 
@@ -95,7 +101,7 @@
 
             <MudGrid>
                 <MudItem xs="12" md="6">
-                    <MudTextField @bind-Value="note.Assessment" @bind-Value:after="PersistDraft"
+                    <MudTextField @bind-Value="note.Assessment" @bind-Value:after="QueueDraftSave"
                                   Label="Assessment" 
                                   Variant="Variant.Outlined" 
                                   Lines="3" 
@@ -104,7 +110,7 @@
                                   Class="@(@IsViewOnly ? "dark-disabled-text" : "")" />
                 </MudItem>
                 <MudItem xs="12" md="6">
-                    <MudTextField @bind-Value="note.Plan" @bind-Value:after="PersistDraft"
+                    <MudTextField @bind-Value="note.Plan" @bind-Value:after="QueueDraftSave"
                                   Label="Plan" 
                                   Variant="Variant.Outlined" 
                                   Lines="3" 
@@ -156,8 +162,11 @@
     private ClinicalNote note = new();
     private bool signNote = false;
     private bool _saved;
+    private bool _draftRestored;
     private IDisposable? _editScope;
     private string? _saveError;
+    private CancellationTokenSource? _draftDebounce;
+    private CancellationTokenSource? _draftFlush;
 
     protected override void OnInitialized()
     {
@@ -187,6 +196,7 @@
         {
             Logger.LogDebug("New note for patient {PatientId}", PatientId);
             var draft = Drafts.Get(DraftUser, PatientId);
+            _draftRestored = draft is { IsEmpty: false };
             note = new ClinicalNote
             {
                 PatientId = PatientId,
@@ -219,6 +229,55 @@
         }
 
         Edits.DiscardRequested += OnDiscardRequested;
+        if (!IsViewOnly && !IsEdit)
+        {
+            _draftFlush = new CancellationTokenSource();
+            _ = FlushDraftWhileOpen(_draftFlush.Token);
+        }
+    }
+
+    private void QueueDraftSave()
+    {
+        _draftDebounce?.Cancel();
+        _draftDebounce?.Dispose();
+        _draftDebounce = new CancellationTokenSource();
+        var token = _draftDebounce.Token;
+        _ = DebouncedSave(token);
+    }
+
+    private async Task DebouncedSave(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(400), token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        try
+        {
+            await InvokeAsync(PersistDraft);
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    private async Task FlushDraftWhileOpen(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                await InvokeAsync(PersistDraft);
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
     }
 
     private void OnDiscardRequested() => MudDialog.Cancel();
@@ -245,7 +304,11 @@
 
     public void Dispose()
     {
+        _draftDebounce?.Cancel();
+        _draftFlush?.Cancel();
         PersistDraft();
+        _draftDebounce?.Dispose();
+        _draftFlush?.Dispose();
         Edits.DiscardRequested -= OnDiscardRequested;
         _editScope?.Dispose();
         _editScope = null;

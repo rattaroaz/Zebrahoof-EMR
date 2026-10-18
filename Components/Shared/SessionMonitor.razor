@@ -7,9 +7,10 @@
 @if (_showWarning)
 {
     <div class="idle-warning-backdrop">
-        <div class="idle-warning" role="alertdialog" aria-modal="true" aria-labelledby="idle-warning-title" aria-describedby="idle-warning-countdown" data-testid="idle-warning">
+        <div class="idle-warning" role="alertdialog" aria-modal="true" aria-labelledby="idle-warning-title" aria-describedby="idle-warning-once" data-testid="idle-warning">
             <h2 id="idle-warning-title">Still there?</h2>
-            <p id="idle-warning-countdown" aria-live="assertive">You'll be signed out in @_countdownLabel</p>
+            <p id="idle-warning-once">You will be signed out in 2 minutes unless you stay signed in.</p>
+            <p class="idle-warning-clock" aria-hidden="true" data-testid="idle-countdown">@_countdownLabel</p>
             <button type="button" @ref="_stayButton" @onclick="StaySignedIn">Stay signed in</button>
         </div>
     </div>
@@ -24,23 +25,12 @@
     private bool _startAttempted;
     private bool _showWarning;
     private bool _focusStay;
+    private bool _deadlineKnown;
+    private int _signOutStarted;
     private DateTimeOffset _signOutAt;
     private CancellationTokenSource? _countdown;
     private ElementReference _stayButton;
-
-    private string _countdownLabel
-    {
-        get
-        {
-            var left = _signOutAt - DateTimeOffset.UtcNow;
-            if (left < TimeSpan.Zero)
-            {
-                left = TimeSpan.Zero;
-            }
-
-            return $"{(int)left.TotalMinutes}:{left.Seconds:00}";
-        }
-    }
+    private string _countdownLabel = IdleWarningClock.Format(IdleWarningClock.WarningLead);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -115,46 +105,34 @@
     [JSInvokable]
     public Task OnIdleWarning(string message)
     {
-        if (!_showWarning)
-        {
-            _showWarning = true;
-            _focusStay = true;
-        }
-
-        return InvokeAsync(StateHasChanged);
+        return InvokeAsync(ApplyClock);
     }
 
     [JSInvokable]
     public Task OnIdleTimeUpdate(double idleSeconds, double absoluteSeconds)
     {
-        _signOutAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(0, idleSeconds));
-        var show = idleSeconds > 0 && idleSeconds <= 120;
-        if (show && !_showWarning)
+        if (idleSeconds <= 0 && absoluteSeconds <= 0)
         {
-            _focusStay = true;
-            StartCountdown();
+            return Task.CompletedTask;
         }
 
-        if (!show)
-        {
-            StopCountdown();
-        }
-
-        _showWarning = show;
-        return InvokeAsync(StateHasChanged);
+        _signOutAt = IdleWarningClock.SignOutAt(DateTimeOffset.UtcNow, idleSeconds);
+        _deadlineKnown = true;
+        EnsureTicker();
+        return InvokeAsync(ApplyClock);
     }
 
     [JSInvokable]
     public Task OnForceLogout(string message)
     {
-        Navigation.NavigateTo("/login", forceLoad: true);
+        SignOutNow();
         return Task.CompletedTask;
     }
 
     private async Task StaySignedIn()
     {
         _showWarning = false;
-        StopCountdown();
+        _deadlineKnown = false;
         try
         {
             await JS.InvokeVoidAsync("zebrahoofPostActivity");
@@ -165,7 +143,7 @@
         }
     }
 
-    private void StartCountdown()
+    private void EnsureTicker()
     {
         if (_countdown != null)
         {
@@ -180,16 +158,76 @@
             {
                 try
                 {
-                    await Task.Delay(1000, token);
+                    await Task.Delay(250, token);
                 }
                 catch (OperationCanceledException)
                 {
                     return;
                 }
 
-                await InvokeAsync(StateHasChanged);
+                try
+                {
+                    await InvokeAsync(ApplyClock);
+                }
+                catch (Exception ex) when (IsDisconnect(ex))
+                {
+                    return;
+                }
             }
         }, token);
+    }
+
+    private void ApplyClock()
+    {
+        if (!_deadlineKnown || _signOutStarted != 0)
+        {
+            return;
+        }
+
+        var left = _signOutAt - DateTimeOffset.UtcNow;
+        if (IdleWarningClock.ShouldSignOut(left))
+        {
+            SignOutNow();
+            return;
+        }
+
+        var show = IdleWarningClock.ShouldWarn(left);
+        if (!show)
+        {
+            if (_showWarning)
+            {
+                _showWarning = false;
+                StateHasChanged();
+            }
+
+            return;
+        }
+
+        var label = IdleWarningClock.Format(left);
+        var changed = !_showWarning || label != _countdownLabel;
+        if (!_showWarning)
+        {
+            _showWarning = true;
+            _focusStay = true;
+        }
+
+        _countdownLabel = label;
+        if (changed)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private void SignOutNow()
+    {
+        if (System.Threading.Interlocked.Exchange(ref _signOutStarted, 1) != 0)
+        {
+            return;
+        }
+
+        _showWarning = false;
+        StopCountdown();
+        Navigation.NavigateTo("/account/logout", forceLoad: true);
     }
 
     private void StopCountdown()

@@ -111,7 +111,7 @@ public static class AccountEndpoints
     {
         var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Auth.Account");
         var userId = EndpointAuditHelper.ResolveUserId(context);
-        signOut.ForgetCharts(userId);
+        signOut.ForgetCharts(context.User);
         log.LogInformation("User logout for user id {UserId} (session cookies cleared)", userId ?? "(anonymous)");
         await EndpointAuditHelper.AuditAsync(audit, context, "logout", "auth:login");
         await signInManager.SignOutAsync();

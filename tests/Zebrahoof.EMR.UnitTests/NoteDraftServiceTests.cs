@@ -25,4 +25,27 @@ public class NoteDraftServiceTests
         drafts.Clear("physician", 2);
         Assert.Null(drafts.Get("physician", 2));
     }
+
+    [Fact]
+    public void Draft_ExpiresAfterTwentyFourHours()
+    {
+        var clock = new MutableClock(new DateTimeOffset(2026, 10, 18, 12, 0, 0, TimeSpan.Zero));
+        var drafts = new NoteDraftService(clock);
+        drafts.Save("physician", 2, new NoteDraft { ChiefComplaint = "keep" });
+
+        clock.UtcNow = clock.UtcNow.AddHours(24).AddTicks(-1);
+        Assert.Equal("keep", drafts.Get("physician", 2)!.ChiefComplaint);
+
+        clock.UtcNow = clock.UtcNow.AddTicks(1);
+        Assert.Null(drafts.Get("physician", 2));
+    }
+
+    private sealed class MutableClock : TimeProvider
+    {
+        public MutableClock(DateTimeOffset utcNow) => UtcNow = utcNow;
+
+        public DateTimeOffset UtcNow { get; set; }
+
+        public override DateTimeOffset GetUtcNow() => UtcNow;
+    }
 }
