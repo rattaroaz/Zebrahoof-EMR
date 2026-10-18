@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
+using Zebrahoof_EMR.Helpers;
 using Zebrahoof_EMR.Models;
 
 namespace Zebrahoof_EMR.Services;
@@ -12,6 +14,7 @@ public class AuthSyncService
     private readonly AuthStateService _authStateService;
     private readonly NoteDraftService _drafts;
     private readonly DraftAutosaveGate _autosave;
+    private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<AuthSyncService> _logger;
 
     public AuthSyncService(
@@ -20,6 +23,7 @@ public class AuthSyncService
         AuthStateService authStateService,
         NoteDraftService drafts,
         DraftAutosaveGate autosave,
+        IHttpContextAccessor httpContextAccessor,
         ILogger<AuthSyncService> logger)
     {
         _userManager = userManager;
@@ -27,6 +31,7 @@ public class AuthSyncService
         _authStateService = authStateService;
         _drafts = drafts;
         _autosave = autosave;
+        _httpContextAccessor = httpContextAccessor;
         _logger = logger;
     }
 
@@ -47,7 +52,8 @@ public class AuthSyncService
             return;
         }
 
-        _autosave.Capture(_drafts.CurrentEpoch(principal.Identity.Name));
+        var browserId = DraftBrowser.Read(_httpContextAccessor.HttpContext);
+        _autosave.Capture(browserId, _drafts.CurrentEpoch(browserId));
 
         if (string.Equals(_authStateService.CurrentUser?.Username, principal.Identity.Name, StringComparison.OrdinalIgnoreCase))
         {

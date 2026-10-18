@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Http
 @implements IDisposable
 @inject MockClinicalDataService ClinicalDataService
 @inject AuthStateService AuthState
@@ -5,6 +6,7 @@
 @inject ChartEditTracker Edits
 @inject NoteDraftService Drafts
 @inject DraftAutosaveGate Autosave
+@inject IHttpContextAccessor HttpContextAccessor
 @inject ILogger<ClinicalNoteDialog> Logger
 
 <MudDialog>
@@ -197,7 +199,8 @@
         else
         {
             Logger.LogDebug("New note for patient {PatientId}", PatientId);
-            var draft = Drafts.Get(DraftUser, PatientId);
+            EnsureAutosave();
+            var draft = Drafts.Get(DraftUser, Autosave.BrowserId, PatientId);
             _draftRestored = draft is { IsEmpty: false };
             note = new ClinicalNote
             {
@@ -231,10 +234,7 @@
         }
 
         Edits.DiscardRequested += OnDiscardRequested;
-        if (!Autosave.EpochCaptured)
-        {
-            Autosave.Capture(Drafts.CurrentEpoch(DraftUser));
-        }
+        EnsureAutosave();
 
         _draftEpoch = Autosave.Epoch;
         if (!IsViewOnly && !IsEdit)
@@ -297,14 +297,25 @@
 
     private string DraftUser => AuthState.CurrentUser?.Username ?? string.Empty;
 
-    private void PersistDraft()
+    private void EnsureAutosave()
     {
-        if (!Autosave.Enabled || IsViewOnly || IsEdit || _saved)
+        if (Autosave.EpochCaptured)
         {
             return;
         }
 
-        var saved = Drafts.TrySave(DraftUser, PatientId > 0 ? PatientId : note.PatientId, new NoteDraft
+        var browserId = DraftBrowser.Read(HttpContextAccessor.HttpContext);
+        Autosave.Capture(browserId, Drafts.CurrentEpoch(browserId));
+    }
+
+    private void PersistDraft()
+    {
+        if (!Autosave.Enabled || !Autosave.EpochCaptured || IsViewOnly || IsEdit || _saved)
+        {
+            return;
+        }
+
+        var saved = Drafts.TrySave(DraftUser, Autosave.BrowserId, PatientId > 0 ? PatientId : note.PatientId, new NoteDraft
         {
             ChiefComplaint = note.ChiefComplaint,
             HistoryOfPresentIllness = note.HistoryOfPresentIllness,
@@ -371,7 +382,7 @@
             {
                 await ClinicalDataService.CreateNoteAsync(note);
                 _saved = true;
-                Drafts.Clear(DraftUser, note.PatientId);
+                Drafts.Clear(DraftUser, Autosave.BrowserId, note.PatientId);
             }
 
             MudDialog.Close(DialogResult.Ok(note));

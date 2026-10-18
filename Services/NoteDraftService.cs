@@ -3,15 +3,15 @@ using System.Collections.Concurrent;
 namespace Zebrahoof_EMR.Services;
 
 /// <summary>
-/// Unsaved clinical-note text, kept per user and patient. Drafts expire after
-/// 24 hours and are removed on sign-out.
+/// Unsaved clinical-note text, kept per user, browser, and patient. Drafts expire
+/// after 24 hours. An explicit logout drops only that browser's drafts.
 /// </summary>
 public sealed class NoteDraftService
 {
     public static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
 
-    private readonly ConcurrentDictionary<string, NoteDraft> _drafts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, long> _epoch = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, NoteDraft> _drafts = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, long> _epoch = new(StringComparer.Ordinal);
     private readonly TimeProvider _time;
 
     public NoteDraftService()
@@ -24,45 +24,45 @@ public sealed class NoteDraftService
         _time = time;
     }
 
-    public long CurrentEpoch(string? user)
+    public long CurrentEpoch(string? browserId)
     {
-        if (string.IsNullOrWhiteSpace(user))
+        if (!IsBrowser(browserId))
         {
             return 0;
         }
 
-        return _epoch.TryGetValue(user.Trim(), out var epoch) ? epoch : 0;
+        return _epoch.TryGetValue(browserId!, out var epoch) ? epoch : 0;
     }
 
     /// <summary>
-    /// Explicit sign-out. Clears drafts and advances the epoch so a circuit that
-    /// was already open cannot write the draft back.
+    /// Explicit logout of one browser. Other browsers of the same user keep their drafts.
+    /// A circuit that already captured this epoch cannot write the draft back.
     /// </summary>
-    public void SignOut(string? user)
+    public void Revoke(string? browserId)
     {
-        ClearUser(user);
-        if (string.IsNullOrWhiteSpace(user))
+        if (!IsBrowser(browserId))
         {
             return;
         }
 
-        _epoch.AddOrUpdate(user.Trim(), 1, (_, current) => current + 1);
+        ClearBrowser(browserId!);
+        _epoch.AddOrUpdate(browserId!, 1, (_, current) => current + 1);
     }
 
-    public bool TrySave(string? user, int patientId, NoteDraft draft, long epoch)
+    public bool TrySave(string? user, string? browserId, int patientId, NoteDraft draft, long epoch)
     {
-        if (epoch != CurrentEpoch(user))
+        if (!IsBrowser(browserId) || epoch != CurrentEpoch(browserId))
         {
             return false;
         }
 
-        Save(user, patientId, draft);
+        Save(user, browserId, patientId, draft);
         return true;
     }
 
-    public void Save(string? user, int patientId, NoteDraft draft)
+    public void Save(string? user, string? browserId, int patientId, NoteDraft draft)
     {
-        var key = Key(user, patientId);
+        var key = Key(user, browserId, patientId);
         if (key == null)
         {
             return;
@@ -93,9 +93,9 @@ public sealed class NoteDraftService
         return removed;
     }
 
-    public NoteDraft? Get(string? user, int patientId)
+    public NoteDraft? Get(string? user, string? browserId, int patientId)
     {
-        var key = Key(user, patientId);
+        var key = Key(user, browserId, patientId);
         if (key == null || !_drafts.TryGetValue(key, out var draft))
         {
             return null;
@@ -110,40 +110,38 @@ public sealed class NoteDraftService
         return draft.Copy();
     }
 
-    public void Clear(string? user, int patientId)
+    public void Clear(string? user, string? browserId, int patientId)
     {
-        var key = Key(user, patientId);
+        var key = Key(user, browserId, patientId);
         if (key != null)
         {
             _drafts.TryRemove(key, out _);
         }
     }
 
-    public void ClearUser(string? user)
+    private void ClearBrowser(string browserId)
     {
-        if (string.IsNullOrWhiteSpace(user))
-        {
-            return;
-        }
-
-        var prefix = user.Trim() + ":";
+        var marker = "\u001f" + browserId + "\u001f";
         foreach (var key in _drafts.Keys)
         {
-            if (key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            if (key.Contains(marker, StringComparison.Ordinal))
             {
                 _drafts.TryRemove(key, out _);
             }
         }
     }
 
-    private static string? Key(string? user, int patientId)
+    private static bool IsBrowser(string? browserId) =>
+        !string.IsNullOrWhiteSpace(browserId) && browserId.IndexOf('\u001f') < 0;
+
+    private static string? Key(string? user, string? browserId, int patientId)
     {
-        if (string.IsNullOrWhiteSpace(user) || patientId <= 0)
+        if (string.IsNullOrWhiteSpace(user) || !IsBrowser(browserId) || patientId <= 0)
         {
             return null;
         }
 
-        return user.Trim() + ":" + patientId;
+        return user.Trim().ToUpperInvariant() + "\u001f" + browserId + "\u001f" + patientId;
     }
 }
 

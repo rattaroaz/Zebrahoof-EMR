@@ -72,6 +72,7 @@ public static class AccountEndpoints
             var roles = await userManager.GetRolesAsync(user);
             var idleWindow = ResolveIdleWindow(roles);
             await IssueSessionAsync(context, user, sessionService, idleWindow);
+            DraftBrowser.Ensure(context);
 
             await authSyncService.SyncUserAuthenticationAsync(user.UserName!);
 
@@ -112,6 +113,8 @@ public static class AccountEndpoints
         var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Auth.Account");
         var userId = EndpointAuditHelper.ResolveUserId(context);
         var idle = string.Equals(context.Request.Query["reason"], "idle", StringComparison.OrdinalIgnoreCase);
+        var browserId = DraftBrowser.Read(context);
+        var sessionId = ReadSessionId(context);
         if (idle)
         {
             signOut.ForgetCharts(context.User);
@@ -119,14 +122,18 @@ public static class AccountEndpoints
         }
         else
         {
-            signOut.BeginExplicitSignOut(context.User);
-            log.LogInformation("User logout for user id {UserId} (session cookies cleared)", userId ?? "(anonymous)");
+            signOut.BeginExplicitSignOut(context.User, browserId);
+            log.LogInformation(
+                "User logout for user id {UserId}; drafts cleared for browser {BrowserId} only",
+                userId ?? "(anonymous)",
+                browserId ?? "(none)");
         }
         await EndpointAuditHelper.AuditAsync(audit, context, "logout", "auth:login");
         await signInManager.SignOutAsync();
         if (!idle)
         {
-            await signOut.BroadcastAsync(context.User);
+            await signOut.BroadcastSessionAsync(sessionId);
+            DraftBrowser.Delete(context);
         }
         await RevokeSessionAsync(context, sessionService, "logout");
         ClearSessionCookies(context);
@@ -220,6 +227,12 @@ public static class AccountEndpoints
         }
 
         await sessionService.RevokeSessionAsync(sessionId, reason);
+    }
+
+    private static Guid ReadSessionId(HttpContext context)
+    {
+        var raw = context.Request.Cookies[SessionCookieHelper.SessionIdCookieName];
+        return Guid.TryParse(raw, out var sessionId) ? sessionId : Guid.Empty;
     }
 
     private static bool TryReadSessionCookies(HttpContext context, out Guid sessionId, out string refreshToken)

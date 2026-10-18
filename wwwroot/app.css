@@ -548,13 +548,47 @@ textarea:focus-visible,
     z-index: 20;
 }
 
-@media (max-width: 800px) {
+/* Mud's mini drawer is an overlay through the md breakpoint (959px) and can
+   still sit collapsed just past that. Keep the button in normal flow so it
+   cannot cover the Allergies card anywhere in that range, including 1024. */
+@media (max-width: 1024px) {
     .patient-sticky-toggle {
         position: static;
         bottom: auto;
         left: auto;
         margin: 8px 0;
         z-index: 1;
+    }
+}
+
+.profile-menu-btn {
+    min-width: 0;
+    max-width: 16rem;
+}
+
+.profile-menu-btn .mud-button-label {
+    min-width: 0;
+}
+
+.profile-identity {
+    min-width: 0;
+    max-width: 9.5rem;
+    overflow: hidden;
+}
+
+.profile-name,
+.profile-role {
+    display: block;
+    max-width: 9.5rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.25;
+}
+
+@media (max-width: 1024px) {
+    .profile-role {
+        display: none !important;
     }
 }
 

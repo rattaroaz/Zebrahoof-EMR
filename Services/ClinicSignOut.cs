@@ -6,7 +6,8 @@ namespace Zebrahoof_EMR.Services;
 
 /// <summary>
 /// Forgets one user's open chart and cached charts. Drafts are cleared only on
-/// an explicit sign-out. Idle timeout and cookie expiry keep them.
+/// an explicit sign-out, and only for the browser that signed out. Idle timeout
+/// and cookie expiry keep them. Other signed-in devices stay signed in.
 /// </summary>
 public sealed class ClinicSignOut
 {
@@ -27,13 +28,25 @@ public sealed class ClinicSignOut
         _hub = hub;
     }
 
-    public void ForgetCharts(ClaimsPrincipal? user) => Release(user, clearDrafts: false);
+    public void ForgetCharts(ClaimsPrincipal? user) => ReleaseCharts(user);
 
-    public void BeginExplicitSignOut(ClaimsPrincipal? user) => Release(user, clearDrafts: true);
+    public void BeginExplicitSignOut(ClaimsPrincipal? user, string? browserId = null)
+    {
+        ReleaseCharts(user);
+        _drafts.Revoke(browserId);
+    }
 
-    public Task BroadcastAsync(ClaimsPrincipal? user) => BroadcastCoreAsync(user);
+    public Task BroadcastSessionAsync(Guid sessionId)
+    {
+        if (_hub == null || sessionId == Guid.Empty)
+        {
+            return Task.CompletedTask;
+        }
 
-    private void Release(ClaimsPrincipal? user, bool clearDrafts)
+        return _hub.Clients.Group(sessionId.ToString()).SendAsync("SignedOut");
+    }
+
+    private void ReleaseCharts(ClaimsPrincipal? user)
     {
         if (user?.Identity?.IsAuthenticated != true)
         {
@@ -43,37 +56,5 @@ public sealed class ClinicSignOut
         var chartKey = ChartUser.Resolve(user);
         _charts.ClearUser(chartKey);
         _registry.ReleaseUser(chartKey);
-        if (!clearDrafts)
-        {
-            return;
-        }
-
-        _drafts.SignOut(user.Identity?.Name);
-        _drafts.SignOut(chartKey);
-        _drafts.SignOut(user.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-    }
-
-    private async Task BroadcastCoreAsync(ClaimsPrincipal? user)
-    {
-        if (_hub == null || user == null)
-        {
-            return;
-        }
-
-        var names = new[]
-        {
-            user.Identity?.Name,
-            user.FindFirst(ClaimTypes.NameIdentifier)?.Value
-        };
-
-        foreach (var name in names)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                continue;
-            }
-
-            await _hub.Clients.Group(SignOutChannel.Group(name)).SendAsync("SignedOut");
-        }
     }
 }

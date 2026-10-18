@@ -29,6 +29,10 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
         v => FieldEncryptionHelper.Encrypt(v),
         v => FieldEncryptionHelper.Decrypt(v));
 
+    private static readonly ValueConverter<string?, string?> AuditMetadataConverter = new(
+        v => FieldEncryptionHelper.Encrypt(v),
+        v => FieldEncryptionHelper.DecryptOrUnreadable(v));
+
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
         : base(options)
     {
@@ -207,7 +211,7 @@ public class ApplicationDbContext : IdentityDbContext<ApplicationUser, IdentityR
             entity.Property(al => al.Action).HasMaxLength(128);
             entity.Property(al => al.Scope).HasMaxLength(256);
             entity.Property(al => al.Metadata)
-                  .HasConversion(EncryptedStringConverter);
+                  .HasConversion(AuditMetadataConverter);
             entity.HasOne<ApplicationUser>()
                   .WithMany()
                   .HasForeignKey(al => al.UserId)

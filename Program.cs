@@ -399,6 +399,15 @@ app.UseAntiforgery();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseSession();
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        DraftBrowser.Ensure(context);
+    }
+
+    await next();
+});
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
