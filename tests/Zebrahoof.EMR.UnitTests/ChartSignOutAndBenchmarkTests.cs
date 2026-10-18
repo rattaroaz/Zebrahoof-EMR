@@ -22,7 +22,11 @@ public class ChartSignOutAndBenchmarkTests
         var loader = new CountingLoader();
         var cache = CreateCache(loader);
         var registry = new ActivePatientRegistry();
-        var signOut = new ClinicSignOut(cache, registry);
+        var drafts = new NoteDraftService();
+        drafts.Save("physician", "browser-a", 2, new NoteDraft { ChiefComplaint = "kept" });
+        drafts.Save("physician", "browser-b", 2, new NoteDraft { ChiefComplaint = "device-b" });
+        drafts.Save("nurse", "browser-n", 2, new NoteDraft { ChiefComplaint = "other" });
+        var signOut = new ClinicSignOut(cache, registry, drafts);
         var physician = new ClaimsPrincipal(new ClaimsIdentity(
         [
             new Claim(ClaimTypes.NameIdentifier, "Physician"),
@@ -37,6 +41,17 @@ public class ChartSignOutAndBenchmarkTests
 
         signOut.ForgetCharts(physician);
 
+        Assert.Equal("kept", drafts.Get("physician", "browser-a", 2)!.ChiefComplaint);
+        Assert.Equal("device-b", drafts.Get("physician", "browser-b", 2)!.ChiefComplaint);
+        Assert.Equal("other", drafts.Get("nurse", "browser-n", 2)!.ChiefComplaint);
+        var epochA = drafts.CurrentEpoch("browser-a");
+        var epochB = drafts.CurrentEpoch("browser-b");
+        signOut.BeginExplicitSignOut(physician, "browser-a");
+        Assert.Null(drafts.Get("physician", "browser-a", 2));
+        Assert.False(drafts.TrySave("physician", "browser-a", 2, new NoteDraft { ChiefComplaint = "written back" }, epochA));
+        Assert.Equal("device-b", drafts.Get("physician", "browser-b", 2)!.ChiefComplaint);
+        Assert.True(drafts.TrySave("physician", "browser-b", 2, new NoteDraft { ChiefComplaint = "still" }, epochB));
+        Assert.Equal("other", drafts.Get("nurse", "browser-n", 2)!.ChiefComplaint);
         Assert.False(cache.TryPeek("Physician", 1, out _));
         Assert.Null(registry.Current("Physician"));
         Assert.True(cache.TryPeek("Nurse", 1, out _));

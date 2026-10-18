@@ -48,6 +48,40 @@ public class AuditLogServiceTests
         Assert.Equal("audit-physician", logs[0].UserId);
     }
 
+    [Fact]
+    public async Task GetLogs_CorruptMetadata_KeepsTheRowAndTheRestOfThePage()
+    {
+        await using var context = CreateContext();
+        await AddUserAsync(context, "audit-physician");
+        var good = new AuditLog
+        {
+            Action = "login",
+            Scope = "account",
+            UserId = "audit-physician",
+            Timestamp = new DateTimeOffset(2026, 10, 18, 8, 0, 0, TimeSpan.Zero),
+            Metadata = "{\"ok\":true}"
+        };
+        var bad = new AuditLog
+        {
+            Action = "chart.open",
+            Scope = "patient",
+            UserId = "audit-physician",
+            Timestamp = new DateTimeOffset(2026, 10, 18, 9, 0, 0, TimeSpan.Zero),
+            Metadata = "will be replaced"
+        };
+        context.AuditLogs.AddRange(good, bad);
+        await context.SaveChangesAsync();
+        await context.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE AuditLogs SET Metadata = {"%%%not-ciphertext%%%"} WHERE Id = {bad.Id}");
+        context.ChangeTracker.Clear();
+
+        var logs = await new AuditLogService(context).GetLogsAsync(null, null, null, null);
+
+        Assert.Equal(2, logs.Count);
+        Assert.Equal(FieldEncryptionHelper.Unreadable, logs.Single(log => log.Action == "chart.open").Metadata);
+        Assert.Contains("ok", logs.Single(log => log.Action == "login").Metadata);
+    }
+
     private static async Task AddUserAsync(ApplicationDbContext context, string userId)
     {
         context.Users.Add(new ApplicationUser

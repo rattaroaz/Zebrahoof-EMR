@@ -7,7 +7,7 @@
     <div class="@CssClass" data-testid="patient-safety-banner">
         <div class="patient-safety-name">@_patient.LastName, @_patient.FirstName</div>
         <div class="patient-safety-meta">
-            DOB @_patient.DateOfBirth.ToString("MM/dd/yyyy") (@_patient.Age y) · MRN @_patient.MRN
+            DOB @_patient.DateOfBirth.ToString("MM/dd/yyyy") (@_patient.Age y) · @MrnOnce(_patient.MRN)
             · Allergies:
             @if (_allergyNames.Count == 0)
             {
@@ -78,6 +78,17 @@
 
         await LoadAsync();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private static string MrnOnce(string? mrn)
+    {
+        var value = mrn?.Trim() ?? "";
+        if (value.Length == 0)
+        {
+            return "MRN";
+        }
+
+        return value.StartsWith("MRN", StringComparison.OrdinalIgnoreCase) ? value : "MRN " + value;
     }
 
     public void Dispose() => ClinicalData.PatientDataChanged -= OnPatientDataChanged;

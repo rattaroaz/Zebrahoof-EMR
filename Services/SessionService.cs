@@ -41,15 +41,7 @@ public class SessionService
     {
         var now = _timeProvider.GetUtcNow();
 
-        await _dbContext.UserSessions
-            .Where(s => s.UserId == userId &&
-                        s.DeviceFingerprint == deviceFingerprint &&
-                        !s.IsRevoked)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(s => s.IsRevoked, true)
-                .SetProperty(s => s.LastSeenAt, now),
-                cancellationToken);
-
+        // A second browser stays signed in. The chart lock, not this session, decides which chart is open.
         var session = new UserSession
         {
             UserId = userId,

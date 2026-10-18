@@ -50,4 +50,22 @@ public static class FieldEncryptionHelper
         var plainBytes = decryptor.TransformFinalBlock(cipherBytes, 0, cipherBytes.Length);
         return Encoding.UTF8.GetString(plainBytes);
     }
+
+    public const string Unreadable = "Unreadable";
+
+    /// <summary>
+    /// Audit metadata only. A corrupt ciphertext becomes a placeholder so one
+    /// bad row does not fail the whole query. Secrets still use <see cref="Decrypt"/>.
+    /// </summary>
+    public static string DecryptOrUnreadable(string? value)
+    {
+        try
+        {
+            return Decrypt(value) ?? string.Empty;
+        }
+        catch (Exception)
+        {
+            return Unreadable;
+        }
+    }
 }

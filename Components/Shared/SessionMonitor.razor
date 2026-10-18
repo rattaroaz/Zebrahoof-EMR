@@ -1,23 +1,37 @@
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
 @implements IAsyncDisposable
 @inject IJSRuntime JS
-@inject ISnackbar Snackbar
 @inject NavigationManager Navigation
+@inject DraftAutosaveGate Autosave
 
-@if (_idleSeconds > 0 && _idleSeconds < 600)
+@if (_showWarning)
 {
-    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="position-fixed bottom-0 right-0 ma-4">
-        Session idle: @TimeSpan.FromSeconds(_idleSeconds).ToString("mm\\:ss")
-    </MudChip>
+    <div class="idle-warning-backdrop">
+        <div class="idle-warning" role="alertdialog" aria-modal="true" aria-labelledby="idle-warning-title" aria-describedby="idle-warning-once" data-testid="idle-warning">
+            <h2 id="idle-warning-title">Still there?</h2>
+            <p id="idle-warning-once">You will be signed out in 2 minutes unless you stay signed in.</p>
+            <p class="idle-warning-clock" aria-hidden="true" data-testid="idle-countdown">@_countdownLabel</p>
+            <button type="button" @ref="_stayButton" @onclick="StaySignedIn">Stay signed in</button>
+        </div>
+    </div>
 }
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
 
     private DotNetObjectReference<SessionMonitor>? _dotNetRef;
-    private IJSObjectReference? _module;
     private bool _isMonitoring;
-    private double _idleSeconds;
+    private bool _shouldMonitor;
+    private bool _startAttempted;
+    private bool _showWarning;
+    private bool _focusStay;
+    private bool _deadlineKnown;
+    private int _signOutStarted;
+    private DateTimeOffset _signOutAt;
+    private CancellationTokenSource? _countdown;
+    private ElementReference _stayButton;
+    private string _countdownLabel = IdleWarningClock.Format(IdleWarningClock.WarningLead);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -27,33 +41,44 @@
         }
 
         var state = await AuthenticationStateTask;
-        var isAuthenticated = state.User.Identity?.IsAuthenticated == true;
+        _shouldMonitor = state.User.Identity?.IsAuthenticated == true;
 
-        if (isAuthenticated && !_isMonitoring)
-        {
-            await StartMonitoringAsync();
-        }
-        else if (!isAuthenticated && _isMonitoring)
+        if (!_shouldMonitor && _isMonitoring)
         {
             await StopMonitoringAsync();
         }
     }
 
-    private async Task EnsureModuleAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        _module ??= await JS.InvokeAsync<IJSObjectReference>("import", "/js/sessionMonitor.js");
+        if (_shouldMonitor && !_isMonitoring && !_startAttempted)
+        {
+            _startAttempted = true;
+            await StartMonitoringAsync();
+        }
+
+        if (_focusStay)
+        {
+            _focusStay = false;
+            try
+            {
+                await _stayButton.FocusAsync();
+            }
+            catch (Exception ex) when (IsDisconnect(ex))
+            {
+            }
+        }
     }
 
     private async Task StartMonitoringAsync()
     {
         try
         {
-            await EnsureModuleAsync();
             _dotNetRef = DotNetObjectReference.Create(this);
-            await _module!.InvokeVoidAsync("start", _dotNetRef, SessionCookieHelper.SessionIdCookieName, "/account/refresh");
+            await JS.InvokeVoidAsync("sessionMonitor.start", _dotNetRef, SessionCookieHelper.SessionIdCookieName);
             _isMonitoring = true;
         }
-        catch (JSException ex)
+        catch (Exception ex) when (IsDisconnect(ex))
         {
             Console.Error.WriteLine($"Failed to start session monitor: {ex.Message}");
         }
@@ -63,73 +88,172 @@
     {
         try
         {
-            if (_module != null)
-            {
-                await _module.InvokeVoidAsync("stop");
-            }
+            await JS.InvokeVoidAsync("sessionMonitor.stop");
         }
-        catch (JSException)
+        catch (Exception ex) when (IsDisconnect(ex))
         {
-            // Ignore
         }
         finally
         {
             _dotNetRef?.Dispose();
             _dotNetRef = null;
             _isMonitoring = false;
-            _idleSeconds = 0;
-            StateHasChanged();
+            _showWarning = false;
+            StopCountdown();
         }
     }
 
     [JSInvokable]
     public Task OnIdleWarning(string message)
     {
-        Snackbar.Add(message, Severity.Warning, options =>
-        {
-            options.RequireInteraction = true;
-            options.CloseAfterNavigation = false;
-        });
-        return Task.CompletedTask;
+        return InvokeAsync(ApplyClock);
     }
 
     [JSInvokable]
     public Task OnIdleTimeUpdate(double idleSeconds, double absoluteSeconds)
     {
-        _idleSeconds = idleSeconds;
-        if (_idleSeconds <= 0)
+        if (idleSeconds <= 0 && absoluteSeconds <= 0)
         {
-            Snackbar.Add("Session expired due to inactivity.", Severity.Error);
+            return Task.CompletedTask;
         }
-        InvokeAsync(StateHasChanged);
-        return Task.CompletedTask;
+
+        _signOutAt = IdleWarningClock.SignOutAt(DateTimeOffset.UtcNow, idleSeconds);
+        _deadlineKnown = true;
+        EnsureTicker();
+        return InvokeAsync(ApplyClock);
     }
 
     [JSInvokable]
     public Task OnForceLogout(string message)
     {
-        Snackbar.Add(message, Severity.Error, options => options.RequireInteraction = true);
-        Navigation.NavigateTo("/login", forceLoad: true);
+        SignOutNow();
         return Task.CompletedTask;
     }
 
+    [JSInvokable]
+    public Task OnSignedOut()
+    {
+        Autosave.Stop();
+        return Task.CompletedTask;
+    }
+
+    private async Task StaySignedIn()
+    {
+        _showWarning = false;
+        _deadlineKnown = false;
+        try
+        {
+            await JS.InvokeVoidAsync("zebrahoofPostActivity");
+            await JS.InvokeVoidAsync("sessionMonitor.noteActive");
+        }
+        catch (Exception ex) when (IsDisconnect(ex))
+        {
+        }
+    }
+
+    private void EnsureTicker()
+    {
+        if (_countdown != null)
+        {
+            return;
+        }
+
+        _countdown = new CancellationTokenSource();
+        var token = _countdown.Token;
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(250, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                try
+                {
+                    await InvokeAsync(ApplyClock);
+                }
+                catch (Exception ex) when (IsDisconnect(ex))
+                {
+                    return;
+                }
+            }
+        }, token);
+    }
+
+    private void ApplyClock()
+    {
+        if (!_deadlineKnown || _signOutStarted != 0)
+        {
+            return;
+        }
+
+        var left = _signOutAt - DateTimeOffset.UtcNow;
+        if (IdleWarningClock.ShouldSignOut(left))
+        {
+            SignOutNow();
+            return;
+        }
+
+        var show = IdleWarningClock.ShouldWarn(left);
+        if (!show)
+        {
+            if (_showWarning)
+            {
+                _showWarning = false;
+                StateHasChanged();
+            }
+
+            return;
+        }
+
+        var label = IdleWarningClock.Format(left);
+        var changed = !_showWarning || label != _countdownLabel;
+        if (!_showWarning)
+        {
+            _showWarning = true;
+            _focusStay = true;
+        }
+
+        _countdownLabel = label;
+        if (changed)
+        {
+            StateHasChanged();
+        }
+    }
+
+    private void SignOutNow()
+    {
+        if (System.Threading.Interlocked.Exchange(ref _signOutStarted, 1) != 0)
+        {
+            return;
+        }
+
+        _showWarning = false;
+        StopCountdown();
+        Navigation.NavigateTo("/account/logout?reason=idle", forceLoad: true);
+    }
+
+    private void StopCountdown()
+    {
+        _countdown?.Cancel();
+        _countdown?.Dispose();
+        _countdown = null;
+    }
+
+    private static bool IsDisconnect(Exception ex) =>
+        ex is JSException or JSDisconnectedException or ObjectDisposedException or InvalidOperationException;
+
     public async ValueTask DisposeAsync()
     {
+        StopCountdown();
         if (_isMonitoring)
         {
             await StopMonitoringAsync();
-        }
-
-        if (_module != null)
-        {
-            try
-            {
-                await _module.DisposeAsync();
-            }
-            catch
-            {
-                // ignore
-            }
         }
     }
 }

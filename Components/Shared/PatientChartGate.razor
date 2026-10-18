@@ -40,11 +40,11 @@ else if (_phase == Phase.Blocked)
         <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
             @if (_blockedHasUnsaved)
             {
-                <span>Unsaved work on @_blockedName will be discarded. Save it before you switch, or continue and lose those edits.</span>
+                <span>Unsaved notes on @_blockedName are kept as a draft and restored when you open that chart again. Other unsaved edits on @_blockedName are not kept.</span>
             }
             else
             {
-                <span>Any unsaved work on @_blockedName will be discarded.</span>
+                <span>Notes in progress on @_blockedName are kept as a draft and restored when you come back.</span>
             }
         </MudAlert>
         <MudStack Row="true" Spacing="2">

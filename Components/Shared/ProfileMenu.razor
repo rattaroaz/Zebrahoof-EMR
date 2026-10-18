@@ -1,14 +1,14 @@
 @inject AuthStateService AuthState
 
-<MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+<MudMenu Class="profile-menu" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
     <ActivatorContent>
-        <MudButton Color="Color.Inherit" Class="px-2">
+        <MudButton Color="Color.Inherit" Class="px-2 profile-menu-btn">
             <MudAvatar Size="Size.Small" Color="Color.Primary" Class="mr-2">
                 @(AuthState.CurrentUser?.FullName?.Split(' ').FirstOrDefault()?[..1] ?? "U")
             </MudAvatar>
-            <MudStack Spacing="0" AlignItems="AlignItems.Start" Class="d-none d-md-flex">
-                <MudText Typo="Typo.body2">@(AuthState.CurrentUser?.FullName ?? "User")</MudText>
-                <MudText Typo="Typo.caption" Class="mud-text-secondary">@GetRoleDisplay()</MudText>
+            <MudStack Spacing="0" AlignItems="AlignItems.Start" Class="profile-identity">
+                <MudText Typo="Typo.body2" Class="profile-name">@(AuthState.CurrentUser?.FullName ?? "User")</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary profile-role">@GetRoleDisplay()</MudText>
             </MudStack>
             <MudIcon Icon="@Icons.Material.Filled.ArrowDropDown" Size="Size.Small" />
         </MudButton>

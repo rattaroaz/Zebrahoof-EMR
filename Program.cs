@@ -20,6 +20,7 @@ using Zebrahoof_EMR.Components;
 using Zebrahoof_EMR.Configuration;
 using Zebrahoof_EMR.Data;
 using Zebrahoof_EMR.Endpoints;
+using Zebrahoof_EMR.Helpers;
 using Zebrahoof_EMR.Hubs;
 using Zebrahoof_EMR.Logging;
 using Zebrahoof_EMR.Models;
@@ -75,8 +76,6 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
-const string LastActivityKey = ".zebrahoof_last_activity";
-const string AbsoluteIssuedKey = ".zebrahoof_absolute_issue";
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -99,8 +98,8 @@ builder.Services.ConfigureApplicationCookie(options =>
                 context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
 
             var nowTicks = DateTimeOffset.UtcNow.Ticks.ToString();
-            context.Properties.Items[LastActivityKey] = nowTicks;
-            context.Properties.Items[AbsoluteIssuedKey] = nowTicks;
+            context.Properties.Items[AuthCookieIdle.LastActivityKey] = nowTicks;
+            context.Properties.Items[AuthCookieIdle.AbsoluteIssuedKey] = nowTicks;
             return Task.CompletedTask;
         },
         OnValidatePrincipal = async context =>
@@ -110,41 +109,49 @@ builder.Services.ConfigureApplicationCookie(options =>
             var now = DateTimeOffset.UtcNow;
             var items = context.Properties.Items;
 
-            if (items.TryGetValue(AbsoluteIssuedKey, out var absoluteTicks) &&
-                long.TryParse(absoluteTicks, out var absTicks))
+            if (AuthCookieIdle.IsAbsoluteExpired(items, now))
             {
-                var absoluteIssued = new DateTimeOffset(absTicks, TimeSpan.Zero);
-                if (now - absoluteIssued > TimeSpan.FromHours(12))
-                {
-                    authLog?.LogWarning(
-                        "Cookie principal rejected: absolute session maximum (12h) exceeded for user id {UserId}",
-                        context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
-                    context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
-                    context.RejectPrincipal();
-                    await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
-                    return;
-                }
+                authLog?.LogWarning(
+                    "Cookie principal rejected: absolute session maximum (12h) exceeded for user id {UserId}",
+                    context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
+                context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
+                return;
             }
 
             var idleWindow = ResolveIdleWindow(context.Principal);
-            if (items.TryGetValue(LastActivityKey, out var lastActivityTicksString) &&
-                long.TryParse(lastActivityTicksString, out var lastActivityTicks))
+            items.TryGetValue(AuthCookieIdle.LastActivityKey, out var previousActivity);
+            var decision = AuthCookieIdle.Evaluate(items, now, idleWindow);
+            if (decision == AuthCookieIdleDecision.Expired)
             {
-                var lastActivity = new DateTimeOffset(lastActivityTicks, TimeSpan.Zero);
-                if (now - lastActivity > idleWindow)
-                {
-                    authLog?.LogWarning(
-                        "Cookie principal rejected: idle timeout ({IdleMinutes}m) exceeded for user id {UserId}",
-                        idleWindow.TotalMinutes,
-                        context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
-                    context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
-                    context.RejectPrincipal();
-                    await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
-                    return;
-                }
+                authLog?.LogWarning(
+                    "Cookie principal rejected: idle timeout ({IdleMinutes}m) exceeded for user id {UserId}",
+                    idleWindow.TotalMinutes,
+                    context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
+                context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
+                return;
             }
 
-            items[LastActivityKey] = now.Ticks.ToString();
+            if (decision == AuthCookieIdleDecision.Renew)
+            {
+                if (AuthCookieIdle.CountsAsActivity(context.HttpContext.Request.Path.Value))
+                {
+                    // Persist the new last-activity stamp. SlidingExpiration stays off so the 12h absolute cap does not move.
+                    context.ShouldRenew = true;
+                    await TouchClinicSessionAsync(context.HttpContext);
+                }
+                else if (previousActivity == null)
+                {
+                    items.Remove(AuthCookieIdle.LastActivityKey);
+                }
+                else
+                {
+                    items[AuthCookieIdle.LastActivityKey] = previousActivity;
+                }
+            }
         }
     };
 });
@@ -208,6 +215,7 @@ builder.Services.AddRazorComponents()
         options.KeepAliveInterval = TimeSpan.FromSeconds(5);
         options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
     });
+builder.Services.AddCascadingAuthenticationState();
 
 // Add mock data services
 builder.Services.AddScoped<AuthStateService>();
@@ -227,6 +235,9 @@ builder.Services.Configure<ChartCacheOptions>(builder.Configuration.GetSection(C
 builder.Services.AddSingleton<IPatientChartLoader, ClinicalChartLoader>();
 builder.Services.AddSingleton<PatientChartCache>();
 builder.Services.AddSingleton<ClinicSignOut>();
+builder.Services.AddSingleton<NoteDraftService>();
+builder.Services.AddScoped<DraftAutosaveGate>();
+builder.Services.AddHostedService<NoteDraftSweepService>();
 builder.Services.AddScoped<OpenChartView>();
 builder.Services.AddScoped<OpenChartRefresher>();
 builder.Services.AddHostedService<PatientChartCacheMaintenance>();
@@ -388,6 +399,15 @@ app.UseAntiforgery();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseSession();
+app.Use(async (context, next) =>
+{
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        DraftBrowser.Ensure(context);
+    }
+
+    await next();
+});
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
@@ -449,6 +469,23 @@ void ConfigureDatabase(DbContextOptionsBuilder options)
     }
 
     options.UseNpgsql(postgresConnection!);
+}
+
+static async Task TouchClinicSessionAsync(HttpContext http)
+{
+    var sessionService = http.RequestServices.GetService<SessionService>();
+    if (sessionService == null)
+    {
+        return;
+    }
+
+    var raw = http.Request.Cookies[SessionCookieHelper.RefreshCookieName];
+    if (!SessionCookieHelper.TryDecode(raw, out var sessionId, out _))
+    {
+        return;
+    }
+
+    await sessionService.UpdateLastSeenAsync(sessionId);
 }
 
 static TimeSpan ResolveIdleWindow(ClaimsPrincipal? principal)

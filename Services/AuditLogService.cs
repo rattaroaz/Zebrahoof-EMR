@@ -42,9 +42,9 @@ public class AuditLogService
             query = query.Where(log => log.Action == action);
         }
 
-        // SQLite cannot ORDER BY DateTimeOffset, and it rejects ORDER BY on a
-        // column that DISTINCT removed from the select list. Filter in SQL,
-        // then sort the page in memory.
+        // SQLite refuses ORDER BY DateTimeOffset, so the filtered rows are
+        // sorted here. Server-side paging needs a sortable column this provider
+        // does not translate.
         var rows = await query.ToListAsync(cancellationToken);
         return rows
             .OrderByDescending(log => log.Timestamp)
