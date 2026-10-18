@@ -15,8 +15,19 @@ html, body {
     -moz-osx-font-smoothing: grayscale;
 }
 
-h1:focus {
-    outline: none;
+h1:focus-visible,
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+.mud-button-root:focus-visible,
+.mud-icon-button:focus-visible,
+.mud-input-slot:focus-visible,
+.mud-nav-link:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid #0B57D0 !important;
+    outline-offset: 2px;
 }
 
 .valid.modified:not([type=checkbox]) {
@@ -123,9 +134,15 @@ h1:focus {
     pointer-events: none;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1200px) {
     .summary-window-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 1100px) {
+    .app-wordmark {
+        display: none;
     }
 }
 
@@ -370,4 +387,459 @@ h1:focus {
     background: transparent;
     cursor: pointer;
     font: inherit;
+}
+
+.chart-main.mud-main-content {
+    padding-top: 48px;
+}
+
+.chart-tabs-wrap {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+}
+
+.chart-tab-scroll {
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    border: 1px solid #424242;
+    border-radius: 4px;
+    background: #FFFFFF;
+    color: #212121;
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.chart-nav-tabs {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    scroll-behavior: smooth;
+}
+
+.chart-tab-btn {
+    white-space: nowrap;
+}
+
+.patient-banner-sticky {
+    position: sticky;
+    top: 48px;
+    z-index: 30;
+    background: var(--mud-palette-surface, #fff);
+}
+
+.patient-banner-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.patient-banner {
+    box-sizing: border-box;
+    padding: 8px 16px !important;
+    margin: 0 0 8px 0 !important;
+    border: 0 !important;
+}
+
+.patient-banner .mud-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+}
+
+.patient-banner .mud-button-root {
+    box-sizing: border-box;
+    min-height: 32px;
+    height: 32px;
+    padding: 0 8px;
+    line-height: 24px;
+}
+
+.patient-banner-id {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+
+.patient-banner-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 24px;
+    height: 24px;
+}
+
+.patient-banner-meta,
+.patient-safety-meta {
+    font-size: 13px;
+    line-height: 16px;
+    color: #3f3f3f;
+}
+
+.patient-banner-actions {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+}
+
+.patient-allergy-caption {
+    font-weight: 700;
+    color: #212121;
+}
+
+.patient-allergy-names {
+    color: #7F1D1D;
+    font-weight: 700;
+}
+
+.patient-allergy-none {
+    color: #1B5E20;
+    font-weight: 700;
+}
+
+.patient-safety-banner {
+    box-sizing: border-box;
+    border: 0;
+    box-shadow: inset 0 0 0 1px #e0e0e0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    margin: 0 0 8px 0;
+    background: #fff;
+}
+
+.patient-safety-name {
+    font-weight: 700;
+    font-size: 16px;
+    line-height: 24px;
+}
+
+.lab-abnormal {
+    color: #7F1D1D;
+    font-weight: 700;
+}
+
+.inbox-critical-label {
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: #7F1D1D;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.patient-inbox-strip {
+    background: var(--mud-palette-surface, #fff);
+}
+
+.patient-sticky-toggle {
+    position: fixed;
+    bottom: 16px;
+    left: 72px;
+    z-index: 20;
+}
+
+.global-search {
+    position: relative;
+    min-width: 220px;
+    max-width: 360px;
+    flex: 1 1 220px;
+}
+
+.global-search-menu {
+    position: absolute;
+    z-index: 40;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 320px;
+    overflow: auto;
+}
+
+.global-search-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    background: transparent;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.global-search-item:hover,
+.global-search-item:focus-visible {
+    background: rgba(25, 118, 210, 0.08);
+}
+
+.global-search-item-name {
+    font-weight: 600;
+}
+
+.global-search-item-meta {
+    font-size: 0.75rem;
+    color: #424242;
+}
+
+.mud-chip.mud-chip-filled.mud-chip-color-warning,
+.mud-chip-filled.mud-chip-color-warning {
+    background-color: #9A3412 !important;
+    color: #FFFFFF !important;
+}
+
+.mud-chip.mud-chip-filled.mud-chip-color-error,
+.mud-chip-filled.mud-chip-color-error {
+    background-color: #B71C1C !important;
+    color: #FFFFFF !important;
+}
+
+.mud-chip.mud-chip-filled.mud-chip-color-success,
+.mud-chip-filled.mud-chip-color-success {
+    background-color: #2E7D32 !important;
+    color: #FFFFFF !important;
+}
+
+.ask-ai-appbar {
+    white-space: nowrap;
+}
+
+.mud-nav-link.active {
+    background-color: #0D47A1 !important;
+    color: #FFFFFF !important;
+}
+
+.mud-nav-link.active .mud-nav-link-text,
+.mud-nav-link.active .mud-icon-root,
+.mud-nav-link.active .mud-typography {
+    color: #FFFFFF !important;
+}
+
+.chart-breadcrumbs .mud-link,
+.chart-breadcrumbs .mud-typography,
+.chart-breadcrumbs .mud-icon-root {
+    color: #0D47A1 !important;
+}
+
+.mud-text-secondary,
+.prior-note-text,
+.mud-secondary-text,
+.mud-tertiary-text {
+    color: #424242 !important;
+}
+
+.mud-input-root.mud-disabled input,
+.mud-input-root.mud-disabled textarea,
+.mud-input-root.mud-disabled .mud-input-slot,
+.mud-input > input:disabled,
+.mud-input > textarea:disabled,
+textarea:disabled,
+input:disabled,
+.mud-disabled .mud-input-slot {
+    color: #424242 !important;
+    -webkit-text-fill-color: #424242 !important;
+    opacity: 1;
+}
+
+.inbox-timestamp {
+    color: #424242 !important;
+}
+
+.notes-virtual-list {
+    height: calc(100vh - 280px);
+    min-height: 280px;
+    overflow-y: auto;
+}
+
+.notes-all-list {
+    height: auto;
+    overflow: visible;
+}
+
+.chart-print-sheet,
+.chart-print-head,
+.chart-print-body,
+.chart-print-sheet tr,
+.chart-print-sheet td {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-collapse: collapse;
+    background: transparent;
+}
+
+.note-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.print-filter-notice,
+.notes-print-meta {
+    display: none;
+}
+
+@media print {
+    .notes-virtual-list,
+    .notes-all-list {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    @page {
+        margin: 12mm 12mm 16mm;
+    }
+
+    .chart-print-sheet {
+        display: table !important;
+        width: 100% !important;
+        border-collapse: collapse;
+    }
+
+    .chart-print-head {
+        display: table-header-group !important;
+    }
+
+    .chart-print-body {
+        display: table-row-group !important;
+    }
+
+    .chart-print-sheet tr {
+        display: table-row !important;
+    }
+
+    .chart-print-sheet td {
+        display: table-cell !important;
+        padding: 0 !important;
+    }
+
+    .print-filter-notice,
+    .notes-print-meta {
+        display: block;
+    }
+
+    .notes-print-meta {
+        position: fixed;
+        bottom: 4mm;
+        left: 12mm;
+        right: 12mm;
+        font-size: 11px;
+        color: #212121;
+        background: #fff;
+    }
+
+    .patient-banner-sticky {
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        background: #fff !important;
+    }
+
+    .chart-print-head .patient-banner {
+        margin-bottom: 8px !important;
+    }
+
+    .note-card,
+    .note-card.mud-paper {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        box-shadow: none !important;
+        background: #fff !important;
+    }
+
+    .note-row-actions,
+    .notes-toolbar,
+    .mud-appbar,
+    .mud-drawer,
+    .mud-navmenu,
+    .mud-breadcrumbs,
+    .chart-breadcrumbs,
+    .patient-banner-actions,
+    .patient-banner-back,
+    .chart-tab-bar,
+    .patient-inbox-strip,
+    .patient-sticky-toggle,
+    .patient-sticky-note,
+    .view-full-note,
+    #blazor-error-ui {
+        display: none !important;
+    }
+
+    html,
+    body,
+    .mud-layout,
+    .mud-main-content,
+    .mud-paper,
+    .mud-card,
+    .mud-card-content,
+    .chart-main {
+        margin: 0 !important;
+        background: #fff !important;
+        box-shadow: none !important;
+        width: 100% !important;
+        max-width: none !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .mud-layout {
+        display: block !important;
+    }
+
+    .mud-main-content,
+    .chart-main {
+        padding: 0 !important;
+    }
+
+    .chart-print-head .patient-banner {
+        margin: 0 0 8px 0 !important;
+    }
+}
+
+.local-ai-in-use,
+.local-ai-in-use td,
+.local-ai-in-use .mud-typography {
+    background-color: #E8F0FE !important;
+    color: #0D47A1 !important;
+}
+
+.mud-breadcrumbs a,
+.mud-breadcrumbs .mud-typography,
+.mud-breadcrumbs .mud-disabled {
+    color: #424242 !important;
+    opacity: 1 !important;
+}
+
+.schedule-appointment-card.status-inprogress,
+.schedule-week-appointment.status-inprogress {
+    background-color: #E8F0FE !important;
+    color: #0D47A1 !important;
+}
+
+.schedule-appointment-card.status-inprogress .mud-typography,
+.schedule-week-appointment.status-inprogress .mud-typography {
+    color: #0D47A1 !important;
+}
+
+.inbox-row-action {
+    border: 1px solid #9A3412;
+    background: #fff;
+    color: #1A1A1A;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    cursor: pointer;
 }

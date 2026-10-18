@@ -9,12 +9,14 @@ public class MockPatientService
 {
     private readonly List<Patient> _patients;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ChartWriteGuard? _writes;
     private readonly SemaphoreSlim _hydrationLock = new(1, 1);
     private bool _hydrated;
 
-    public MockPatientService(IServiceScopeFactory scopeFactory)
+    public MockPatientService(IServiceScopeFactory scopeFactory, ChartWriteGuard? writes = null)
     {
         _scopeFactory = scopeFactory;
+        _writes = writes;
         _patients = GenerateMockPatients();
     }
 
@@ -39,12 +41,7 @@ public class MockPatientService
     public async Task<List<Patient>> SearchPatientsAsync(string searchTerm)
     {
         await EnsureHydratedAsync();
-        return _patients.Where(p =>
-            p.FullName.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-            p.MRN.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ||
-            (p.Phone?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false) ||
-            (p.Email?.Contains(searchTerm, StringComparison.OrdinalIgnoreCase) ?? false)
-        ).ToList();
+        return _patients.Where(p => PatientSearch.Matches(p, searchTerm)).ToList();
     }
 
     public async Task<Patient> AddPatientAsync(Patient patient)
@@ -83,6 +80,7 @@ public class MockPatientService
 
     public async Task<Patient?> UpdatePatientAsync(int id, Action<Patient> mutate)
     {
+        _writes?.Ensure(id);
         await EnsureHydratedAsync();
         var patient = _patients.FirstOrDefault(p => p.Id == id);
         if (patient == null)

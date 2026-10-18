@@ -2,15 +2,28 @@
 @implements IDisposable
 @inject MockClinicalDataService ClinicalDataService
 @inject NavigationManager Navigation
+@inject IDialogService DialogService
 
-<MudPaper Elevation="1" Class="pa-3 mb-3">
-    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
-        <MudText Typo="Typo.subtitle1">Inbox</MudText>
-        @if (_messages.Count > 0)
+<MudPaper Elevation="1" Class="patient-inbox-strip px-3 py-1 mb-2">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+        <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@(_expanded ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" OnClick="@(() => _expanded = !_expanded)">
+            Inbox (@_messages.Count)
+        </MudButton>
+        @{
+            var critical = _messages.FirstOrDefault(InboxOrdering.IsUnacknowledgedCritical);
+        }
+        @if (critical != null)
         {
-            <MudChip T="string" Size="Size.Small" Color="Color.Primary">@_messages.Count</MudChip>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <span class="inbox-critical-label">@critical.Subject</span>
+                <MudButton Size="Size.Small" Variant="Variant.Filled" Color="Color.Primary" data-testid="ack-critical" OnClick="@(() => AcknowledgeAsync(critical))">Acknowledge</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" data-testid="open-chart-critical" OnClick="@(() => OpenChart(critical))">Open chart</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" data-testid="order-critical" OnClick="@(() => OrderForAsync(critical))">Order</MudButton>
+            </MudStack>
         }
     </MudStack>
+    @if (_expanded)
+    {
     @if (_messages.Count == 0)
     {
         <MudText Typo="Typo.body2" Color="Color.Secondary">No inbox items for this patient.</MudText>
@@ -73,7 +86,13 @@
                         </MudCardContent>
                         <MudDivider />
                         <MudCardActions>
-                            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Reply"
+                            @if (InboxOrdering.IsUnacknowledgedCritical(_selected) || _selected.IsUrgent)
+                            {
+                                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => AcknowledgeAsync(_selected))">Acknowledge</MudButton>
+                                <MudButton Variant="Variant.Outlined" OnClick="@(() => OpenChart(_selected))">Open chart</MudButton>
+                                <MudButton Variant="Variant.Outlined" OnClick="@(() => OrderForAsync(_selected))">Order</MudButton>
+                            }
+                            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Reply"
                                        OnClick="@(() => _showReplyDialog = true)">
                                 Reply
                             </MudButton>
@@ -89,6 +108,7 @@
                 }
             </MudItem>
         </MudGrid>
+    }
     }
 </MudPaper>
 
@@ -119,6 +139,7 @@
     private int? _consumedInitialMessageId;
 
     private bool _showReplyDialog;
+    private bool _expanded;
     private string _replyBody = "";
 
     protected override void OnInitialized()
@@ -163,7 +184,10 @@
             var match = _messages.FirstOrDefault(m => m.Id == openId)
                         ?? await ClinicalDataService.GetMessageByIdAsync(openId);
             if (match != null && match.PatientId == PatientId)
+            {
+                _expanded = true;
                 await SelectMessageAsync(match);
+            }
             ClearMessageFromQuery();
         }
     }
@@ -212,6 +236,41 @@
         _replyBody = "";
         _messages = await ClinicalDataService.GetInboxMessagesAsync(patientId: PatientId);
         _selected = _messages.FirstOrDefault(m => m.Id == saved.Id) ?? _selected;
+    }
+
+    private async Task AcknowledgeAsync(InboxMessage message)
+    {
+        await ClinicalDataService.AcknowledgeMessageAsync(message.Id);
+        message.IsAcknowledged = true;
+        _messages = await ClinicalDataService.GetInboxMessagesAsync(patientId: PatientId);
+        if (_selected?.Id == message.Id)
+        {
+            _selected = _messages.FirstOrDefault(m => m.Id == message.Id);
+        }
+    }
+
+    private void OpenChart(InboxMessage message)
+    {
+        if (message.PatientId is int id)
+        {
+            Navigation.NavigateTo($"/patients/{id}/summary");
+        }
+    }
+
+    private async Task OrderForAsync(InboxMessage message)
+    {
+        if (message.PatientId is not int id)
+        {
+            return;
+        }
+
+        var parameters = new DialogParameters<OrderEntryDialog>
+        {
+            { x => x.PatientId, id },
+            { x => x.PatientName, message.PatientName ?? "Patient" },
+            { x => x.InitialFilter, OrderCatalogFilter.All }
+        };
+        await DialogService.ShowAsync<OrderEntryDialog>("Order", parameters, new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true });
     }
 
     private static string GetCategoryName(MessageCategory category) => category switch

@@ -23,11 +23,13 @@
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
             <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" 
                            OnClick="PreviousPeriod" 
-                           Size="Size.Small" />
+                           Size="Size.Small"
+                           aria-label="Previous period" />
             <MudButton Variant="Variant.Text" OnClick="GoToToday" Size="Size.Small">Today</MudButton>
             <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" 
                            OnClick="NextPeriod" 
-                           Size="Size.Small" />
+                           Size="Size.Small"
+                           aria-label="Next period" />
             <MudDatePicker Date="_selectedDate"
                            DateChanged="OnDateChanged"
                            Variant="Variant.Outlined" 
@@ -256,7 +258,6 @@ else
     
     .schedule-appointment-card.status-completed {
         border-left-color: var(--mud-palette-success);
-        opacity: 0.8;
     }
     
     .schedule-appointment-card.status-inprogress {
@@ -357,7 +358,6 @@ else
     
     .schedule-week-appointment.status-completed {
         border-left-color: var(--mud-palette-success);
-        opacity: 0.7;
     }
     
     .schedule-week-appointment.status-inprogress {

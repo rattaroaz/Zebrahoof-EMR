@@ -12,6 +12,7 @@
 @inject IDialogService DialogService
 @inject ApplicationDbContext Db
 @inject ILogger<PatientDemographics> Logger
+@inject ChartWriteGuard ChartWrites
 
 <MudGrid>
     <MudItem xs="12" md="8">
@@ -502,6 +503,7 @@
     private async Task UploadDocument(IBrowserFile file)
     {
         if (file == null) return;
+        ChartWrites.Ensure(Patient.Id);
         
         _isProcessingDoc = true;
         _docAnalysisResult = string.Empty;

@@ -143,6 +143,7 @@
                                  Icon="@Icons.Material.Filled.ViewList"
                                  ToggledIcon="@Icons.Material.Filled.ViewModule"
                                  Size="Size.Small"
+                                 aria-label="@(_showCompact ? "Show tasks as cards" : "Show tasks as a list")"
                                   />
         </CardHeaderActions>
     </MudCardHeader>
@@ -213,6 +214,7 @@
                             <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" 
                                            Color="Color.Success" 
                                            Size="Size.Small"
+                                           aria-label="@($"Complete task {context.Title}")"
                                            OnClick="@(() => CompleteTask(context.Id))"
                                             />
                         }

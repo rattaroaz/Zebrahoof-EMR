@@ -15,6 +15,7 @@ public class MockClinicalDataService
 
     private readonly IServiceScopeFactory? _scopeFactory;
     private readonly ILogger<MockClinicalDataService> _logger;
+    private readonly ChartWriteGuard? _writes;
     private readonly object _persistenceLock = new();
 
     private readonly List<Encounter> _encounters;
@@ -58,17 +59,21 @@ public class MockClinicalDataService
 
     public void NotifyPatientDataChanged(int patientId) => PatientDataChanged?.Invoke(patientId);
 
+    private void RequireChart(int patientId) => _writes?.Ensure(patientId);
+
     public MockClinicalDataService()
-        : this(null, NullLogger<MockClinicalDataService>.Instance)
+        : this(null, NullLogger<MockClinicalDataService>.Instance, null)
     {
     }
 
     public MockClinicalDataService(
         IServiceScopeFactory? scopeFactory,
-        ILogger<MockClinicalDataService> logger)
+        ILogger<MockClinicalDataService> logger,
+        ChartWriteGuard? writes = null)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _writes = writes;
 
         _encounters = GenerateMockEncounters();
         _problems = GenerateMockProblems();
@@ -265,6 +270,74 @@ public class MockClinicalDataService
             db.Entry(entity).State = EntityState.Modified;
         });
 
+    /// <summary>
+    /// Writes a medication change and reports whether the database accepted it.
+    /// A missing row is inserted. A failed save is not reported as success.
+    /// </summary>
+    private async Task<bool> PersistMedicationUpdateAsync(Medication medication)
+    {
+        if (_scopeFactory == null)
+        {
+            return true;
+        }
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var existing = await db.Medications.FirstOrDefaultAsync(m => m.Id == medication.Id);
+            if (existing == null)
+            {
+                db.Medications.Add(CopyMedication(medication));
+            }
+            else
+            {
+                existing.Name = medication.Name;
+                existing.Dose = medication.Dose;
+                existing.Route = medication.Route;
+                existing.Frequency = medication.Frequency;
+                existing.StartDate = medication.StartDate;
+                existing.EndDate = medication.EndDate;
+                existing.Prescriber = medication.Prescriber;
+                existing.Status = medication.Status;
+                existing.IsHighRisk = medication.IsHighRisk;
+                existing.IsLongTerm = medication.IsLongTerm;
+                existing.Instructions = medication.Instructions;
+                existing.RefillsRemaining = medication.RefillsRemaining;
+                existing.DaysSupply = medication.DaysSupply;
+                existing.Pharmacy = medication.Pharmacy;
+            }
+
+            await db.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to persist medication {MedicationId}", medication.Id);
+            return false;
+        }
+    }
+
+    private static Medication CopyMedication(Medication medication) => new()
+    {
+        Id = medication.Id,
+        PatientId = medication.PatientId,
+        Name = medication.Name,
+        Dose = medication.Dose,
+        Route = medication.Route,
+        Frequency = medication.Frequency,
+        StartDate = medication.StartDate,
+        EndDate = medication.EndDate,
+        Prescriber = medication.Prescriber,
+        Status = medication.Status,
+        IsHighRisk = medication.IsHighRisk,
+        IsLongTerm = medication.IsLongTerm,
+        Instructions = medication.Instructions,
+        RefillsRemaining = medication.RefillsRemaining,
+        DaysSupply = medication.DaysSupply,
+        Pharmacy = medication.Pharmacy
+    };
+
     private void PersistRemove<T>(T entity) where T : class =>
         Persist(db =>
         {
@@ -313,8 +386,9 @@ public class MockClinicalDataService
     // transactional persistence already happened upstream.
     public void ReplaceProblemsForPatient(int patientId, IEnumerable<Problem> problems)
     {
+        RequireChart(patientId);
         _problems.RemoveAll(p => p.PatientId == patientId);
-        var nextId = _problems.Count == 0 ? 1 : _problems.Max(p => p.Id) + 1;
+        var nextId = NextId(_problems.Select(p => p.Id));
         foreach (var problem in problems)
         {
             problem.PatientId = patientId;
@@ -325,8 +399,9 @@ public class MockClinicalDataService
 
     public void ReplaceMedicationsForPatient(int patientId, IEnumerable<Medication> medications)
     {
+        RequireChart(patientId);
         _medications.RemoveAll(m => m.PatientId == patientId);
-        var nextId = _medications.Count == 0 ? 1 : _medications.Max(m => m.Id) + 1;
+        var nextId = NextId(_medications.Select(m => m.Id));
         foreach (var med in medications)
         {
             med.PatientId = patientId;
@@ -337,8 +412,9 @@ public class MockClinicalDataService
 
     public void ReplaceAllergiesForPatient(int patientId, IEnumerable<Allergy> allergies)
     {
+        RequireChart(patientId);
         _allergies.RemoveAll(a => a.PatientId == patientId);
-        var nextId = _allergies.Count == 0 ? 1 : _allergies.Max(a => a.Id) + 1;
+        var nextId = NextId(_allergies.Select(a => a.Id));
         foreach (var allergy in allergies)
         {
             allergy.PatientId = patientId;
@@ -387,6 +463,7 @@ public class MockClinicalDataService
         string? pharmacy,
         bool isHighRisk = false)
     {
+        RequireChart(patientId);
         Medication? medication = null;
         
         // For long-term medications, add to the medication list if not already present
@@ -401,7 +478,7 @@ public class MockClinicalDataService
             {
                 medication = new Medication
                 {
-                    Id = _medications.Count > 0 ? _medications.Max(m => m.Id) + 1 : 1,
+                    Id = NextId(_medications.Select(m => m.Id)),
                     PatientId = patientId,
                     Name = name,
                     Dose = dose,
@@ -429,7 +506,7 @@ public class MockClinicalDataService
         // Create the prescription record
         var prescription = new Prescription
         {
-            Id = _prescriptions.Count > 0 ? _prescriptions.Max(p => p.Id) + 1 : 1,
+            Id = NextId(_prescriptions.Select(p => p.Id)),
             PatientId = patientId,
             MedicationId = medication?.Id,
             MedicationName = name,
@@ -456,13 +533,14 @@ public class MockClinicalDataService
     // Order a refill for an existing medication
     public Task<Prescription> OrderRefillAsync(int patientId, int medicationId, string? prescriber, int? daysSupply = null, int? quantity = null)
     {
+        RequireChart(patientId);
         var medication = _medications.FirstOrDefault(m => m.Id == medicationId && m.PatientId == patientId);
         if (medication == null)
             throw new InvalidOperationException("Medication not found");
         
         var prescription = new Prescription
         {
-            Id = _prescriptions.Count > 0 ? _prescriptions.Max(p => p.Id) + 1 : 1,
+            Id = NextId(_prescriptions.Select(p => p.Id)),
             PatientId = patientId,
             MedicationId = medicationId,
             MedicationName = medication.Name,
@@ -498,9 +576,10 @@ public class MockClinicalDataService
         string? instructions,
         bool isHighRisk = false)
     {
+        RequireChart(patientId);
         var medication = new Medication
         {
-            Id = _medications.Count > 0 ? _medications.Max(m => m.Id) + 1 : 1,
+            Id = NextId(_medications.Select(m => m.Id)),
             PatientId = patientId,
             Name = name,
             Dose = dose,
@@ -520,7 +599,7 @@ public class MockClinicalDataService
     }
 
     // Update/edit an existing medication
-    public Task<Medication?> UpdateMedicationAsync(
+    public async Task<Medication?> UpdateMedicationAsync(
         int medicationId,
         string? dose = null,
         string? route = null,
@@ -533,20 +612,38 @@ public class MockClinicalDataService
         bool? isHighRisk = null)
     {
         var medication = _medications.FirstOrDefault(m => m.Id == medicationId);
-        if (medication != null)
+        if (medication == null)
         {
-            if (dose != null) medication.Dose = dose;
-            if (route != null) medication.Route = route;
-            if (frequency != null) medication.Frequency = frequency;
-            if (prescriber != null) medication.Prescriber = prescriber;
-            if (pharmacy != null) medication.Pharmacy = pharmacy;
-            if (instructions != null) medication.Instructions = instructions;
-            if (refillsRemaining.HasValue) medication.RefillsRemaining = refillsRemaining;
-            if (daysSupply.HasValue) medication.DaysSupply = daysSupply;
-            if (isHighRisk.HasValue) medication.IsHighRisk = isHighRisk.Value;
-            PersistUpdate(medication);
+            return null;
         }
-        return Task.FromResult(medication);
+
+        RequireChart(medication.PatientId);
+        var previous = CopyMedication(medication);
+        if (dose != null) medication.Dose = dose;
+        if (route != null) medication.Route = route;
+        if (frequency != null) medication.Frequency = frequency;
+        if (prescriber != null) medication.Prescriber = prescriber;
+        if (pharmacy != null) medication.Pharmacy = pharmacy;
+        if (instructions != null) medication.Instructions = instructions;
+        if (refillsRemaining.HasValue) medication.RefillsRemaining = refillsRemaining;
+        if (daysSupply.HasValue) medication.DaysSupply = daysSupply;
+        if (isHighRisk.HasValue) medication.IsHighRisk = isHighRisk.Value;
+
+        if (await PersistMedicationUpdateAsync(medication))
+        {
+            return medication;
+        }
+
+        medication.Dose = previous.Dose;
+        medication.Route = previous.Route;
+        medication.Frequency = previous.Frequency;
+        medication.Prescriber = previous.Prescriber;
+        medication.Pharmacy = previous.Pharmacy;
+        medication.Instructions = previous.Instructions;
+        medication.RefillsRemaining = previous.RefillsRemaining;
+        medication.DaysSupply = previous.DaysSupply;
+        medication.IsHighRisk = previous.IsHighRisk;
+        return null;
     }
 
     // Discontinue a medication
@@ -555,6 +652,7 @@ public class MockClinicalDataService
         var medication = _medications.FirstOrDefault(m => m.Id == medicationId);
         if (medication != null)
         {
+            RequireChart(medication.PatientId);
             medication.Status = MedicationStatus.Discontinued;
             medication.EndDate = DateTime.Today;
             PersistUpdate(medication);
@@ -581,6 +679,7 @@ public class MockClinicalDataService
 
     public Task<Problem> AddProblemAsync(Problem problem)
     {
+        RequireChart(problem.PatientId);
         problem.PatientId = problem.PatientId;
         problem.Id = NextId(_problems.Select(p => p.Id));
         if (problem.OnsetDate == default)
@@ -596,6 +695,7 @@ public class MockClinicalDataService
 
     public Task<Problem?> UpdateProblemAsync(int patientId, string name, Action<Problem> mutate)
     {
+        RequireChart(patientId);
         var problem = FindNamed(_problems, patientId, p => p.PatientId, p => p.Name, name);
         if (problem == null)
         {
@@ -610,6 +710,7 @@ public class MockClinicalDataService
 
     public Task<bool> RemoveProblemAsync(int patientId, string name)
     {
+        RequireChart(patientId);
         var problem = FindNamed(_problems, patientId, p => p.PatientId, p => p.Name, name);
         if (problem == null)
         {
@@ -624,6 +725,7 @@ public class MockClinicalDataService
 
     public Task<Allergy> AddAllergyAsync(Allergy allergy)
     {
+        RequireChart(allergy.PatientId);
         allergy.Id = NextId(_allergies.Select(a => a.Id));
         _allergies.Add(allergy);
         PersistAdd(allergy);
@@ -631,8 +733,24 @@ public class MockClinicalDataService
         return Task.FromResult(allergy);
     }
 
+    public Task<Allergy?> UpdateAllergyAsync(int patientId, int allergyId, Action<Allergy> mutate)
+    {
+        RequireChart(patientId);
+        var allergy = _allergies.FirstOrDefault(a => a.Id == allergyId && a.PatientId == patientId);
+        if (allergy == null)
+        {
+            return Task.FromResult<Allergy?>(null);
+        }
+
+        mutate(allergy);
+        PersistUpdate(allergy);
+        NotifyPatientDataChanged(patientId);
+        return Task.FromResult<Allergy?>(allergy);
+    }
+
     public Task<bool> RemoveAllergyAsync(int patientId, string allergen)
     {
+        RequireChart(patientId);
         var allergy = FindNamed(_allergies, patientId, a => a.PatientId, a => a.Allergen, allergen);
         if (allergy == null)
         {
@@ -647,6 +765,7 @@ public class MockClinicalDataService
 
     public Task<VitalSigns> AddVitalsAsync(VitalSigns vitals)
     {
+        RequireChart(vitals.PatientId);
         vitals.Id = NextId(_vitals.Select(v => v.Id));
         if (vitals.RecordedAt == default)
         {
@@ -661,6 +780,7 @@ public class MockClinicalDataService
 
     public Task<Immunization> AddImmunizationAsync(Immunization immunization)
     {
+        RequireChart(immunization.PatientId);
         immunization.Id = NextId(_immunizations.Select(i => i.Id));
         if (immunization.AdministeredDate == default)
         {
@@ -675,6 +795,7 @@ public class MockClinicalDataService
 
     public Task<CareTeamMember> AddCareTeamMemberAsync(CareTeamMember member)
     {
+        RequireChart(member.PatientId);
         member.Id = NextId(_careTeamMembers.Select(m => m.Id));
         _careTeamMembers.Add(member);
         PersistAdd(member);
@@ -684,6 +805,7 @@ public class MockClinicalDataService
 
     public Task<Encounter?> UpdateLatestEncounterAsync(int patientId, Action<Encounter> mutate)
     {
+        RequireChart(patientId);
         var encounter = _encounters
             .Where(e => e.PatientId == patientId)
             .OrderByDescending(e => e.DateTime)
@@ -739,6 +861,7 @@ public class MockClinicalDataService
         var alert = _alerts.FirstOrDefault(a => a.Id == alertId);
         if (alert != null)
         {
+            RequireChart(alert.PatientId ?? 0);
             alert.IsAcknowledged = true;
             alert.AcknowledgedAt = DateTime.Now;
             PersistUpdate(alert);
@@ -759,6 +882,7 @@ public class MockClinicalDataService
 
     public Task<EmergencyContact> AddEmergencyContactAsync(EmergencyContact contact)
     {
+        RequireChart(contact.PatientId);
         contact.Id = NextId(_emergencyContacts.Select(e => e.Id));
         _emergencyContacts.Add(contact);
         PersistAdd(contact);
@@ -772,6 +896,7 @@ public class MockClinicalDataService
 
     public Task<Insurance> UpsertInsuranceAsync(Insurance insurance)
     {
+        RequireChart(insurance.PatientId);
         var existing = _insurances.FirstOrDefault(i =>
             i.PatientId == insurance.PatientId
             && (string.Equals(i.PayerName, insurance.PayerName, StringComparison.OrdinalIgnoreCase)
@@ -797,6 +922,7 @@ public class MockClinicalDataService
 
     public Task<ClinicalAlert?> AcknowledgeAlertByTitleAsync(int patientId, string title)
     {
+        RequireChart(patientId);
         var alert = _alerts.FirstOrDefault(a =>
             a.PatientId == patientId
             && !a.IsAcknowledged
@@ -838,7 +964,8 @@ public class MockClinicalDataService
 
     public Task<ClinicalNote> CreateNoteAsync(ClinicalNote note)
     {
-        note.Id = _notes.Count > 0 ? _notes.Max(n => n.Id) + 1 : 1;
+        RequireChart(note.PatientId);
+        note.Id = NextId(_notes.Select(n => n.Id));
         note.CreatedAt = DateTime.UtcNow;
         _notes.Add(note);
         PersistAdd(note);
@@ -847,6 +974,7 @@ public class MockClinicalDataService
 
     public Task<ClinicalNote> UpdateNoteAsync(ClinicalNote note)
     {
+        RequireChart(note.PatientId);
         var existingNote = _notes.FirstOrDefault(n => n.Id == note.Id);
         if (existingNote != null)
         {
@@ -868,6 +996,7 @@ public class MockClinicalDataService
         var note = _notes.FirstOrDefault(n => n.Id == noteId);
         if (note != null)
         {
+            RequireChart(note.PatientId);
             _notes.Remove(note);
             PersistRemove(note);
             return Task.FromResult(true);
@@ -1553,6 +1682,7 @@ public class MockClinicalDataService
         string orderingProvider,
         IReadOnlyList<OrderCartItem> cart)
     {
+        RequireChart(patientId);
         if (patientId <= 0) throw new ArgumentOutOfRangeException(nameof(patientId));
         if (cart.Count == 0) throw new ArgumentException("Cart is empty.", nameof(cart));
 
@@ -1651,11 +1781,27 @@ public class MockClinicalDataService
         return results.Count == 0 ? null : SimulatedOrderFulfillment.SummarizeLabs(results);
     }
 
-    private static int NextId(IEnumerable<int> ids)
+    /// <summary>
+    /// Benchmark rows use ids at or above this floor. New clinical rows stay below it
+    /// so a timing seed cannot collide with the real id counter.
+    /// </summary>
+    public const int BenchmarkIdFloor = 700_000;
+
+    public static int NextClinicalId(IEnumerable<int> ids)
     {
-        var list = ids.ToList();
-        return list.Count > 0 ? list.Max() + 1 : 1;
+        var clinical = 0;
+        foreach (var id in ids)
+        {
+            if (id > clinical && id < BenchmarkIdFloor)
+            {
+                clinical = id;
+            }
+        }
+
+        return clinical + 1;
     }
+
+    private static int NextId(IEnumerable<int> ids) => NextClinicalId(ids);
 
     public Task<List<string>> GetSpecialtiesAsync() => Task.FromResult(_specialties.ToList());
 
@@ -1670,6 +1816,7 @@ public class MockClinicalDataService
 
     public Task<LabOrder> CreateLabOrderAsync(LabOrder order)
     {
+        RequireChart(order.PatientId);
         order.Id = _labOrders.Count > 0 ? _labOrders.Max(o => o.Id) + 1 : 1;
         order.OrderedAt = DateTime.Now;
         order.Status = OrderStatus.Ordered;
@@ -1680,6 +1827,7 @@ public class MockClinicalDataService
 
     public Task<ImagingOrder> CreateImagingOrderAsync(ImagingOrder order)
     {
+        RequireChart(order.PatientId);
         order.Id = _imagingOrders.Count > 0 ? _imagingOrders.Max(o => o.Id) + 1 : 1;
         order.OrderedAt = DateTime.Now;
         order.Status = OrderStatus.Ordered;
@@ -1690,6 +1838,7 @@ public class MockClinicalDataService
 
     public Task<ReferralOrder> CreateReferralOrderAsync(ReferralOrder order)
     {
+        RequireChart(order.PatientId);
         order.Id = _referralOrders.Count > 0 ? _referralOrders.Max(o => o.Id) + 1 : 1;
         order.OrderedAt = DateTime.Now;
         order.Status = OrderStatus.Ordered;
@@ -1740,14 +1889,32 @@ public class MockClinicalDataService
     }
 
     // Inbox and Messaging Methods
-    public Task<List<InboxMessage>> GetInboxMessagesAsync(string? category = null, bool? unreadOnly = null, bool? flaggedOnly = null, int? patientId = null) =>
-        Task.FromResult(_inboxMessages
+    public Task<List<InboxMessage>> GetInboxMessagesAsync(string? category = null, bool? unreadOnly = null, bool? flaggedOnly = null, int? patientId = null)
+    {
+        var filtered = _inboxMessages
             .Where(m => category == null || m.Category.ToString() == category)
             .Where(m => unreadOnly != true || !m.IsRead)
             .Where(m => flaggedOnly != true || m.IsFlagged)
-            .Where(m => patientId == null || m.PatientId == patientId)
-            .OrderByDescending(m => m.SentAt)
-            .ToList());
+            .Where(m => patientId == null || m.PatientId == patientId);
+        return Task.FromResult(InboxOrdering.Sort(filtered));
+    }
+
+    public Task AcknowledgeMessageAsync(int messageId)
+    {
+        var message = _inboxMessages.FirstOrDefault(m => m.Id == messageId);
+        if (message == null)
+        {
+            return Task.CompletedTask;
+        }
+
+        message.IsAcknowledged = true;
+        message.AcknowledgedAt = DateTime.Now;
+        message.IsRead = true;
+        message.ReadAt ??= DateTime.Now;
+        message.Status = MessageStatus.Completed;
+        InboxChanged?.Invoke();
+        return Task.CompletedTask;
+    }
 
     public Task<InboxMessage?> GetMessageByIdAsync(int messageId) =>
         Task.FromResult(_inboxMessages.FirstOrDefault(m => m.Id == messageId));
@@ -1822,6 +1989,7 @@ public class MockClinicalDataService
 
     public Task<ClinicalTask> CreateTaskAsync(ClinicalTask task)
     {
+        RequireChart(task.PatientId ?? 0);
         task.Id = _clinicalTasks.Count > 0 ? _clinicalTasks.Max(t => t.Id) + 1 : 1;
         task.CreatedAt = DateTime.Now;
         task.Status = ClinicalTaskStatus.Pending;

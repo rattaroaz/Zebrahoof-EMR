@@ -1,0 +1,84 @@
+@inject MockPatientService PatientService
+@inject MockClinicalDataService ClinicalData
+@implements IDisposable
+
+@if (_patient != null)
+{
+    <div class="@CssClass" data-testid="patient-safety-banner">
+        <div class="patient-safety-name">@_patient.LastName, @_patient.FirstName</div>
+        <div class="patient-safety-meta">
+            DOB @_patient.DateOfBirth.ToString("MM/dd/yyyy") (@_patient.Age y) · MRN @_patient.MRN
+            · Allergies:
+            @if (_allergyNames.Count == 0)
+            {
+                <span class="patient-allergy-none">NKA</span>
+            }
+            else
+            {
+                <span class="patient-allergy-names">@string.Join(", ", _allergyNames)</span>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int PatientId { get; set; }
+
+    [Parameter]
+    public Patient? Patient { get; set; }
+
+    [Parameter]
+    public bool Sticky { get; set; }
+
+    private Patient? _patient;
+    private List<string> _allergyNames = new();
+    private string CssClass => Sticky ? "patient-safety-banner patient-banner-sticky" : "patient-safety-banner";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        ClinicalData.PatientDataChanged -= OnPatientDataChanged;
+        ClinicalData.PatientDataChanged += OnPatientDataChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var id = PatientId > 0 ? PatientId : Patient?.Id ?? 0;
+        if (Patient != null && (PatientId == 0 || Patient.Id == PatientId))
+        {
+            _patient = Patient;
+        }
+        else if (id > 0)
+        {
+            _patient = await PatientService.GetPatientByIdAsync(id);
+        }
+
+        if (id <= 0)
+        {
+            _allergyNames = new();
+            return;
+        }
+
+        var allergies = await ClinicalData.GetActiveAllergiesByPatientAsync(id);
+        _allergyNames = allergies
+            .Select(allergy => allergy.Allergen)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private async void OnPatientDataChanged(int patientId)
+    {
+        var id = PatientId > 0 ? PatientId : Patient?.Id ?? 0;
+        if (patientId != id)
+        {
+            return;
+        }
+
+        await LoadAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => ClinicalData.PatientDataChanged -= OnPatientDataChanged;
+}

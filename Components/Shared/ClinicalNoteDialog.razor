@@ -1,5 +1,8 @@
+@implements IDisposable
 @inject MockClinicalDataService ClinicalDataService
 @inject AuthStateService AuthState
+@inject MockPatientService PatientService
+@inject ChartEditTracker Edits
 @inject ILogger<ClinicalNoteDialog> Logger
 
 <MudDialog>
@@ -12,6 +15,11 @@
         </MudStack>
     </TitleContent>
     <DialogContent>
+        <PatientSafetyBanner PatientId="@(PatientId > 0 ? PatientId : note.PatientId)" />
+        @if (!string.IsNullOrEmpty(_saveError))
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-2">@_saveError</MudAlert>
+        }
         <MudStack Spacing="4" Class="pa-2">
             @if (IsViewOnly)
             {
@@ -28,7 +36,7 @@
                         </MudItem>
                         <MudItem xs="12" md="6">
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">Created</MudText>
-                            <MudText Typo="Typo.body2">@note.CreatedAt.ToString("MMM dd, yyyy HH:mm")</MudText>
+                            <MudText Typo="Typo.body2">@ClinicTime.Format(note.CreatedAt, "MMM dd, yyyy h:mm tt")</MudText>
                         </MudItem>
                         <MudItem xs="12" md="6">
                             <MudText Typo="Typo.caption" Class="mud-text-secondary">Status</MudText>
@@ -145,6 +153,8 @@
 
     private ClinicalNote note = new();
     private bool signNote = false;
+    private IDisposable? _editScope;
+    private string? _saveError;
 
     protected override void OnInitialized()
     {
@@ -192,6 +202,22 @@
         }
 
         Logger.LogDebug("ClinicalNoteDialog ready. NoteId {NoteId} status {Status}", note.Id, note.Status);
+        if (!IsViewOnly)
+        {
+            var id = PatientId > 0 ? PatientId : note.PatientId;
+            _editScope = Edits.Push(id);
+        }
+
+        Edits.DiscardRequested += OnDiscardRequested;
+    }
+
+    private void OnDiscardRequested() => MudDialog.Cancel();
+
+    public void Dispose()
+    {
+        Edits.DiscardRequested -= OnDiscardRequested;
+        _editScope?.Dispose();
+        _editScope = null;
     }
 
     private async Task SaveNote()
@@ -233,11 +259,15 @@
 
             MudDialog.Close(DialogResult.Ok(note));
         }
+        catch (ChartNotHeldException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to save clinical note for patient {PatientId} (edit: {IsEdit}, noteId: {NoteId})",
                 PatientId, IsEdit, note?.Id);
-            // TODO: Show user-friendly snackbar via injected NotificationService (add @inject if needed)
+            _saveError = "The note could not be saved.";
         }
     }
 

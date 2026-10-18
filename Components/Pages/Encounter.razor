@@ -1,22 +1,42 @@
 @page "/encounter/{EncounterId:int}"
-@inject NavigationManager Navigation
+@inject MockClinicalDataService ClinicalData
+@inject MockPatientService PatientService
 
 <PageTitle>Encounter - Zebrahoof EMR</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-    <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" OnClick="@GoBack">
-        Back
-    </MudButton>
-</MudStack>
-
-<EncounterWorkspace EncounterId="EncounterId" />
+@if (_patientId is int patientId)
+{
+    <PatientChartGate PatientId="patientId" PatientName="@_patientName">
+        <PatientSafetyBanner PatientId="patientId" Sticky="true" />
+        <EncounterWorkspace EncounterId="EncounterId" />
+    </PatientChartGate>
+}
+else if (_missing)
+{
+    <MudAlert Severity="Severity.Error">Encounter not found.</MudAlert>
+}
 
 @code {
     [Parameter]
     public int EncounterId { get; set; }
 
-    private void GoBack()
+    private int? _patientId;
+    private string? _patientName;
+    private bool _missing;
+
+    protected override async Task OnParametersSetAsync()
     {
-        Navigation.NavigateTo("javascript:history.back()");
+        var encounter = await ClinicalData.GetEncounterByIdAsync(EncounterId);
+        if (encounter == null)
+        {
+            _missing = true;
+            _patientId = null;
+            return;
+        }
+
+        _missing = false;
+        _patientId = encounter.PatientId;
+        var patient = await PatientService.GetPatientByIdAsync(encounter.PatientId);
+        _patientName = patient?.FullName ?? encounter.PatientName;
     }
 }

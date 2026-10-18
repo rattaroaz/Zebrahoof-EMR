@@ -357,7 +357,7 @@ public sealed class PatientChartAskService
             return $"skip: no medication matching '{action.Name}'";
         }
 
-        await _clinical.UpdateMedicationAsync(
+        var updated = await _clinical.UpdateMedicationAsync(
             med.Id,
             dose: action.Dose,
             route: action.Route,
@@ -366,7 +366,9 @@ public sealed class PatientChartAskService
             pharmacy: action.Pharmacy,
             instructions: action.Instructions,
             daysSupply: action.DaysSupply);
-        return $"Updated medication {med.Name}";
+        return updated == null
+            ? $"skip: {med.Name} was not saved"
+            : $"Updated medication {med.Name}";
     }
 
     private async Task<string> DiscontinueMedicationAsync(int patientId, ChartAskAction action)

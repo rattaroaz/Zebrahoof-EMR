@@ -4,7 +4,6 @@
 @using Microsoft.AspNetCore.Components
 @inject MockPatientService PatientService
 @inject MockClinicalDataService ClinicalDataService
-@inject AppStateService AppState
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 
@@ -12,8 +11,9 @@
 
 @if (PatientId.HasValue && _selectedPatient != null)
 {
-    @* Patient Chart - Phases 8-10 *@
-    <PatientChartLayout Patient="_selectedPatient" Tab="@Tab" InboxMessageId="@InboxMessageId" />
+    <PatientChartGate PatientId="_selectedPatient.Id" PatientName="@_selectedPatient.FullName">
+        <PatientChartLayout Patient="_selectedPatient" Tab="@Tab" InboxMessageId="@InboxMessageId" />
+    </PatientChartGate>
 }
 else if (PatientId.HasValue && _selectedPatient == null && !_isLoading)
 {
@@ -199,15 +199,10 @@ else
         {
             _isLoading = true;
             _selectedPatient = await PatientService.GetPatientByIdAsync(PatientId.Value);
-            if (_selectedPatient != null)
-            {
-                AppState.SelectPatient(_selectedPatient);
-            }
             _isLoading = false;
         }
         else
         {
-            AppState.SelectPatient(null);
             _selectedPatient = null;
         }
     }

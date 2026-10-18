@@ -3,6 +3,7 @@ using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Components.Server.Circuits;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
@@ -187,15 +188,40 @@ builder.Services.AddHostedService<PlaywrightTestUserSeeder>();
 
 // Add MudBlazor services
 builder.Services.AddMudServices();
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    // The browser reschedules its ping when a server message arrives, so the
+    // server keepalive has to be 5s as well or the browser ping lands on this
+    // interval (measured at 10–11s when this was 10s). 30s is still at least
+    // twice the ping. The browser treats 20s without a server message as a drop.
+    options.KeepAliveInterval = TimeSpan.FromSeconds(5);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+});
 
 // Add Blazor services
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddHubOptions(options =>
+    {
+        options.KeepAliveInterval = TimeSpan.FromSeconds(5);
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    });
 
 // Add mock data services
-builder.Services.AddSingleton<AuthStateService>();
-builder.Services.AddSingleton<AppStateService>();
+builder.Services.AddScoped<AuthStateService>();
+builder.Services.AddScoped<AppStateService>();
+builder.Services.Configure<ChartLockOptions>(builder.Configuration.GetSection(ChartLockOptions.Section));
+builder.Services.AddSingleton<TimeProvider>(_ => TimeProvider.System);
+builder.Services.AddSingleton(sp => new ActivePatientRegistry(
+    sp.GetRequiredService<TimeProvider>(),
+    sp.GetRequiredService<IOptions<ChartLockOptions>>().Value.DisconnectGraceSeconds));
+builder.Services.AddSingleton<ChartWriteGuard>();
+builder.Services.AddScoped<CircuitScope>();
+builder.Services.AddScoped<CircuitHandler, ChartCircuitHandler>();
+builder.Services.AddScoped<ChartEditTracker>();
+builder.Services.AddScoped<NavigationTrail>();
+builder.Services.AddScoped<PatientDialogTracker>();
+builder.Services.AddScoped<AskAiCoordinator>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddScoped<StickyNoteService>();
 builder.Services.AddScoped<PatientStickyNoteService>();

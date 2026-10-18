@@ -1,6 +1,8 @@
 @inject MockClinicalDataService ClinicalDataService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject ChartEditTracker Edits
+@inject PatientDialogTracker Dialogs
 @implements IDisposable
 
 <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" Class="mb-4">
@@ -51,16 +53,16 @@
                         <MudTd DataLabel="Pharmacy">@context.Pharmacy</MudTd>
                         <MudTd>
                             <MudTooltip Text="Edit Medication">
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Secondary" OnClick="@(() => OpenEditMedicationDialog(context))" />
+                                <MudIconButton aria-label="Edit medication" Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Secondary" OnClick="@(() => OpenEditMedicationDialog(context))" />
                             </MudTooltip>
                             <MudTooltip Text="Order Refill">
-                                <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Color="Color.Primary" OnClick="@(() => OrderRefill(context))" />
+                                <MudIconButton aria-label="Order refill" Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" Color="Color.Primary" OnClick="@(() => OrderRefill(context))" />
                             </MudTooltip>
                             <MudTooltip Text="View History">
-                                <MudIconButton Icon="@Icons.Material.Filled.History" Size="Size.Small" OnClick="@(() => ViewMedicationHistory(context))" />
+                                <MudIconButton aria-label="View medication history" Icon="@Icons.Material.Filled.History" Size="Size.Small" OnClick="@(() => ViewMedicationHistory(context))" />
                             </MudTooltip>
                             <MudTooltip Text="Discontinue">
-                                <MudIconButton Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" OnClick="@(() => DiscontinueMedication(context))" />
+                                <MudIconButton aria-label="Discontinue medication" Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" OnClick="@(() => DiscontinueMedication(context))" />
                             </MudTooltip>
                         </MudTd>
                     </RowTemplate>
@@ -185,13 +187,14 @@
 </MudTabs>
 
 @* Prescribe Medication Dialog *@
-<MudDialog @bind-Visible="_showPrescribeDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+<MudDialog @bind-Visible="_showPrescribeDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true })">
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" /> Prescribe Medication
         </MudText>
     </TitleContent>
     <DialogContent>
+        <PatientSafetyBanner PatientId="PatientId" />
         <MudForm @ref="_prescribeForm" @bind-IsValid="_prescribeFormValid">
             <MudGrid>
                 <MudItem xs="12" md="6">
@@ -257,7 +260,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="ClosePrescribeDialog">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitPrescription" Disabled="@(!_prescribeFormValid)">
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitPrescription">
             Prescribe
         </MudButton>
     </DialogActions>
@@ -271,6 +274,7 @@
         </MudText>
     </TitleContent>
     <DialogContent>
+        <PatientSafetyBanner PatientId="PatientId" />
         @if (_selectedMedication != null)
         {
             <MudStack Spacing="2">
@@ -375,7 +379,7 @@
 </MudDialog>
 
 @* Add to List Dialog (without prescription) *@
-<MudDialog @bind-Visible="_showAddToListDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+<MudDialog @bind-Visible="_showAddToListDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true })">
     <TitleContent>
         <MudText Typo="Typo.h6">
             <MudIcon Icon="@Icons.Material.Filled.PlaylistAdd" Class="mr-2" /> Add Medication to List
@@ -426,7 +430,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="CloseAddToListDialog">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAddToList" Disabled="@(!_addToListFormValid)">
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitAddToList">
             Add to List
         </MudButton>
     </DialogActions>
@@ -440,6 +444,7 @@
         </MudText>
     </TitleContent>
     <DialogContent>
+        <PatientSafetyBanner PatientId="PatientId" />
         <MudForm @ref="_editMedicationForm" @bind-IsValid="_editMedicationFormValid">
             <MudGrid>
                 <MudItem xs="12">
@@ -484,7 +489,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="CloseEditMedicationDialog">Cancel</MudButton>
-        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitEditMedication" Disabled="@(!_editMedicationFormValid)">
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SubmitEditMedication">
             Save Changes
         </MudButton>
     </DialogActions>
@@ -563,13 +568,44 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private IDisposable? _editScope;
+    private IDisposable? _dialogLease;
+
     public void Dispose()
     {
         ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        Edits.DiscardRequested -= CloseEditingDialogs;
+        _dialogLease?.Dispose();
+        _editScope?.Dispose();
+    }
+
+    protected override void OnInitialized()
+    {
+        Edits.DiscardRequested += CloseEditingDialogs;
+        _dialogLease = Dialogs.TrackInline(CloseEditingDialogs);
+    }
+
+    private void CloseEditingDialogs()
+    {
+        _showPrescribeDialog = false;
+        _showRefillDialog = false;
+        _showDiscontinueDialog = false;
+        _showHistoryDialog = false;
+        _showAddToListDialog = false;
+        _showEditMedicationDialog = false;
+        _editScope?.Dispose();
+        _editScope = null;
+    }
+
+    private void TrackEdit()
+    {
+        _editScope?.Dispose();
+        _editScope = Edits.Push(PatientId);
     }
 
     private void OpenPrescribeDialog()
     {
+        TrackEdit();
         _newPrescription = new PrescriptionFormModel
         {
             Prescriber = "Dr. Sarah Smith",
@@ -584,6 +620,8 @@
     {
         _showPrescribeDialog = false;
         _newPrescription = new();
+        _editScope?.Dispose();
+        _editScope = null;
     }
 
     private async Task SubmitPrescription()
@@ -628,6 +666,7 @@
 
     private void OrderRefill(Medication medication)
     {
+        TrackEdit();
         _selectedMedication = medication;
         _refillDaysSupply = medication.DaysSupply ?? 30;
         _refillPharmacy = medication.Pharmacy ?? string.Empty;
@@ -638,6 +677,8 @@
     {
         _showRefillDialog = false;
         _selectedMedication = null;
+        _editScope?.Dispose();
+        _editScope = null;
     }
 
     private async Task SubmitRefill()
@@ -780,7 +821,8 @@
             if (!_editMedicationFormValid) return;
         }
 
-        await ClinicalDataService.UpdateMedicationAsync(
+        var medicationName = _editMedicationModel.MedicationName;
+        var updated = await ClinicalDataService.UpdateMedicationAsync(
             _editMedicationModel.MedicationId,
             _editMedicationModel.Dose,
             _editMedicationModel.Route,
@@ -792,10 +834,15 @@
             _editMedicationModel.DaysSupply,
             _editMedicationModel.IsHighRisk
         );
+        if (updated == null)
+        {
+            Snackbar.Add($"{medicationName} was not saved.", Severity.Error);
+            return;
+        }
 
         await LoadData();
         CloseEditMedicationDialog();
-        Snackbar.Add($"{_editMedicationModel.MedicationName} updated successfully", Severity.Success);
+        Snackbar.Add($"{medicationName} updated successfully", Severity.Success);
     }
 
     public Task<IEnumerable<MedicationCatalog>> SearchMedications(string value, CancellationToken token = default)
@@ -819,6 +866,7 @@
 
     private void OnMedicationSelected(MedicationCatalog? medication)
     {
+        _newPrescription.SelectedMedication = medication;
         if (medication != null)
         {
             _newPrescription.MedicationName = medication.Name;

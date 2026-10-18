@@ -1,0 +1,89 @@
+<MudPaper Elevation="1" Class="pa-4 mb-2 note-card">
+    <MudStack Spacing="2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(Note.Status)">@Note.Status</MudChip>
+                <MudText Typo="Typo.h6">@(Note.ChiefComplaint ?? "Clinical Note")</MudText>
+            </MudStack>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="note-row-actions">
+                @if (Note.Status == NoteStatus.InProgress)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                  aria-label="Edit note" OnClick="@(() => OnEdit.InvokeAsync(Note))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                  aria-label="Delete note" OnClick="@(() => OnDelete.InvokeAsync(Note))" />
+                }
+                @if (Note.Status == NoteStatus.InProgress && CanSign)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.HowToReg" Size="Size.Small"
+                                  Color="Color.Primary" aria-label="Sign note"
+                                  OnClick="@(() => OnSign.InvokeAsync(Note))" />
+                }
+            </MudStack>
+        </MudStack>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-2">
+            <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                By @Note.AuthorName on @ClinicTime.Format(Note.CreatedAt, "MMM dd, yyyy h:mm tt")
+            </MudText>
+            @if (Note.SignedAt is DateTime signedAt)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Success">
+                    ✓ Signed on @ClinicTime.Format(signedAt, "MMM dd, yyyy h:mm tt")
+                </MudText>
+            }
+        </MudStack>
+        @if (!string.IsNullOrEmpty(Note.ChiefComplaint))
+        {
+            <MudText Typo="Typo.body2" Class="font-weight-bold">Chief Complaint: @Note.ChiefComplaint</MudText>
+        }
+        @if (!string.IsNullOrEmpty(Note.HistoryOfPresentIllness))
+        {
+            <MudText Typo="Typo.body2">
+                <strong>HPI:</strong> @(Note.HistoryOfPresentIllness.Length > 200 ? Note.HistoryOfPresentIllness.Substring(0, 200) + "..." : Note.HistoryOfPresentIllness)
+            </MudText>
+        }
+        @if (!string.IsNullOrEmpty(Note.Assessment) || !string.IsNullOrEmpty(Note.Plan))
+        {
+            <MudText Typo="Typo.body2">
+                @if (!string.IsNullOrEmpty(Note.Assessment))
+                {
+                    <strong>Assessment:</strong> @(Note.Assessment.Length > 100 ? Note.Assessment.Substring(0, 100) + "..." : Note.Assessment)
+                }
+                @if (!string.IsNullOrEmpty(Note.Plan))
+                {
+                    <br />
+                    <strong>Plan:</strong> @(Note.Plan.Length > 100 ? Note.Plan.Substring(0, 100) + "..." : Note.Plan)
+                }
+            </MudText>
+        }
+        <MudButton Variant="Variant.Text" Size="Size.Small" Class="view-full-note" aria-label="@ViewLabel" OnClick="@(() => OnView.InvokeAsync(Note))">View Full Note</MudButton>
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public ClinicalNote Note { get; set; } = null!;
+    [Parameter] public bool CanSign { get; set; }
+    [Parameter] public EventCallback<ClinicalNote> OnEdit { get; set; }
+    [Parameter] public EventCallback<ClinicalNote> OnDelete { get; set; }
+    [Parameter] public EventCallback<ClinicalNote> OnSign { get; set; }
+    [Parameter] public EventCallback<ClinicalNote> OnView { get; set; }
+
+    private string ViewLabel
+    {
+        get
+        {
+            var title = string.IsNullOrWhiteSpace(Note.ChiefComplaint) ? "Clinical Note" : Note.ChiefComplaint.Trim();
+            var date = ClinicTime.Format(Note.CreatedAt, "MMM dd, yyyy");
+            return $"View full note: {title}, {date}";
+        }
+    }
+
+    private static Color StatusColor(NoteStatus status) => status switch
+    {
+        NoteStatus.InProgress => Color.Warning,
+        NoteStatus.Signed => Color.Success,
+        NoteStatus.Addended => Color.Info,
+        NoteStatus.Cosigned => Color.Primary,
+        _ => Color.Default
+    };
+}

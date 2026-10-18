@@ -1,25 +1,29 @@
 @inject ILogger<ErrorHandler> Logger
 @inject NotificationService NotificationService
+@inject NavigationManager Navigation
 @using System.Diagnostics
 @using Zebrahoof_EMR.Components.Shared
 
 <CascadingValue Value="this">
-    <ErrorBoundary>
+    <ErrorBoundary @ref="_boundary">
         <ChildContent>
             @ChildContent
         </ChildContent>
-        <ErrorContent>
-            @{
-                var ex = context;
-                Logger.LogError(ex, "Unhandled error in component (PatientId: {PatientId})", 
-                    (ex.Data["PatientId"] as int?) ?? 0);
-                
-                NotificationService.ShowError($"An unexpected error occurred. Details have been logged. Correlation ID: {System.Diagnostics.Activity.Current?.Id ?? "unknown"}");
+        <ErrorContent Context="ex">
+            @if (ex is ChartNotHeldException closed)
+            {
+                <ChartClosedPanel Exception="closed" OnLeave="LeaveClosedChart" />
             }
-            <MudAlert Severity="Severity.Error" Class="my-4">
-                An error occurred. Check the logs for details (Correlation ID above).
-                <MudButton OnClick="Recover" Color="Color.Primary" Variant="Variant.Filled" Class="ml-4">Retry</MudButton>
-            </MudAlert>
+            else
+            {
+                Logger.LogError(ex, "Unhandled error in component (PatientId: {PatientId})",
+                    (ex.Data["PatientId"] as int?) ?? 0);
+                NotificationService.ShowError($"An unexpected error occurred. Details have been logged. Correlation ID: {Activity.Current?.Id ?? "unknown"}");
+                <MudAlert Severity="Severity.Error" Class="my-4">
+                    An error occurred. Check the logs for details (Correlation ID above).
+                    <MudButton OnClick="Recover" Color="Color.Primary" Variant="Variant.Filled" Class="ml-4">Retry</MudButton>
+                </MudAlert>
+            }
         </ErrorContent>
     </ErrorBoundary>
 </CascadingValue>
@@ -28,13 +32,22 @@
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
 
-    private void Recover()
+    private ErrorBoundary? _boundary;
+
+    private void Recover() => _boundary?.Recover();
+
+    private void LeaveClosedChart(ChartNotHeldException closed)
     {
-        // Trigger recovery - ErrorBoundary will re-render children
-        StateHasChanged();
+        _boundary?.Recover();
+        if (closed.OpenedPatientId is int id)
+        {
+            Navigation.NavigateTo($"/patients/{id}/summary");
+            return;
+        }
+
+        Navigation.NavigateTo("/dashboard");
     }
 
-    // Helper for components to attach context
     public static void AddPatientContext(Exception ex, int? patientId)
     {
         if (patientId.HasValue)

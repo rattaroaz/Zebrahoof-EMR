@@ -1,0 +1,376 @@
+@implements IDisposable
+@inject ActivePatientRegistry Registry
+@inject CircuitScope Circuit
+@inject AuthenticationStateProvider Auth
+@inject NavigationManager Navigation
+@inject IAuditLogger Audit
+@inject AppStateService AppState
+@inject MockPatientService PatientService
+@inject ChartEditTracker Edits
+@inject NavigationTrail Trail
+@inject PatientDialogTracker Dialogs
+@inject IJSRuntime JS
+
+@if (_phase == Phase.Closed)
+{
+    <MudPaper Class="pa-6 my-2" Elevation="2" data-testid="chart-closed">
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Filled">
+            This chart was closed because you opened @_openedElsewhere elsewhere.
+        </MudAlert>
+        <MudText Class="my-3">No chart data is open on this screen.</MudText>
+        @if (_openedElsewhereId is int openedId)
+        {
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => Navigation.NavigateTo($"/patients/{openedId}/summary"))">
+                Go to @_openedElsewhere
+            </MudButton>
+        }
+    </MudPaper>
+}
+else if (_phase == Phase.Blocked)
+{
+    <MudPaper Class="pa-6 my-2" Elevation="2" data-testid="chart-switch-prompt">
+        <MudText Typo="Typo.h6">@_blockedName is already open</MudText>
+        <MudText Class="my-3">
+            Only one patient can be open at a time. Close @_blockedName and open @_requestedName?
+        </MudText>
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+            @if (_blockedHasUnsaved)
+            {
+                <span>Unsaved work on @_blockedName will be discarded. Save it before you switch, or continue and lose those edits.</span>
+            }
+            else
+            {
+                <span>Any unsaved work on @_blockedName will be discarded.</span>
+            }
+        </MudAlert>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" data-testid="confirm-switch" OnClick="ConfirmSwitch">
+                Close @_blockedName and open @_requestedName
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" data-testid="cancel-switch" OnClick="CancelSwitch">
+                Keep @_blockedName open
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+}
+else if (_phase == Phase.Open)
+{
+    <div data-testid="patient-chart" data-patient-id="@PatientId">
+        @ChildContent
+    </div>
+}
+else
+{
+    <MudProgressLinear Indeterminate="true" Class="my-2" />
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public int PatientId { get; set; }
+
+    [Parameter]
+    public string? PatientName { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    private enum Phase { Checking, Open, Blocked, Closed }
+
+    private Phase _phase = Phase.Checking;
+    private int _claimedFor = -1;
+    private int _auditedFor = -1;
+    private string? _userId;
+    private string _requestedName = "this patient";
+    private string? _blockedName;
+    private int? _blockedPatientId;
+    private bool _blockedHasUnsaved;
+    private string _openedElsewhere = "another patient";
+    private int? _openedElsewhereId;
+    private bool _subscribed;
+    private bool _claiming;
+
+    protected override void OnInitialized()
+    {
+        Registry.ChartClosed += OnChartClosed;
+        Edits.Changed += OnEditsChanged;
+        _subscribed = true;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_claimedFor == PatientId)
+        {
+            return;
+        }
+
+        _phase = Phase.Checking;
+        SwitchSameCircuit();
+    }
+
+    /// <summary>
+    /// Runs during render, before a disposed chart releases, so A to B on this circuit is one lock.
+    /// </summary>
+    private void SwitchSameCircuit()
+    {
+        var userId = string.IsNullOrEmpty(_userId) ? Circuit.UserId : _userId;
+        if (string.IsNullOrEmpty(userId))
+        {
+            return;
+        }
+
+        _userId = userId;
+        var name = string.IsNullOrWhiteSpace(PatientName) ? $"patient {PatientId}" : PatientName!;
+        var decision = Registry.Switch(userId, Circuit.Id, PatientId, name);
+        if (decision.Status == ChartOpenStatus.Granted
+            && Edits.HasUnsavedWork
+            && Edits.PatientId is int edited
+            && edited != PatientId)
+        {
+            Edits.Discard();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_phase != Phase.Checking || _claiming)
+        {
+            return;
+        }
+
+        _claiming = true;
+        try
+        {
+            await ClaimAsync();
+        }
+        finally
+        {
+            _claiming = false;
+        }
+    }
+
+    private async Task ClaimAsync()
+    {
+        var patientId = PatientId;
+        _userId = await ChartUser.ResolveAsync(Auth);
+        if (!string.IsNullOrEmpty(_userId))
+        {
+            Circuit.UserId = _userId;
+        }
+
+        var patient = await PatientService.GetPatientByIdAsync(patientId);
+        _requestedName = !string.IsNullOrWhiteSpace(PatientName)
+            ? PatientName!
+            : patient?.FullName ?? $"patient {patientId}";
+
+        if (string.IsNullOrEmpty(_userId))
+        {
+            _phase = Phase.Open;
+            _claimedFor = patientId;
+            AppState.SelectPatient(patient);
+            await InvokeAsync(StateHasChanged);
+            await RememberOpenChartAsync();
+            return;
+        }
+
+        if (patientId != PatientId)
+        {
+            return;
+        }
+
+        var decision = Registry.Switch(_userId, Circuit.Id, patientId, _requestedName);
+        _claimedFor = patientId;
+        if (decision.Status == ChartOpenStatus.Blocked)
+        {
+            _phase = Phase.Blocked;
+            _blockedName = decision.OpenPatientName ?? "another patient";
+            _blockedPatientId = decision.OpenPatientId;
+            _blockedHasUnsaved = decision.OpenChartHasUnsavedWork;
+            AppState.SelectPatient(null);
+        }
+        else
+        {
+            _phase = Phase.Open;
+            AppState.SelectPatient(patient);
+            Registry.SetUnsaved(_userId, Circuit.Id, Edits.HasUnsavedWork);
+            if (_auditedFor != patientId)
+            {
+                _auditedFor = patientId;
+                await Audit.LogAsync("chart.view", $"patient:{patientId}", $"patientId={patientId}", _userId);
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+        if (_phase == Phase.Open)
+        {
+            await RememberOpenChartAsync();
+        }
+    }
+
+    private void ConfirmSwitch()
+    {
+        if (string.IsNullOrEmpty(_userId))
+        {
+            return;
+        }
+
+        Edits.Discard();
+        Registry.ConfirmSwitch(_userId, Circuit.Id, PatientId, _requestedName);
+        _phase = Phase.Open;
+        _ = FinishGrantedAsync();
+        _ = RememberOpenChartAsync();
+    }
+
+    private async Task FinishGrantedAsync()
+    {
+        var patient = await PatientService.GetPatientByIdAsync(PatientId);
+        AppState.SelectPatient(patient);
+        if (!string.IsNullOrEmpty(_userId))
+        {
+            Registry.SetUnsaved(_userId, Circuit.Id, Edits.HasUnsavedWork);
+            if (_auditedFor != PatientId)
+            {
+                _auditedFor = PatientId;
+                await Audit.LogAsync("chart.view", $"patient:{PatientId}", $"patientId={PatientId}", _userId);
+            }
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task CancelSwitch()
+    {
+        if (await TryReturnAsync(Trail.PreviousPath))
+        {
+            return;
+        }
+
+        string? stored = null;
+        try
+        {
+            stored = await JS.InvokeAsync<string?>("zebrahoofReadInAppPath");
+        }
+        catch (JSException)
+        {
+        }
+
+        if (await TryReturnAsync(stored))
+        {
+            return;
+        }
+
+        string? referrer = null;
+        try
+        {
+            referrer = await JS.InvokeAsync<string?>("zebrahoofSameOriginReferrer");
+        }
+        catch (JSException)
+        {
+        }
+
+        if (await TryReturnAsync(referrer))
+        {
+            return;
+        }
+
+        Navigation.NavigateTo("/dashboard");
+    }
+
+    private Task<bool> TryReturnAsync(string? path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return Task.FromResult(false);
+        }
+
+        var blockedChart = _blockedPatientId is int id
+            && path.Contains($"/patients/{id}", StringComparison.OrdinalIgnoreCase);
+        if (blockedChart)
+        {
+            return Task.FromResult(false);
+        }
+
+        Navigation.NavigateTo(path);
+        return Task.FromResult(true);
+    }
+
+    private async Task RememberOpenChartAsync()
+    {
+        var relative = NavigationTrail.ToRelative(Navigation.Uri);
+        if (!NavigationTrail.IsPatientChart(relative))
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("zebrahoofRememberInAppPath", relative);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    private void OnEditsChanged()
+    {
+        if (!string.IsNullOrEmpty(_userId))
+        {
+            Registry.SetUnsaved(_userId, Circuit.Id, Edits.HasUnsavedWork);
+        }
+    }
+
+    private void OnChartClosed(ChartClosedNotice notice)
+    {
+        if (!string.Equals(notice.UserId, _userId, StringComparison.Ordinal)
+            || !string.Equals(notice.CircuitId, Circuit.Id, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            Edits.Discard();
+            Dialogs.CloseAll();
+            StateHasChanged();
+            await Task.Yield();
+            await Task.Delay(40);
+            _phase = Phase.Closed;
+            _openedElsewhere = notice.OpenedPatientName;
+            _openedElsewhereId = notice.OpenedPatientId;
+            _claimedFor = -1;
+            AppState.SelectPatient(null);
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        if (_subscribed)
+        {
+            Registry.ChartClosed -= OnChartClosed;
+            Edits.Changed -= OnEditsChanged;
+            _subscribed = false;
+        }
+
+        var userId = string.IsNullOrEmpty(_userId) ? Circuit.UserId : _userId;
+        if (string.IsNullOrEmpty(userId) || _claimedFor <= 0)
+        {
+            return;
+        }
+
+        var circuitId = Circuit.Id;
+        var patientId = _claimedFor;
+        Registry.BeginHandoff(userId, circuitId, patientId);
+        var context = SynchronizationContext.Current;
+        if (context != null)
+        {
+            context.Post(_ => Registry.CommitHandoff(userId, circuitId, patientId), null);
+        }
+        else
+        {
+            Registry.CommitHandoff(userId, circuitId, patientId);
+        }
+    }
+}

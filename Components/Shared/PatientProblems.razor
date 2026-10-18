@@ -1,4 +1,7 @@
 @inject MockClinicalDataService ClinicalDataService
+@inject PatientDialogTracker Dialogs
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
 @implements IDisposable
 
 <MudCard Elevation="2">
@@ -12,7 +15,7 @@
                 <MudToggleItem Value="@("active")">Active</MudToggleItem>
                 <MudToggleItem Value="@("resolved")">Resolved</MudToggleItem>
             </MudToggleGroup>
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Class="ml-3">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Class="ml-3" OnClick="OpenAdd">
                 Add Problem
             </MudButton>
         </CardHeaderActions>
@@ -38,10 +41,10 @@
                 <MudTd DataLabel="Severity">@(context.Severity ?? "—")</MudTd>
                 <MudTd DataLabel="Notes">@(context.Notes ?? "—")</MudTd>
                 <MudTd>
-                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="@($"Edit {context.Name}")" OnClick="@(() => OpenEdit(context))" />
                     @if (context.Status == ProblemStatus.Active)
                     {
-                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" title="Mark Resolved" />
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" aria-label="@($"Resolve {context.Name}")" OnClick="@(() => Resolve(context))" />
                     }
                 </MudTd>
             </RowTemplate>
@@ -52,12 +55,40 @@
     </MudCardContent>
 </MudCard>
 
+<MudDialog @bind-Visible="_showDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editingName == null ? "Add Problem" : "Edit Problem")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <PatientSafetyBanner PatientId="PatientId" />
+        <MudTextField @bind-Value="_name" Label="Problem" Required="true" Class="mt-2"
+                      Error="@(_nameError != null)" ErrorText="@_nameError" Immediate="true" />
+        <MudTextField @bind-Value="_icd" Label="ICD code" Class="mt-2" />
+        <MudTextField @bind-Value="_severity" Label="Severity" Class="mt-2" />
+        <MudTextField @bind-Value="_notes" Label="Notes" Lines="2" Class="mt-2" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     [Parameter, EditorRequired]
     public int PatientId { get; set; }
 
     private List<Problem> _problems = new();
     private string _statusFilter = "active";
+    private bool _showDialog;
+    private string? _editingName;
+    private string _name = string.Empty;
+    private string? _nameError;
+    private string? _icd;
+    private string? _severity;
+    private string? _notes;
+    private IDisposable? _dialogLease;
+
+    protected override void OnInitialized() => _dialogLease = Dialogs.TrackInline(CloseDialog);
 
     private IEnumerable<Problem> FilteredProblems => _statusFilter switch
     {
@@ -83,6 +114,89 @@
     public void Dispose()
     {
         ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        _dialogLease?.Dispose();
+    }
+
+    private void CloseDialog() => _showDialog = false;
+
+    private void OpenAdd()
+    {
+        _editingName = null;
+        _name = string.Empty;
+        _nameError = null;
+        _icd = null;
+        _severity = null;
+        _notes = null;
+        _showDialog = true;
+    }
+
+    private void OpenEdit(Problem problem)
+    {
+        _editingName = problem.Name;
+        _name = problem.Name;
+        _nameError = null;
+        _icd = problem.IcdCode;
+        _severity = problem.Severity;
+        _notes = problem.Notes;
+        _showDialog = true;
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _nameError = "Enter the problem.";
+            return;
+        }
+
+        _nameError = null;
+
+        if (_editingName != null)
+        {
+            await ClinicalDataService.UpdateProblemAsync(PatientId, _editingName, problem =>
+            {
+                problem.Name = _name.Trim();
+                problem.IcdCode = _icd;
+                problem.Severity = _severity;
+                problem.Notes = _notes;
+            });
+        }
+        else
+        {
+            await ClinicalDataService.AddProblemAsync(new Problem
+            {
+                PatientId = PatientId,
+                Name = _name.Trim(),
+                IcdCode = _icd,
+                Severity = _severity,
+                Notes = _notes,
+                Status = ProblemStatus.Active,
+                OnsetDate = DateTime.Today
+            });
+        }
+
+        CloseDialog();
+        Snackbar.Add("Problem saved", Severity.Success);
+    }
+
+    private async Task Resolve(Problem problem)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Resolve problem",
+            $"Mark {problem.Name} as resolved? It stays on the chart with a resolved status.",
+            yesText: "Resolve",
+            cancelText: "Cancel");
+        if (confirmed != true)
+        {
+            return;
+        }
+
+        await ClinicalDataService.UpdateProblemAsync(PatientId, problem.Name, item =>
+        {
+            item.Status = ProblemStatus.Resolved;
+            item.ResolvedDate = DateTime.Today;
+        });
+        Snackbar.Add($"{problem.Name} resolved", Severity.Success);
     }
 
     private Color GetStatusColor(ProblemStatus status) => status switch

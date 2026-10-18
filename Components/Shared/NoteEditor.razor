@@ -40,9 +40,9 @@
                 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-1">
                     <MudText Typo="Typo.subtitle2">History of Present Illness (HPI)</MudText>
                     <MudButtonGroup Variant="Variant.Text" Size="Size.Small">
-                        <MudIconButton Icon="@Icons.Material.Filled.FormatBold" Size="Size.Small" />
-                        <MudIconButton Icon="@Icons.Material.Filled.FormatItalic" Size="Size.Small" />
-                        <MudIconButton Icon="@Icons.Material.Filled.FormatListBulleted" Size="Size.Small" />
+                        <MudIconButton Icon="@Icons.Material.Filled.FormatBold" Size="Size.Small" aria-label="Bold" />
+                        <MudIconButton Icon="@Icons.Material.Filled.FormatItalic" Size="Size.Small" aria-label="Italic" />
+                        <MudIconButton Icon="@Icons.Material.Filled.FormatListBulleted" Size="Size.Small" aria-label="Bulleted list" />
                     </MudButtonGroup>
                 </MudStack>
                 <MudTextField @bind-Value="Note.HistoryOfPresentIllness"

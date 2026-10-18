@@ -167,7 +167,7 @@ else
                                     <MudListItem Dense="true">
                                         <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
                                             <MudText Typo="Typo.body2">@order</MudText>
-                                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" />
+                                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" Color="Color.Error" aria-label="@($"Remove pending order {order}")" />
                                         </MudStack>
                                     </MudListItem>
                                 }
@@ -183,7 +183,7 @@ else
                             <MudText Typo="Typo.subtitle2">Latest Vitals</MudText>
                         </CardHeaderContent>
                         <CardHeaderActions>
-                            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" aria-label="Record vitals" />
                         </CardHeaderActions>
                     </MudCardHeader>
                     <MudCardContent>
@@ -229,7 +229,7 @@ else
                                 <MudListItem Dense="true" OnClick="@(() => Navigation.NavigateTo($"/encounter/{enc.Id}"))">
                                     <div>
                                         <MudText Typo="Typo.body2">@enc.VisitType</MudText>
-                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">@enc.DateTime.ToString("MM/dd/yyyy")</MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary prior-note-text">@enc.DateTime.ToString("MM/dd/yyyy")</MudText>
                                     </div>
                                 </MudListItem>
                             }

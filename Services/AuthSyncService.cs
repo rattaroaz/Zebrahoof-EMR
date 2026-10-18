@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Logging;
 using Zebrahoof_EMR.Models;
@@ -21,6 +22,31 @@ public class AuthSyncService
         _userMappingService = userMappingService;
         _authStateService = authStateService;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Copies the circuit's authenticated principal into this circuit's auth state.
+    /// Each circuit has its own <see cref="AuthStateService"/>, so one login cannot
+    /// replace another session's user.
+    /// </summary>
+    public async Task BindCircuitAsync(ClaimsPrincipal principal)
+    {
+        if (principal.Identity?.IsAuthenticated != true || string.IsNullOrWhiteSpace(principal.Identity.Name))
+        {
+            if (_authStateService.IsAuthenticated)
+            {
+                _authStateService.Logout();
+            }
+
+            return;
+        }
+
+        if (string.Equals(_authStateService.CurrentUser?.Username, principal.Identity.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        await SyncUserAuthenticationAsync(principal.Identity.Name);
     }
 
     public async Task<bool> SyncUserAuthenticationAsync(string username)

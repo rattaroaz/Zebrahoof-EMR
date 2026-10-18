@@ -6,6 +6,11 @@
 @inject NavigationManager Navigation
 @inject MockClinicalDataService ClinicalData
 @inject DashboardAskSession DashboardAskSession
+@inject AskAiCoordinator AskAi
+@inject NavigationTrail Trail
+@inject AuthenticationStateProvider AuthenticationState
+@inject AuthSyncService AuthSync
+@inject IJSRuntime JS
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -14,11 +19,16 @@
 
 <MudLayout>
         <MudAppBar Elevation="1" Dense="true" Color="Color.Surface">
-            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@ToggleDrawer" />
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" aria-label="Open navigation" OnClick="@ToggleDrawer" />
             <MudImage Src="images/logo.svg" Alt="Zebrahoof EMR" Height="32" Class="mr-2" />
-            <MudText Typo="Typo.h6" Class="mr-4">Zebrahoof EMR</MudText>
+            <MudText Typo="Typo.h6" Class="mr-4 app-wordmark">Zebrahoof EMR</MudText>
             
             <GlobalSearch />
+
+            <MudButton Variant="Variant.Text" Color="Color.Inherit" StartIcon="@Icons.Material.Filled.AutoAwesome"
+                       Class="ml-2 ask-ai-appbar" aria-label="Ask AI" OnClick="AskAi.RequestOpen">
+                Ask AI
+            </MudButton>
             
             <MudSpacer />
             
@@ -49,12 +59,13 @@
             </MudMenu>
             
             <MudBadge Content="@_unreadMessages" Color="Color.Error" Overlap="true" Visible="@(_unreadMessages > 0)" Class="mx-2">
-                <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" Href="/inbox" />
+                <MudIconButton Icon="@Icons.Material.Filled.Notifications" Color="Color.Inherit" Href="/inbox" aria-label="Inbox notifications" />
             </MudBadge>
             
             <MudIconButton Icon="@(_isDarkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)" 
                            Color="Color.Inherit" 
                            OnClick="@ToggleDarkMode" 
+                           aria-label="@(_isDarkMode ? "Switch to light mode" : "Switch to dark mode")"
                            title="@(_isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode")" />
             
             <ProfileMenu />
@@ -64,8 +75,8 @@
             <NavMenu />
         </MudDrawer>
         
-        <MudMainContent Class="pt-16">
-            <MudContainer MaxWidth="MaxWidth.False" Class="pa-4">
+        <MudMainContent Class="chart-main">
+            <MudContainer MaxWidth="MaxWidth.False" Class="pa-3">
                 <Breadcrumbs />
                 @Body
             </MudContainer>
@@ -95,18 +106,26 @@
     {
         PaletteLight = new PaletteLight()
         {
-            Primary = "#1976D2",
-            Secondary = "#00796B",
+            Primary = "#0D47A1",
+            Secondary = "#00695C",
+            Tertiary = "#004D40",
+            TertiaryContrastText = "#FFFFFF",
+            TextPrimary = "#212121",
+            TextSecondary = "#424242",
             AppbarBackground = "#FFFFFF",
             AppbarText = "#424242",
             Background = "#F5F5F5",
             Surface = "#FFFFFF",
             DrawerBackground = "#FFFFFF",
             DrawerText = "#424242",
-            Success = "#4CAF50",
-            Warning = "#FF9800",
-            Error = "#F44336",
-            Info = "#2196F3"
+            Success = "#2E7D32",
+            SuccessContrastText = "#FFFFFF",
+            Warning = "#9A3412",
+            WarningContrastText = "#FFFFFF",
+            Error = "#B71C1C",
+            ErrorContrastText = "#FFFFFF",
+            Info = "#1565C0",
+            InfoContrastText = "#FFFFFF"
         },
         PaletteDark = new PaletteDark()
         {
@@ -118,10 +137,14 @@
             Surface = "#1E1E1E",
             DrawerBackground = "#1E1E1E",
             DrawerText = "#FFFFFF",
-            Success = "#81C784",
-            Warning = "#FFB74D",
-            Error = "#E57373",
-            Info = "#64B5F6"
+            Success = "#2E7D32",
+            SuccessContrastText = "#FFFFFF",
+            Warning = "#9A3412",
+            WarningContrastText = "#FFFFFF",
+            Error = "#B71C1C",
+            ErrorContrastText = "#FFFFFF",
+            Info = "#1565C0",
+            InfoContrastText = "#FFFFFF"
         },
         Typography = new Typography()
         {
@@ -135,11 +158,23 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _ = Trail.PreviousPath;
+        var state = await AuthenticationState.GetAuthenticationStateAsync();
+        await AuthSync.BindCircuitAsync(state.User);
+        AuthenticationState.AuthenticationStateChanged += OnAuthenticationChanged;
         AuthState.OnAuthStateChanged += OnStateChangedHandler;
         AppState.OnStateChanged += OnStateChangedHandler;
         ClinicalData.InboxChanged += OnInboxDataChanged;
         Navigation.LocationChanged += OnLocationChanged;
         await RefreshUnreadMessageCountAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await RememberInAppPathAsync(Navigation.Uri);
+        }
     }
 
     private void OnInboxDataChanged() => _ = InboxUpdateAsync();
@@ -160,11 +195,42 @@
             DashboardAskSession.IsOpen = false;
         }
 
-        _ = InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(async () =>
+        {
+            await RememberInAppPathAsync(e.Location);
+            StateHasChanged();
+        });
+    }
+
+    private async Task RememberInAppPathAsync(string uri)
+    {
+        var relative = NavigationTrail.ToRelative(uri);
+        if (NavigationTrail.IsPatientChart(relative))
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("zebrahoofRememberInAppPath", relative);
+        }
+        catch (InvalidOperationException)
+        {
+        }
+        catch (JSException)
+        {
+        }
     }
 
     private async void OnStateChangedHandler()
     {
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async void OnAuthenticationChanged(Task<AuthenticationState> task)
+    {
+        var state = await task;
+        await AuthSync.BindCircuitAsync(state.User);
         await InvokeAsync(StateHasChanged);
     }
 
@@ -184,6 +250,7 @@
 
     public void Dispose()
     {
+        AuthenticationState.AuthenticationStateChanged -= OnAuthenticationChanged;
         AuthState.OnAuthStateChanged -= OnStateChangedHandler;
         AppState.OnStateChanged -= OnStateChangedHandler;
         ClinicalData.InboxChanged -= OnInboxDataChanged;
