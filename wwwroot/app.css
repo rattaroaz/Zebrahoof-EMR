@@ -563,7 +563,7 @@ textarea:focus-visible,
 
 .profile-menu-btn {
     min-width: 0;
-    max-width: 16rem;
+    flex-shrink: 0;
 }
 
 .profile-menu-btn .mud-button-label {
@@ -572,21 +572,32 @@ textarea:focus-visible,
 
 .profile-identity {
     min-width: 0;
-    max-width: 9.5rem;
-    overflow: hidden;
 }
 
 .profile-name,
 .profile-role {
     display: block;
-    max-width: 9.5rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
     line-height: 1.25;
 }
 
 @media (max-width: 1024px) {
+    .profile-menu-btn {
+        max-width: 16rem;
+    }
+
+    .profile-identity {
+        max-width: 9.5rem;
+        overflow: hidden;
+    }
+
+    .profile-name,
+    .profile-role {
+        max-width: 9.5rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     .profile-role {
         display: none !important;
     }
