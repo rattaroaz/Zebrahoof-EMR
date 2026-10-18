@@ -1,6 +1,7 @@
 @inject MockClinicalDataService ClinicalDataService
 @inject MockPatientService PatientService
 @inject IDialogService DialogService
+@inject OpenChartView ChartView
 @implements IDisposable
 
 <MudCard Elevation="2">
@@ -87,19 +88,39 @@
     {
         ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
         ClinicalDataService.PatientDataChanged += OnPatientDataChanged;
+        ChartView.Changed -= OnChartViewChanged;
+        ChartView.Changed += OnChartViewChanged;
+        await LoadLabsAsync();
+    }
+
+    private void OnChartViewChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadLabsAsync();
+        StateHasChanged();
+    });
+
+    private async Task LoadLabsAsync()
+    {
+        if (ChartView.Snapshot is { } snap && snap.PatientId == PatientId)
+        {
+            _labResults = snap.Labs.ToList();
+            return;
+        }
+
         _labResults = await ClinicalDataService.GetLabResultsByPatientAsync(PatientId);
     }
 
     private async void OnPatientDataChanged(int patientId)
     {
         if (patientId != PatientId) return;
-        _labResults = await ClinicalDataService.GetLabResultsByPatientAsync(PatientId);
+        await LoadLabsAsync();
         await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
     {
         ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        ChartView.Changed -= OnChartViewChanged;
     }
 
     private async Task OpenOrderDialog(OrderCatalogFilter filter)

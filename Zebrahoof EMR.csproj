@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Zebrahoof_EMR</RootNamespace>
-    <Version>0.4.1</Version>
+    <Version>0.4.2</Version>
     <AssemblyName>$(AssemblyName.Replace(' ', '_'))</AssemblyName>
     <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
     <!-- Web SDK globs the project tree as Content. Exclude generated/test output so

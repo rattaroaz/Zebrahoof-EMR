@@ -119,6 +119,7 @@ builder.Services.ConfigureApplicationCookie(options =>
                     authLog?.LogWarning(
                         "Cookie principal rejected: absolute session maximum (12h) exceeded for user id {UserId}",
                         context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
+                    context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
                     context.RejectPrincipal();
                     await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
                     return;
@@ -136,6 +137,7 @@ builder.Services.ConfigureApplicationCookie(options =>
                         "Cookie principal rejected: idle timeout ({IdleMinutes}m) exceeded for user id {UserId}",
                         idleWindow.TotalMinutes,
                         context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
+                    context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
                     context.RejectPrincipal();
                     await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
                     return;
@@ -211,7 +213,6 @@ builder.Services.AddRazorComponents()
 builder.Services.AddScoped<AuthStateService>();
 builder.Services.AddScoped<AppStateService>();
 builder.Services.Configure<ChartLockOptions>(builder.Configuration.GetSection(ChartLockOptions.Section));
-builder.Services.AddSingleton<TimeProvider>(_ => TimeProvider.System);
 builder.Services.AddSingleton(sp => new ActivePatientRegistry(
     sp.GetRequiredService<TimeProvider>(),
     sp.GetRequiredService<IOptions<ChartLockOptions>>().Value.DisconnectGraceSeconds));
@@ -222,6 +223,13 @@ builder.Services.AddScoped<ChartEditTracker>();
 builder.Services.AddScoped<NavigationTrail>();
 builder.Services.AddScoped<PatientDialogTracker>();
 builder.Services.AddScoped<AskAiCoordinator>();
+builder.Services.Configure<ChartCacheOptions>(builder.Configuration.GetSection(ChartCacheOptions.SectionName));
+builder.Services.AddSingleton<IPatientChartLoader, ClinicalChartLoader>();
+builder.Services.AddSingleton<PatientChartCache>();
+builder.Services.AddSingleton<ClinicSignOut>();
+builder.Services.AddScoped<OpenChartView>();
+builder.Services.AddScoped<OpenChartRefresher>();
+builder.Services.AddHostedService<PatientChartCacheMaintenance>();
 builder.Services.AddSingleton<NotificationService>();
 builder.Services.AddScoped<StickyNoteService>();
 builder.Services.AddScoped<PatientStickyNoteService>();

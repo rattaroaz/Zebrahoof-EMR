@@ -501,6 +501,8 @@ public class MockClinicalDataService
             {
                 medication = existingMed;
             }
+
+            NotifyPatientDataChanged(patientId);
         }
         
         // Create the prescription record
@@ -595,6 +597,7 @@ public class MockClinicalDataService
         };
         _medications.Add(medication);
         PersistAdd(medication);
+        NotifyPatientDataChanged(patientId);
         return Task.FromResult(medication);
     }
 
@@ -631,6 +634,7 @@ public class MockClinicalDataService
 
         if (await PersistMedicationUpdateAsync(medication))
         {
+            NotifyPatientDataChanged(medication.PatientId);
             return medication;
         }
 
@@ -656,6 +660,7 @@ public class MockClinicalDataService
             medication.Status = MedicationStatus.Discontinued;
             medication.EndDate = DateTime.Today;
             PersistUpdate(medication);
+            NotifyPatientDataChanged(medication.PatientId);
         }
         return Task.CompletedTask;
     }
@@ -969,6 +974,7 @@ public class MockClinicalDataService
         note.CreatedAt = DateTime.UtcNow;
         _notes.Add(note);
         PersistAdd(note);
+        NotifyPatientDataChanged(note.PatientId);
         return Task.FromResult(note);
     }
 
@@ -987,6 +993,7 @@ public class MockClinicalDataService
             existingNote.Status = note.Status;
             existingNote.SignedAt = note.SignedAt;
             PersistUpdate(existingNote);
+            NotifyPatientDataChanged(note.PatientId);
         }
         return Task.FromResult(note);
     }
@@ -999,6 +1006,7 @@ public class MockClinicalDataService
             RequireChart(note.PatientId);
             _notes.Remove(note);
             PersistRemove(note);
+            NotifyPatientDataChanged(note.PatientId);
             return Task.FromResult(true);
         }
         return Task.FromResult(false);
@@ -2251,4 +2259,132 @@ public class MockClinicalDataService
             new() { Type = OrderType.Imaging, Name = "ECG", Details = "Baseline cardiac" }
         ], CreatedBy = "Dr. Sarah Smith", CreatedAt = DateTime.Today.AddMonths(-5), IsShared = true, IsActive = true }
     ];
+
+    /// <summary>
+    /// Appends years of visits for a timing run. Not part of the shipped demo seed.
+    /// </summary>
+    public (int Notes, int Labs, int Vitals, int Medications, int Encounters) SeedLongitudinalChart(int patientId, int years)
+    {
+        var already = _notes.Count(n => n.PatientId == patientId && n.Id >= 800_000);
+        if (already > 0)
+        {
+            return (
+                already,
+                _labResults.Count(l => l.PatientId == patientId && l.Id >= 1_000_000),
+                _vitals.Count(v => v.PatientId == patientId && v.Id >= 800_000),
+                _medications.Count(m => m.PatientId == patientId && m.Id >= 700_000),
+                _encounters.Count(e => e.PatientId == patientId && e.Id >= 800_000));
+        }
+
+        var start = new DateTime(2019, 1, 7, 14, 30, 0, DateTimeKind.Utc);
+        var end = start.AddYears(years);
+        var labNames = new[]
+        {
+            "WBC", "RBC", "Hemoglobin", "Hematocrit", "Platelets", "MCV", "MCH", "MCHC",
+            "Sodium", "Potassium", "Chloride", "CO2", "BUN", "Creatinine", "Glucose", "Calcium",
+            "AST", "ALT", "Alkaline Phosphatase", "Total Bilirubin", "Albumin", "Total Protein"
+        };
+        var notes = 0;
+        var labs = 0;
+        var vitals = 0;
+        var encounters = 0;
+        var visit = 0;
+        for (var day = start; day < end; day = day.AddDays(14))
+        {
+            visit++;
+            var idBase = 800_000 + visit;
+            _encounters.Add(new Encounter
+            {
+                Id = idBase,
+                PatientId = patientId,
+                PatientName = "Benchmark",
+                DateTime = day,
+                VisitType = "Follow-up",
+                Provider = "Dr. Sarah Smith",
+                Location = "Primary Care",
+                Status = EncounterStatus.Signed,
+                ChiefComplaint = "Hypertension follow-up"
+            });
+            encounters++;
+            _notes.Add(new ClinicalNote
+            {
+                Id = idBase,
+                EncounterId = idBase,
+                PatientId = patientId,
+                AuthorName = "Dr. Sarah Smith",
+                CreatedAt = day,
+                SignedAt = day.AddMinutes(20),
+                Status = NoteStatus.Signed,
+                ChiefComplaint = "Hypertension follow-up",
+                HistoryOfPresentIllness = $"Visit {visit} on {day:yyyy-MM-dd}. Blood pressure reviewed. No chest pain.",
+                Assessment = "Essential hypertension, controlled.",
+                Plan = "Continue lisinopril. Return in two weeks."
+            });
+            notes++;
+            _vitals.Add(new VitalSigns
+            {
+                Id = idBase,
+                PatientId = patientId,
+                EncounterId = idBase,
+                RecordedAt = day,
+                RecordedBy = "MA",
+                Temperature = 98.4m,
+                SystolicBP = 128,
+                DiastolicBP = 78,
+                HeartRate = 72,
+                RespiratoryRate = 16,
+                OxygenSaturation = 98,
+                Weight = 180,
+                Height = 68
+            });
+            vitals++;
+            foreach (var name in labNames)
+            {
+                _labResults.Add(new LabResult
+                {
+                    Id = 1_000_000 + labs,
+                    PatientId = patientId,
+                    TestName = name,
+                    PanelName = name is "WBC" or "Hemoglobin" or "Platelets" ? "CBC" : "CMP",
+                    Value = "1",
+                    Units = "see panel",
+                    ReferenceRange = "normal",
+                    Status = LabResultStatus.Final,
+                    CollectedAt = day,
+                    ResultedAt = day.AddHours(4)
+                });
+                labs++;
+            }
+        }
+
+        var medNames = new[] { "Lisinopril", "Atorvastatin", "Metformin", "Amlodipine", "Hydrochlorothiazide", "Levothyroxine", "Omeprazole", "Aspirin", "Vitamin D", "Sertraline" };
+        var addedMeds = 0;
+        foreach (var name in medNames)
+        {
+            var alreadyListed = _medications.Any(med =>
+                med.PatientId == patientId
+                && string.Equals(med.Name, name, StringComparison.OrdinalIgnoreCase));
+            if (alreadyListed)
+            {
+                continue;
+            }
+
+            _medications.Add(new Medication
+            {
+                Id = 700_000 + _medications.Count,
+                PatientId = patientId,
+                Name = name,
+                Dose = "10 mg",
+                Route = "Oral",
+                Frequency = "Daily",
+                StartDate = start,
+                Status = MedicationStatus.Active,
+                IsLongTerm = true,
+                Prescriber = "Dr. Sarah Smith"
+            });
+            addedMeds++;
+        }
+
+        return (notes, labs, vitals, addedMeds, encounters);
+    }
 }

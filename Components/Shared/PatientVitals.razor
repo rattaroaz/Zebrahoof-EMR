@@ -2,6 +2,7 @@
 @inject PatientDialogTracker Dialogs
 @inject ISnackbar Snackbar
 @inject AuthStateService AuthState
+@inject OpenChartView ChartView
 @implements IDisposable
 
 <MudCard Elevation="2">
@@ -111,10 +112,33 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        ChartView.Changed -= OnChartViewChanged;
+        ChartView.Changed += OnChartViewChanged;
+        await LoadVitalsAsync();
+    }
+
+    private void OnChartViewChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadVitalsAsync();
+        StateHasChanged();
+    });
+
+    private async Task LoadVitalsAsync()
+    {
+        if (ChartView.Snapshot is { } snap && snap.PatientId == PatientId)
+        {
+            _vitals = snap.Vitals.ToList();
+            return;
+        }
+
         _vitals = await ClinicalDataService.GetVitalsByPatientAsync(PatientId);
     }
 
-    public void Dispose() => _dialogLease?.Dispose();
+    public void Dispose()
+    {
+        ChartView.Changed -= OnChartViewChanged;
+        _dialogLease?.Dispose();
+    }
 
     private void CloseDialog() => _showDialog = false;
 

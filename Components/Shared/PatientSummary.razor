@@ -8,6 +8,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject ILogger<PatientSummary> Logger
+@inject OpenChartView ChartView
 @implements IDisposable
 
 <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2" Class="mb-3">
@@ -135,7 +136,14 @@ else
     protected override void OnInitialized()
     {
         ClinicalDataService.PatientDataChanged += OnPatientDataChanged;
+        ChartView.Changed += OnChartViewChanged;
     }
+
+    private void OnChartViewChanged() => _ = InvokeAsync(async () =>
+    {
+        await ApplyChartAsync();
+        StateHasChanged();
+    });
 
     private async void OnPatientDataChanged(int patientId)
     {
@@ -151,22 +159,44 @@ else
         });
     }
 
-    protected override async Task OnParametersSetAsync()
+    protected override Task OnParametersSetAsync() => ApplyChartAsync();
+
+    private async Task ApplyChartAsync()
     {
-        _problems = await ClinicalDataService.GetActiveProblemsByPatientAsync(PatientId);
-        _medications = await ClinicalDataService.GetMedicationListAsync(PatientId);
-        _allergies = await ClinicalDataService.GetActiveAllergiesByPatientAsync(PatientId);
-        _labs = await ClinicalDataService.GetRecentLabResultsByPatientAsync(PatientId, 5);
-        _vitals = await ClinicalDataService.GetVitalsByPatientAsync(PatientId);
+        if (ChartView.Snapshot is { } snap && snap.PatientId == PatientId)
+        {
+            _problems = snap.Problems.Where(p => p.Status == ProblemStatus.Active).ToList();
+            _medications = snap.Medications.Where(m => m.IsLongTerm && m.Status == MedicationStatus.Active).ToList();
+            _allergies = snap.Allergies.Where(a => a.Status == AllergyStatus.Active).ToList();
+            _labs = snap.Labs.OrderByDescending(l => l.CollectedAt).Take(5).ToList();
+            _vitals = snap.Vitals.OrderByDescending(v => v.RecordedAt).ToList();
+            _encounters = snap.Encounters.ToList();
+            _riskScores = snap.RiskScores.ToList();
+            _orders = snap.Orders.ToList();
+            _imaging = snap.Imaging.ToList();
+            _immunizations = snap.Immunizations.ToList();
+            _notes = snap.Notes.ToList();
+            _careTeam = snap.CareTeam.ToList();
+            _patient = snap.Patient;
+        }
+        else
+        {
+            _problems = await ClinicalDataService.GetActiveProblemsByPatientAsync(PatientId);
+            _medications = await ClinicalDataService.GetMedicationListAsync(PatientId);
+            _allergies = await ClinicalDataService.GetActiveAllergiesByPatientAsync(PatientId);
+            _labs = await ClinicalDataService.GetRecentLabResultsByPatientAsync(PatientId, 5);
+            _vitals = await ClinicalDataService.GetVitalsByPatientAsync(PatientId);
+            _encounters = await ClinicalDataService.GetEncountersByPatientAsync(PatientId);
+            _riskScores = await ClinicalDataService.GetRiskScoresByPatientAsync(PatientId);
+            _orders = await ClinicalDataService.GetSimulatedOrdersByPatientAsync(PatientId);
+            _imaging = await ClinicalDataService.GetImagingByPatientAsync(PatientId);
+            _immunizations = await ClinicalDataService.GetImmunizationsByPatientAsync(PatientId);
+            _notes = await ClinicalDataService.GetPatientNotesAsync(PatientId);
+            _careTeam = await ClinicalDataService.GetCareTeamByPatientAsync(PatientId);
+            _patient = await PatientService.GetPatientByIdAsync(PatientId);
+        }
+
         ProjectVitals();
-        _encounters = await ClinicalDataService.GetEncountersByPatientAsync(PatientId);
-        _riskScores = await ClinicalDataService.GetRiskScoresByPatientAsync(PatientId);
-        _orders = await ClinicalDataService.GetSimulatedOrdersByPatientAsync(PatientId);
-        _imaging = await ClinicalDataService.GetImagingByPatientAsync(PatientId);
-        _immunizations = await ClinicalDataService.GetImmunizationsByPatientAsync(PatientId);
-        _notes = await ClinicalDataService.GetPatientNotesAsync(PatientId);
-        _careTeam = await ClinicalDataService.GetCareTeamByPatientAsync(PatientId);
-        _patient = await PatientService.GetPatientByIdAsync(PatientId);
         try
         {
             _documents = await Db.Documents
@@ -276,6 +306,7 @@ else
     public void Dispose()
     {
         ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        ChartView.Changed -= OnChartViewChanged;
         _ = JS.InvokeVoidAsync("summaryWindowDrag.detach");
         _jsRef?.Dispose();
     }

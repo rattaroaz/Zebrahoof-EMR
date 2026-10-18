@@ -1,8 +1,10 @@
 @inject MockClinicalDataService ClinicalDataService
+@inject OpenChartView ChartView
 @inject AuthStateService AuthState
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>Clinical Notes - Zebrahoof EMR</PageTitle>
 
@@ -101,11 +103,26 @@
 
     protected override async Task OnInitializedAsync()
     {
+        ChartView.Changed += OnChartViewChanged;
         await LoadNotes();
     }
 
+    private void OnChartViewChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadNotes();
+        StateHasChanged();
+    });
+
+    public void Dispose() => ChartView.Changed -= OnChartViewChanged;
+
     private async Task LoadNotes()
     {
+        if (ChartView.Snapshot is { } snap && snap.PatientId == PatientId)
+        {
+            _notes = snap.Notes.OrderByDescending(note => note.CreatedAt).ToList();
+            return;
+        }
+
         var notes = await ClinicalDataService.GetPatientNotesAsync(PatientId);
         _notes = notes.OrderByDescending(note => note.CreatedAt).ToList();
     }

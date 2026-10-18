@@ -2,6 +2,7 @@
 @inject PatientDialogTracker Dialogs
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject OpenChartView ChartView
 @implements IDisposable
 
 <MudCard Elevation="2">
@@ -102,19 +103,39 @@
     {
         ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
         ClinicalDataService.PatientDataChanged += OnPatientDataChanged;
+        ChartView.Changed -= OnChartViewChanged;
+        ChartView.Changed += OnChartViewChanged;
+        await LoadAllergiesAsync();
+    }
+
+    private void OnChartViewChanged() => _ = InvokeAsync(async () =>
+    {
+        await LoadAllergiesAsync();
+        StateHasChanged();
+    });
+
+    private async Task LoadAllergiesAsync()
+    {
+        if (ChartView.Snapshot is { } snap && snap.PatientId == PatientId)
+        {
+            _allergies = snap.Allergies.ToList();
+            return;
+        }
+
         _allergies = await ClinicalDataService.GetAllergiesByPatientAsync(PatientId);
     }
 
     private async void OnPatientDataChanged(int patientId)
     {
         if (patientId != PatientId) return;
-        _allergies = await ClinicalDataService.GetAllergiesByPatientAsync(PatientId);
+        await LoadAllergiesAsync();
         await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
     {
         ClinicalDataService.PatientDataChanged -= OnPatientDataChanged;
+        ChartView.Changed -= OnChartViewChanged;
         _dialogLease?.Dispose();
     }
 
