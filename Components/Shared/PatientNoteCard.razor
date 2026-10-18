@@ -47,12 +47,12 @@
             <MudText Typo="Typo.body2">
                 @if (!string.IsNullOrEmpty(Note.Assessment))
                 {
-                    <strong>Assessment:</strong> @(Note.Assessment.Length > 100 ? Note.Assessment.Substring(0, 100) + "..." : Note.Assessment)
+                    <strong>Assessment: </strong>@(Note.Assessment.Length > 100 ? Note.Assessment.Substring(0, 100) + "..." : Note.Assessment)
                 }
                 @if (!string.IsNullOrEmpty(Note.Plan))
                 {
                     <br />
-                    <strong>Plan:</strong> @(Note.Plan.Length > 100 ? Note.Plan.Substring(0, 100) + "..." : Note.Plan)
+                    <strong>Plan: </strong>@(Note.Plan.Length > 100 ? Note.Plan.Substring(0, 100) + "..." : Note.Plan)
                 }
             </MudText>
         }

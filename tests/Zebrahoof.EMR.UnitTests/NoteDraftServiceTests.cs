@@ -40,6 +40,35 @@ public class NoteDraftServiceTests
         Assert.Null(drafts.Get("physician", 2));
     }
 
+    [Fact]
+    public void ExplicitSignOut_RejectsASaveFromTheOlderEpoch()
+    {
+        var drafts = new NoteDraftService();
+        var epoch = drafts.CurrentEpoch("physician");
+        Assert.True(drafts.TrySave("physician", 2, new NoteDraft { ChiefComplaint = "open" }, epoch));
+
+        drafts.SignOut("physician");
+
+        Assert.False(drafts.TrySave("physician", 2, new NoteDraft { ChiefComplaint = "written back" }, epoch));
+        Assert.Null(drafts.Get("physician", 2));
+        Assert.True(drafts.TrySave("physician", 2, new NoteDraft { ChiefComplaint = "after" }, drafts.CurrentEpoch("physician")));
+        Assert.Equal("after", drafts.Get("physician", 2)!.ChiefComplaint);
+    }
+
+    [Fact]
+    public void Sweep_RemovesDraftsOlderThanTwentyFourHours()
+    {
+        var clock = new MutableClock(new DateTimeOffset(2026, 10, 18, 12, 0, 0, TimeSpan.Zero));
+        var drafts = new NoteDraftService(clock);
+        drafts.Save("physician", 2, new NoteDraft { ChiefComplaint = "old" });
+        clock.UtcNow = clock.UtcNow.AddHours(24);
+        drafts.Save("nurse", 3, new NoteDraft { ChiefComplaint = "fresh" });
+
+        Assert.Equal(1, drafts.Sweep());
+        Assert.Null(drafts.Get("physician", 2));
+        Assert.Equal("fresh", drafts.Get("nurse", 3)!.ChiefComplaint);
+    }
+
     private sealed class MutableClock : TimeProvider
     {
         public MutableClock(DateTimeOffset utcNow) => UtcNow = utcNow;

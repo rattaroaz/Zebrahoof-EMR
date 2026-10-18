@@ -29,6 +29,18 @@ public class SessionHub : Hub
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, sessionId.ToString());
+        var userName = Context.User?.Identity?.Name;
+        var userId = Context.User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (!string.IsNullOrWhiteSpace(userName))
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, SignOutChannel.Group(userName));
+        }
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            await Groups.AddToGroupAsync(Context.ConnectionId, SignOutChannel.Group(userId));
+        }
+
         _logger.LogDebug("SignalR connected: session {SessionId} connection {ConnectionId}", sessionId, Context.ConnectionId);
         await base.OnConnectedAsync();
     }

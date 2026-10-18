@@ -80,10 +80,25 @@ window.sessionMonitor = (function () {
             invokeDotNet("OnIdleTimeUpdate", idleSeconds, absoluteSeconds);
         });
 
+        connection.on("SignedOut", function () {
+            var initiatedHere = false;
+            try {
+                initiatedHere = sessionStorage.getItem("zebrahoof.signingOut") === "1";
+            } catch (err) {
+                initiatedHere = false;
+            }
+            invokeDotNet("OnSignedOut").finally(function () {
+                if (initiatedHere || location.pathname === "/logout" || location.pathname === "/login") {
+                    return;
+                }
+                window.location.replace("/login");
+            });
+        });
+
         connection.on("ForceLogout", async function (message) {
-            await invokeDotNet("OnForceLogout", message || "Session ended");
+            await invokeDotNet("OnForceLogout", message || "Session expired");
             await stop();
-            window.location.href = "/account/logout";
+            window.location.replace("/account/logout?reason=idle");
         });
 
         connection.onclose(function () {

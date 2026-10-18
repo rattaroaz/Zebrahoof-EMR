@@ -40,8 +40,10 @@ public class ChartSignOutAndBenchmarkTests
 
         signOut.ForgetCharts(physician);
 
-        Assert.Null(drafts.Get("physician", 2));
+        Assert.Equal("kept", drafts.Get("physician", 2)!.ChiefComplaint);
         Assert.Equal("other", drafts.Get("nurse", 2)!.ChiefComplaint);
+        signOut.BeginExplicitSignOut(physician);
+        Assert.Null(drafts.Get("physician", 2));
         Assert.False(cache.TryPeek("Physician", 1, out _));
         Assert.Null(registry.Current("Physician"));
         Assert.True(cache.TryPeek("Nurse", 1, out _));

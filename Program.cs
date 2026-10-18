@@ -236,6 +236,8 @@ builder.Services.AddSingleton<IPatientChartLoader, ClinicalChartLoader>();
 builder.Services.AddSingleton<PatientChartCache>();
 builder.Services.AddSingleton<ClinicSignOut>();
 builder.Services.AddSingleton<NoteDraftService>();
+builder.Services.AddScoped<DraftAutosaveGate>();
+builder.Services.AddHostedService<NoteDraftSweepService>();
 builder.Services.AddScoped<OpenChartView>();
 builder.Services.AddScoped<OpenChartRefresher>();
 builder.Services.AddHostedService<PatientChartCacheMaintenance>();

@@ -10,17 +10,23 @@ public class AuthSyncService
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly UserMappingService _userMappingService;
     private readonly AuthStateService _authStateService;
+    private readonly NoteDraftService _drafts;
+    private readonly DraftAutosaveGate _autosave;
     private readonly ILogger<AuthSyncService> _logger;
 
     public AuthSyncService(
         UserManager<ApplicationUser> userManager,
         UserMappingService userMappingService,
         AuthStateService authStateService,
+        NoteDraftService drafts,
+        DraftAutosaveGate autosave,
         ILogger<AuthSyncService> logger)
     {
         _userManager = userManager;
         _userMappingService = userMappingService;
         _authStateService = authStateService;
+        _drafts = drafts;
+        _autosave = autosave;
         _logger = logger;
     }
 
@@ -40,6 +46,8 @@ public class AuthSyncService
 
             return;
         }
+
+        _autosave.Capture(_drafts.CurrentEpoch(principal.Identity.Name));
 
         if (string.Equals(_authStateService.CurrentUser?.Username, principal.Identity.Name, StringComparison.OrdinalIgnoreCase))
         {

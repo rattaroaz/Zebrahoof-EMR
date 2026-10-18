@@ -24,15 +24,16 @@
             try
             {
                 var user = SignInManager.Context.User;
-                SignOut.ForgetCharts(user);
+                SignOut.BeginExplicitSignOut(user);
                 await AuditLogger.LogAsync("Logout", "Authentication", null, user?.Identity?.Name);
                 await SignInManager.SignOutAsync();
+                await SignOut.BroadcastAsync(user);
             }
             catch
             {
             }
 
-            Navigation.NavigateTo("/login", forceLoad: true);
+            Navigation.NavigateTo("/login?logout=success", forceLoad: true);
         }
     }
 }

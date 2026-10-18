@@ -15,7 +15,7 @@
             <div class="patient-banner-id">
                 <div class="patient-banner-name">@Shown.LastName, @Shown.FirstName</div>
                 <div class="patient-banner-meta">
-                    MRN @Shown.MRN · DOB @Shown.DateOfBirth.ToString("MM/dd/yyyy") (@Shown.Age y @SexInitial)
+                    @MrnOnce(Shown.MRN) · DOB @Shown.DateOfBirth.ToString("MM/dd/yyyy") (@Shown.Age y @SexInitial)
                     · @Shown.PrimaryProvider
                     ·
                     <span class="patient-allergy-label" data-testid="patient-allergy-label" aria-label="@AllergyLabel">
@@ -64,6 +64,17 @@
         ChartView.Snapshot is { } snap && snap.PatientId == Patient.Id ? snap.Patient : Patient;
 
     private static string Initials(Patient patient) => $"{patient.FirstName.FirstOrDefault()}{patient.LastName.FirstOrDefault()}";
+
+    private static string MrnOnce(string? mrn)
+    {
+        var value = mrn?.Trim() ?? "";
+        if (value.Length == 0)
+        {
+            return "MRN";
+        }
+
+        return value.StartsWith("MRN", StringComparison.OrdinalIgnoreCase) ? value : "MRN " + value;
+    }
 
     private string SexInitial => Shown.Sex.StartsWith("F", StringComparison.OrdinalIgnoreCase) ? "F"
         : Shown.Sex.StartsWith("M", StringComparison.OrdinalIgnoreCase) ? "M"

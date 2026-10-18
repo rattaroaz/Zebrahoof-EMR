@@ -11,6 +11,7 @@ public sealed class NoteDraftService
     public static readonly TimeSpan Lifetime = TimeSpan.FromHours(24);
 
     private readonly ConcurrentDictionary<string, NoteDraft> _drafts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, long> _epoch = new(StringComparer.OrdinalIgnoreCase);
     private readonly TimeProvider _time;
 
     public NoteDraftService()
@@ -21,6 +22,42 @@ public sealed class NoteDraftService
     public NoteDraftService(TimeProvider time)
     {
         _time = time;
+    }
+
+    public long CurrentEpoch(string? user)
+    {
+        if (string.IsNullOrWhiteSpace(user))
+        {
+            return 0;
+        }
+
+        return _epoch.TryGetValue(user.Trim(), out var epoch) ? epoch : 0;
+    }
+
+    /// <summary>
+    /// Explicit sign-out. Clears drafts and advances the epoch so a circuit that
+    /// was already open cannot write the draft back.
+    /// </summary>
+    public void SignOut(string? user)
+    {
+        ClearUser(user);
+        if (string.IsNullOrWhiteSpace(user))
+        {
+            return;
+        }
+
+        _epoch.AddOrUpdate(user.Trim(), 1, (_, current) => current + 1);
+    }
+
+    public bool TrySave(string? user, int patientId, NoteDraft draft, long epoch)
+    {
+        if (epoch != CurrentEpoch(user))
+        {
+            return false;
+        }
+
+        Save(user, patientId, draft);
+        return true;
     }
 
     public void Save(string? user, int patientId, NoteDraft draft)
@@ -39,6 +76,21 @@ public sealed class NoteDraftService
 
         draft.SavedAt = _time.GetUtcNow();
         _drafts[key] = draft;
+    }
+
+    public int Sweep()
+    {
+        var now = _time.GetUtcNow();
+        var removed = 0;
+        foreach (var pair in _drafts)
+        {
+            if (now - pair.Value.SavedAt >= Lifetime && _drafts.TryRemove(pair.Key, out _))
+            {
+                removed++;
+            }
+        }
+
+        return removed;
     }
 
     public NoteDraft? Get(string? user, int patientId)

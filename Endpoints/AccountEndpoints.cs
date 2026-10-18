@@ -111,10 +111,23 @@ public static class AccountEndpoints
     {
         var log = loggerFactory.CreateLogger("Zebrahoof_EMR.Auth.Account");
         var userId = EndpointAuditHelper.ResolveUserId(context);
-        signOut.ForgetCharts(context.User);
-        log.LogInformation("User logout for user id {UserId} (session cookies cleared)", userId ?? "(anonymous)");
+        var idle = string.Equals(context.Request.Query["reason"], "idle", StringComparison.OrdinalIgnoreCase);
+        if (idle)
+        {
+            signOut.ForgetCharts(context.User);
+            log.LogInformation("Idle sign-out for user id {UserId}; note drafts kept", userId ?? "(anonymous)");
+        }
+        else
+        {
+            signOut.BeginExplicitSignOut(context.User);
+            log.LogInformation("User logout for user id {UserId} (session cookies cleared)", userId ?? "(anonymous)");
+        }
         await EndpointAuditHelper.AuditAsync(audit, context, "logout", "auth:login");
         await signInManager.SignOutAsync();
+        if (!idle)
+        {
+            await signOut.BroadcastAsync(context.User);
+        }
         await RevokeSessionAsync(context, sessionService, "logout");
         ClearSessionCookies(context);
 

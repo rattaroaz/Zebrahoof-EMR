@@ -548,6 +548,16 @@ textarea:focus-visible,
     z-index: 20;
 }
 
+@media (max-width: 800px) {
+    .patient-sticky-toggle {
+        position: static;
+        bottom: auto;
+        left: auto;
+        margin: 8px 0;
+        z-index: 1;
+    }
+}
+
 .global-search {
     position: relative;
     min-width: 220px;

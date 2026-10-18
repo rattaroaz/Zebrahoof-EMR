@@ -3,6 +3,7 @@
 @implements IAsyncDisposable
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
+@inject DraftAutosaveGate Autosave
 
 @if (_showWarning)
 {
@@ -129,6 +130,13 @@
         return Task.CompletedTask;
     }
 
+    [JSInvokable]
+    public Task OnSignedOut()
+    {
+        Autosave.Stop();
+        return Task.CompletedTask;
+    }
+
     private async Task StaySignedIn()
     {
         _showWarning = false;
@@ -227,7 +235,7 @@
 
         _showWarning = false;
         StopCountdown();
-        Navigation.NavigateTo("/account/logout", forceLoad: true);
+        Navigation.NavigateTo("/account/logout?reason=idle", forceLoad: true);
     }
 
     private void StopCountdown()

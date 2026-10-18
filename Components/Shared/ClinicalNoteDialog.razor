@@ -4,6 +4,7 @@
 @inject MockPatientService PatientService
 @inject ChartEditTracker Edits
 @inject NoteDraftService Drafts
+@inject DraftAutosaveGate Autosave
 @inject ILogger<ClinicalNoteDialog> Logger
 
 <MudDialog>
@@ -167,6 +168,7 @@
     private string? _saveError;
     private CancellationTokenSource? _draftDebounce;
     private CancellationTokenSource? _draftFlush;
+    private long _draftEpoch;
 
     protected override void OnInitialized()
     {
@@ -229,6 +231,12 @@
         }
 
         Edits.DiscardRequested += OnDiscardRequested;
+        if (!Autosave.EpochCaptured)
+        {
+            Autosave.Capture(Drafts.CurrentEpoch(DraftUser));
+        }
+
+        _draftEpoch = Autosave.Epoch;
         if (!IsViewOnly && !IsEdit)
         {
             _draftFlush = new CancellationTokenSource();
@@ -272,6 +280,11 @@
         {
             while (await timer.WaitForNextTickAsync(token))
             {
+                if (!Autosave.Enabled)
+                {
+                    break;
+                }
+
                 await InvokeAsync(PersistDraft);
             }
         }
@@ -286,12 +299,12 @@
 
     private void PersistDraft()
     {
-        if (IsViewOnly || IsEdit || _saved)
+        if (!Autosave.Enabled || IsViewOnly || IsEdit || _saved)
         {
             return;
         }
 
-        Drafts.Save(DraftUser, PatientId > 0 ? PatientId : note.PatientId, new NoteDraft
+        var saved = Drafts.TrySave(DraftUser, PatientId > 0 ? PatientId : note.PatientId, new NoteDraft
         {
             ChiefComplaint = note.ChiefComplaint,
             HistoryOfPresentIllness = note.HistoryOfPresentIllness,
@@ -299,7 +312,15 @@
             PhysicalExam = note.PhysicalExam,
             Assessment = note.Assessment,
             Plan = note.Plan
-        });
+        }, _draftEpoch);
+        if (!saved)
+        {
+            Autosave.Stop();
+            Logger.LogInformation(
+                "Draft save rejected for {User} patient {PatientId}; the session is older than sign-out",
+                DraftUser,
+                PatientId > 0 ? PatientId : note.PatientId);
+        }
     }
 
     public void Dispose()
