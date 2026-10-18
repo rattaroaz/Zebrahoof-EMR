@@ -437,7 +437,28 @@ textarea:focus-visible,
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 12px;
+    gap: 8px;
+}
+
+.patient-banner {
+    box-sizing: border-box;
+    padding: 8px 16px !important;
+    margin: 0 0 8px 0 !important;
+    border: 0 !important;
+}
+
+.patient-banner .mud-avatar {
+    width: 24px;
+    height: 24px;
+    font-size: 12px;
+}
+
+.patient-banner .mud-button-root {
+    box-sizing: border-box;
+    min-height: 32px;
+    height: 32px;
+    padding: 0 8px;
+    line-height: 24px;
 }
 
 .patient-banner-id {
@@ -450,8 +471,9 @@ textarea:focus-visible,
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 16px;
-    font-weight: 650;
+    font-weight: 600;
     line-height: 24px;
+    height: 24px;
 }
 
 .patient-banner-meta,
@@ -485,15 +507,19 @@ textarea:focus-visible,
 }
 
 .patient-safety-banner {
-    border: 1px solid #e0e0e0;
+    box-sizing: border-box;
+    border: 0;
+    box-shadow: inset 0 0 0 1px #e0e0e0;
     border-radius: 8px;
-    padding: 8px 12px;
-    margin-bottom: 12px;
+    padding: 8px 16px;
+    margin: 0 0 8px 0;
     background: #fff;
 }
 
 .patient-safety-name {
     font-weight: 700;
+    font-size: 16px;
+    line-height: 24px;
 }
 
 .lab-abnormal {
@@ -639,6 +665,20 @@ input:disabled,
     overflow: visible;
 }
 
+.chart-print-sheet,
+.chart-print-head,
+.chart-print-body,
+.chart-print-sheet tr,
+.chart-print-sheet td {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-collapse: collapse;
+    background: transparent;
+}
+
 .note-card {
     break-inside: avoid;
     page-break-inside: avoid;
@@ -658,7 +698,30 @@ input:disabled,
     }
 
     @page {
-        margin: 28mm 12mm 16mm;
+        margin: 12mm 12mm 16mm;
+    }
+
+    .chart-print-sheet {
+        display: table !important;
+        width: 100% !important;
+        border-collapse: collapse;
+    }
+
+    .chart-print-head {
+        display: table-header-group !important;
+    }
+
+    .chart-print-body {
+        display: table-row-group !important;
+    }
+
+    .chart-print-sheet tr {
+        display: table-row !important;
+    }
+
+    .chart-print-sheet td {
+        display: table-cell !important;
+        padding: 0 !important;
     }
 
     .print-filter-notice,
@@ -677,12 +740,15 @@ input:disabled,
     }
 
     .patient-banner-sticky {
-        position: fixed;
-        top: 6mm;
-        left: 12mm;
-        right: 12mm;
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
         background: #fff !important;
-        z-index: 50;
+    }
+
+    .chart-print-head .patient-banner {
+        margin-bottom: 8px !important;
     }
 
     .note-card,
@@ -724,11 +790,22 @@ input:disabled,
         box-shadow: none !important;
         width: 100% !important;
         max-width: none !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .mud-layout {
+        display: block !important;
     }
 
     .mud-main-content,
     .chart-main {
         padding: 0 !important;
+    }
+
+    .chart-print-head .patient-banner {
+        margin: 0 0 8px 0 !important;
     }
 }
 

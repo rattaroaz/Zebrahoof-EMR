@@ -7,10 +7,17 @@
 @inject IJSRuntime JS
 @inject ILogger<PatientChartLayout> Logger
 
-<MudStack Spacing="0">
-    @* Patient Header Banner *@
-    <PatientHeader Patient="Patient" />
-
+<table class="chart-print-sheet">
+    <thead class="chart-print-head">
+        <tr>
+            <td>
+                <PatientHeader Patient="Patient" />
+            </td>
+        </tr>
+    </thead>
+    <tbody class="chart-print-body">
+        <tr>
+            <td>
     <PatientChartMessages PatientId="Patient.Id" InitialMessageId="InboxMessageId" />
 
     @* Patient Sticky Note Toggle *@
@@ -106,7 +113,10 @@
                 break;
         }
     </div>
-</MudStack>
+            </td>
+        </tr>
+    </tbody>
+</table>
 
 <PatientChartQuestions Patient="Patient" />
 

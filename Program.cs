@@ -190,10 +190,11 @@ builder.Services.AddHostedService<PlaywrightTestUserSeeder>();
 builder.Services.AddMudServices();
 builder.Services.AddSignalR(options =>
 {
-    // The browser pings every 5s (wwwroot/js/blazor-start.js). This window stays
-    // above twice that ping and twice the server keepalive. A silent client is
-    // dropped at 30s; the browser treats 20s without a server message as a drop.
-    options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+    // The browser reschedules its ping when a server message arrives, so the
+    // server keepalive has to be 5s as well or the browser ping lands on this
+    // interval (measured at 10–11s when this was 10s). 30s is still at least
+    // twice the ping. The browser treats 20s without a server message as a drop.
+    options.KeepAliveInterval = TimeSpan.FromSeconds(5);
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
 });
 
@@ -202,7 +203,7 @@ builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents()
     .AddHubOptions(options =>
     {
-        options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+        options.KeepAliveInterval = TimeSpan.FromSeconds(5);
         options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
     });
 

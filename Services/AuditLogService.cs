@@ -20,7 +20,7 @@ public class AuditLogService
         string? action,
         CancellationToken cancellationToken = default)
     {
-        IQueryable<AuditLog> query = _dbContext.AuditLogs.OrderByDescending(log => log.Timestamp);
+        IQueryable<AuditLog> query = _dbContext.AuditLogs;
 
         if (start.HasValue)
         {
@@ -42,14 +42,27 @@ public class AuditLogService
             query = query.Where(log => log.Action == action);
         }
 
-        return await query.Take(500).ToListAsync(cancellationToken);
+        // SQLite cannot ORDER BY DateTimeOffset, and it rejects ORDER BY on a
+        // column that DISTINCT removed from the select list. Filter in SQL,
+        // then sort the page in memory.
+        var rows = await query.ToListAsync(cancellationToken);
+        return rows
+            .OrderByDescending(log => log.Timestamp)
+            .Take(500)
+            .ToList();
     }
 
-    public Task<List<string>> GetRecentActionsAsync(CancellationToken cancellationToken = default) =>
-        _dbContext.AuditLogs
+    public async Task<List<string>> GetRecentActionsAsync(CancellationToken cancellationToken = default)
+    {
+        var rows = await _dbContext.AuditLogs
+            .Select(log => new { log.Action, log.Timestamp })
+            .ToListAsync(cancellationToken);
+
+        return rows
             .OrderByDescending(log => log.Timestamp)
             .Select(log => log.Action)
             .Distinct()
             .Take(50)
-            .ToListAsync(cancellationToken);
+            .ToList();
+    }
 }
