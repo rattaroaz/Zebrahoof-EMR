@@ -76,7 +76,6 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
-const string AbsoluteIssuedKey = ".zebrahoof_absolute_issue";
 
 builder.Services.ConfigureApplicationCookie(options =>
 {
@@ -100,7 +99,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 
             var nowTicks = DateTimeOffset.UtcNow.Ticks.ToString();
             context.Properties.Items[AuthCookieIdle.LastActivityKey] = nowTicks;
-            context.Properties.Items[AbsoluteIssuedKey] = nowTicks;
+            context.Properties.Items[AuthCookieIdle.AbsoluteIssuedKey] = nowTicks;
             return Task.CompletedTask;
         },
         OnValidatePrincipal = async context =>
@@ -110,20 +109,15 @@ builder.Services.ConfigureApplicationCookie(options =>
             var now = DateTimeOffset.UtcNow;
             var items = context.Properties.Items;
 
-            if (items.TryGetValue(AbsoluteIssuedKey, out var absoluteTicks) &&
-                long.TryParse(absoluteTicks, out var absTicks))
+            if (AuthCookieIdle.IsAbsoluteExpired(items, now))
             {
-                var absoluteIssued = new DateTimeOffset(absTicks, TimeSpan.Zero);
-                if (now - absoluteIssued > TimeSpan.FromHours(12))
-                {
-                    authLog?.LogWarning(
-                        "Cookie principal rejected: absolute session maximum (12h) exceeded for user id {UserId}",
-                        context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
-                    context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
-                    context.RejectPrincipal();
-                    await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
-                    return;
-                }
+                authLog?.LogWarning(
+                    "Cookie principal rejected: absolute session maximum (12h) exceeded for user id {UserId}",
+                    context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier) ?? "(unknown)");
+                context.HttpContext.RequestServices.GetService<ClinicSignOut>()?.ForgetCharts(context.Principal);
+                context.RejectPrincipal();
+                await context.HttpContext.SignOutAsync(IdentityConstants.ApplicationScheme);
+                return;
             }
 
             var idleWindow = ResolveIdleWindow(context.Principal);
@@ -241,6 +235,7 @@ builder.Services.Configure<ChartCacheOptions>(builder.Configuration.GetSection(C
 builder.Services.AddSingleton<IPatientChartLoader, ClinicalChartLoader>();
 builder.Services.AddSingleton<PatientChartCache>();
 builder.Services.AddSingleton<ClinicSignOut>();
+builder.Services.AddSingleton<NoteDraftService>();
 builder.Services.AddScoped<OpenChartView>();
 builder.Services.AddScoped<OpenChartRefresher>();
 builder.Services.AddHostedService<PatientChartCacheMaintenance>();

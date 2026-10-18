@@ -388,6 +388,24 @@ public class SessionServiceTests
     }
 
     [Fact]
+    public async Task CreateSessionAsync_SecondLogin_KeepsTheFirstSession()
+    {
+        await using var context = CreateDbContext();
+        var userId = await SeedTestUserAsync(context);
+        var timeProvider = new FixedTimeProvider(new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+        var (hubContext, _, _) = CreateHubContext();
+        var service = new SessionService(context, Substitute.For<IAuditLogger>(), timeProvider, hubContext, NullLogger<SessionService>.Instance);
+
+        var first = await service.CreateSessionAsync(userId, "same-device", "A", "10.0.0.1", TimeSpan.FromMinutes(15), TimeSpan.FromHours(12));
+        var second = await service.CreateSessionAsync(userId, "same-device", "B", "10.0.0.1", TimeSpan.FromMinutes(15), TimeSpan.FromHours(12));
+
+        var storedFirst = await context.UserSessions.SingleAsync(session => session.Id == first.Id);
+        Assert.False(storedFirst.IsRevoked);
+        Assert.NotEqual(first.Id, second.Id);
+        Assert.Equal(2, await context.UserSessions.CountAsync(session => !session.IsRevoked));
+    }
+
+    [Fact]
     public async Task GetActiveSessionsAsync_ReturnsOnlyActiveSessions()
     {
         await using var context = CreateDbContext();

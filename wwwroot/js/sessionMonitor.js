@@ -15,8 +15,8 @@ window.sessionMonitor = (function () {
             return;
         }
         wireUserInput.wired = true;
-        ["pointerdown", "keydown", "input"].forEach(function (type) {
-            document.addEventListener(type, noteUserInput, true);
+        ["pointerdown", "keydown", "input", "wheel", "touchmove"].forEach(function (type) {
+            document.addEventListener(type, noteUserInput, { capture: true, passive: true });
         });
     }
 
@@ -68,6 +68,8 @@ window.sessionMonitor = (function () {
         connection = new signalR.HubConnectionBuilder()
             .withUrl("/hubs/session?sessionId=" + sessionId)
             .withAutomaticReconnect()
+            .withKeepAliveInterval(5000)
+            .withServerTimeout(20000)
             .build();
 
         connection.on("IdleWarning", function (message) {
@@ -92,9 +94,23 @@ window.sessionMonitor = (function () {
         });
 
         wireUserInput();
-        await connection.start();
+        try {
+            await connection.start();
+        } catch (err) {
+            console.warn("Session hub did not start", err);
+            return;
+        }
         sendHeartbeat();
         heartbeatInterval = setInterval(sendHeartbeat, 30000);
+    }
+
+    async function noteActive() {
+        lastInputAt = Date.now();
+        try {
+            await sendHeartbeat();
+        } catch (err) {
+            console.warn("Active heartbeat failed", err);
+        }
     }
 
     async function stop() {
@@ -113,5 +129,5 @@ window.sessionMonitor = (function () {
         dotNetRef = null;
     }
 
-    return { start: start, stop: stop };
+    return { start: start, stop: stop, noteActive: noteActive };
 })();

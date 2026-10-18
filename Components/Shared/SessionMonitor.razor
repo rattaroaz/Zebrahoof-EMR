@@ -1,14 +1,18 @@
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
 @implements IAsyncDisposable
 @inject IJSRuntime JS
-@inject ISnackbar Snackbar
 @inject NavigationManager Navigation
 
-@if (_idleSeconds > 0 && _idleSeconds < 600)
+@if (_showWarning)
 {
-    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="position-fixed bottom-0 right-0 ma-4">
-        Session idle: @TimeSpan.FromSeconds(_idleSeconds).ToString("mm\\:ss")
-    </MudChip>
+    <div class="idle-warning-backdrop">
+        <div class="idle-warning" role="alertdialog" aria-modal="true" aria-labelledby="idle-warning-title" aria-describedby="idle-warning-countdown" data-testid="idle-warning">
+            <h2 id="idle-warning-title">Still there?</h2>
+            <p id="idle-warning-countdown" aria-live="assertive">You'll be signed out in @_countdownLabel</p>
+            <button type="button" @ref="_stayButton" @onclick="StaySignedIn">Stay signed in</button>
+        </div>
+    </div>
 }
 
 @code {
@@ -18,7 +22,25 @@
     private bool _isMonitoring;
     private bool _shouldMonitor;
     private bool _startAttempted;
-    private double _idleSeconds;
+    private bool _showWarning;
+    private bool _focusStay;
+    private DateTimeOffset _signOutAt;
+    private CancellationTokenSource? _countdown;
+    private ElementReference _stayButton;
+
+    private string _countdownLabel
+    {
+        get
+        {
+            var left = _signOutAt - DateTimeOffset.UtcNow;
+            if (left < TimeSpan.Zero)
+            {
+                left = TimeSpan.Zero;
+            }
+
+            return $"{(int)left.TotalMinutes}:{left.Seconds:00}";
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -38,13 +60,23 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!_shouldMonitor || _isMonitoring || _startAttempted)
+        if (_shouldMonitor && !_isMonitoring && !_startAttempted)
         {
-            return;
+            _startAttempted = true;
+            await StartMonitoringAsync();
         }
 
-        _startAttempted = true;
-        await StartMonitoringAsync();
+        if (_focusStay)
+        {
+            _focusStay = false;
+            try
+            {
+                await _stayButton.FocusAsync();
+            }
+            catch (Exception ex) when (IsDisconnect(ex))
+            {
+            }
+        }
     }
 
     private async Task StartMonitoringAsync()
@@ -55,7 +87,7 @@
             await JS.InvokeVoidAsync("sessionMonitor.start", _dotNetRef, SessionCookieHelper.SessionIdCookieName);
             _isMonitoring = true;
         }
-        catch (JSException ex)
+        catch (Exception ex) when (IsDisconnect(ex))
         {
             Console.Error.WriteLine($"Failed to start session monitor: {ex.Message}");
         }
@@ -67,53 +99,112 @@
         {
             await JS.InvokeVoidAsync("sessionMonitor.stop");
         }
-        catch (JSException)
+        catch (Exception ex) when (IsDisconnect(ex))
         {
-            // Ignore
         }
         finally
         {
             _dotNetRef?.Dispose();
             _dotNetRef = null;
             _isMonitoring = false;
-            _idleSeconds = 0;
-            StateHasChanged();
+            _showWarning = false;
+            StopCountdown();
         }
     }
 
     [JSInvokable]
     public Task OnIdleWarning(string message)
     {
-        Snackbar.Add(message, Severity.Warning, options =>
+        if (!_showWarning)
         {
-            options.RequireInteraction = true;
-            options.CloseAfterNavigation = false;
-        });
-        return Task.CompletedTask;
+            _showWarning = true;
+            _focusStay = true;
+        }
+
+        return InvokeAsync(StateHasChanged);
     }
 
     [JSInvokable]
     public Task OnIdleTimeUpdate(double idleSeconds, double absoluteSeconds)
     {
-        _idleSeconds = idleSeconds;
-        if (_idleSeconds <= 0)
+        _signOutAt = DateTimeOffset.UtcNow.AddSeconds(Math.Max(0, idleSeconds));
+        var show = idleSeconds > 0 && idleSeconds <= 120;
+        if (show && !_showWarning)
         {
-            Snackbar.Add("Session expired due to inactivity.", Severity.Error);
+            _focusStay = true;
+            StartCountdown();
         }
-        InvokeAsync(StateHasChanged);
-        return Task.CompletedTask;
+
+        if (!show)
+        {
+            StopCountdown();
+        }
+
+        _showWarning = show;
+        return InvokeAsync(StateHasChanged);
     }
 
     [JSInvokable]
     public Task OnForceLogout(string message)
     {
-        Snackbar.Add(message, Severity.Error, options => options.RequireInteraction = true);
         Navigation.NavigateTo("/login", forceLoad: true);
         return Task.CompletedTask;
     }
 
+    private async Task StaySignedIn()
+    {
+        _showWarning = false;
+        StopCountdown();
+        try
+        {
+            await JS.InvokeVoidAsync("zebrahoofPostActivity");
+            await JS.InvokeVoidAsync("sessionMonitor.noteActive");
+        }
+        catch (Exception ex) when (IsDisconnect(ex))
+        {
+        }
+    }
+
+    private void StartCountdown()
+    {
+        if (_countdown != null)
+        {
+            return;
+        }
+
+        _countdown = new CancellationTokenSource();
+        var token = _countdown.Token;
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(1000, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }, token);
+    }
+
+    private void StopCountdown()
+    {
+        _countdown?.Cancel();
+        _countdown?.Dispose();
+        _countdown = null;
+    }
+
+    private static bool IsDisconnect(Exception ex) =>
+        ex is JSException or JSDisconnectedException or ObjectDisposedException or InvalidOperationException;
+
     public async ValueTask DisposeAsync()
     {
+        StopCountdown();
         if (_isMonitoring)
         {
             await StopMonitoringAsync();

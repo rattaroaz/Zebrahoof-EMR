@@ -75,6 +75,25 @@ public class AuthCookieIdleTests
     }
 
     [Fact]
+    public void AbsoluteCap_ExpiresAfterTwelveHours()
+    {
+        var issued = DateTimeOffset.Parse("2026-10-17T12:00:00Z");
+        var items = new Dictionary<string, string?>
+        {
+            [AuthCookieIdle.AbsoluteIssuedKey] = issued.Ticks.ToString(),
+            [AuthCookieIdle.LastActivityKey] = issued.AddHours(11).Ticks.ToString()
+        };
+
+        Assert.False(AuthCookieIdle.IsAbsoluteExpired(items, issued.AddHours(12)));
+        Assert.True(AuthCookieIdle.IsAbsoluteExpired(items, issued.AddHours(12).AddSeconds(1)));
+
+        var slid = new Dictionary<string, string?>(items);
+        var decision = AuthCookieIdle.Evaluate(slid, issued.AddHours(11).AddMinutes(14), TimeSpan.FromMinutes(15));
+        Assert.NotEqual(AuthCookieIdleDecision.Expired, decision);
+        Assert.True(AuthCookieIdle.IsAbsoluteExpired(slid, issued.AddHours(12).AddSeconds(1)));
+    }
+
+    [Fact]
     public void ActiveSession_StaysSignedInAcrossTwentyMinutes()
     {
         var now = DateTimeOffset.Parse("2026-10-17T12:00:00Z");

@@ -7,6 +7,8 @@ namespace Zebrahoof_EMR.Services;
 public static class AuthCookieIdle
 {
     public const string LastActivityKey = ".zebrahoof_last_activity";
+    public const string AbsoluteIssuedKey = ".zebrahoof_absolute_issue";
+    public static readonly TimeSpan AbsoluteLifetime = TimeSpan.FromHours(12);
 
     /// <summary>Avoid reissuing the cookie on every request while still sliding well inside the idle window.</summary>
     public static readonly TimeSpan RenewAfter = TimeSpan.FromMinutes(1);
@@ -51,6 +53,20 @@ public static class AuthCookieIdle
             && !path.StartsWith("/_framework", StringComparison.OrdinalIgnoreCase)
             && !path.StartsWith("/_content", StringComparison.OrdinalIgnoreCase)
             && !path.StartsWith("/hubs", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// The cookie expiry can move when the ticket is reissued. This stamp does not.
+    /// </summary>
+    public static bool IsAbsoluteExpired(IDictionary<string, string?> items, DateTimeOffset now)
+    {
+        if (!items.TryGetValue(AbsoluteIssuedKey, out var ticksText) || !long.TryParse(ticksText, out var ticks))
+        {
+            return false;
+        }
+
+        var issued = new DateTimeOffset(ticks, TimeSpan.Zero);
+        return now - issued > AbsoluteLifetime;
     }
 }
 
