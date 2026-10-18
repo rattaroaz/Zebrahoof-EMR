@@ -582,11 +582,21 @@ textarea:focus-visible,
 }
 
 @media (max-width: 1024px) {
-    .profile-menu-btn {
+    .mud-appbar .profile-menu {
+        min-width: 0;
+        flex: 0 1 auto;
         max-width: 16rem;
+        overflow: hidden;
+    }
+
+    .profile-menu-btn {
+        flex-shrink: 1;
+        max-width: 100%;
+        overflow: hidden;
     }
 
     .profile-identity {
+        flex: 1 1 auto;
         max-width: 9.5rem;
         overflow: hidden;
     }
