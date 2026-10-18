@@ -591,25 +591,51 @@ textarea:focus-visible,
 
     .profile-menu-btn {
         flex-shrink: 1;
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
+    }
+
+    .profile-menu-btn .mud-button-label {
+        min-width: 0;
         max-width: 100%;
         overflow: hidden;
     }
 
     .profile-identity {
         flex: 1 1 auto;
-        max-width: 9.5rem;
+        min-width: 0;
+        max-width: min(9.5rem, 100%);
         overflow: hidden;
     }
 
     .profile-name,
     .profile-role {
-        max-width: 9.5rem;
+        min-width: 0;
+        max-width: 100%;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
     .profile-role {
         display: none !important;
+    }
+}
+
+/* 800px leftover space is tighter than a short display name. Hold the menu
+   at the width "Charge Nurse" needs; longer names ellipsize inside it. */
+@media (max-width: 800px) {
+    .mud-appbar .profile-menu {
+        min-width: 10.75rem;
+    }
+
+    .ask-ai-appbar .ask-ai-label {
+        display: none;
+    }
+
+    .ask-ai-appbar .mud-button-icon-start {
+        margin-inline-end: 0;
+        margin-right: 0;
     }
 }
 
