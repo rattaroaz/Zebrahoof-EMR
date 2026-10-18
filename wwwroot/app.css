@@ -628,7 +628,11 @@ textarea:focus-visible,
     .mud-appbar .profile-menu {
         min-width: 10.75rem;
     }
+}
 
+/* The labeled Ask AI button fits, with a gap before the location chip,
+   from 900px up. Below that, keep the icon and don't let the control shrink. */
+@media (max-width: 880px) {
     .ask-ai-appbar .ask-ai-label {
         display: none;
     }
@@ -636,6 +640,10 @@ textarea:focus-visible,
     .ask-ai-appbar .mud-button-icon-start {
         margin-inline-end: 0;
         margin-right: 0;
+    }
+
+    .ask-ai-appbar {
+        margin-inline-end: 8px;
     }
 }
 
@@ -701,6 +709,7 @@ textarea:focus-visible,
 }
 
 .ask-ai-appbar {
+    flex-shrink: 0;
     white-space: nowrap;
 }
 
