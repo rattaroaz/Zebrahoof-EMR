@@ -50,7 +50,7 @@
     </MudCardContent>
 </MudCard>
 
-<MudDialog @bind-Visible="_showDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true })">
+<MudDialog @bind-Visible="_showDialog" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseOnEscapeKey = true })">
     <TitleContent>
         <MudText Typo="Typo.h6">Record Vitals</MudText>
     </TitleContent>

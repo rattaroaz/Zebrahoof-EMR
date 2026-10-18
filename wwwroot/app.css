@@ -449,15 +449,15 @@ textarea:focus-visible,
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 1.15rem;
+    font-size: 16px;
     font-weight: 650;
-    line-height: 1.2;
+    line-height: 24px;
 }
 
 .patient-banner-meta,
 .patient-safety-meta {
-    font-size: 0.8125rem;
-    line-height: 1.3;
+    font-size: 13px;
+    line-height: 16px;
     color: #3f3f3f;
 }
 
@@ -639,6 +639,16 @@ input:disabled,
     overflow: visible;
 }
 
+.note-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+
+.print-filter-notice,
+.notes-print-meta {
+    display: none;
+}
+
 @media print {
     .notes-virtual-list,
     .notes-all-list {
@@ -647,6 +657,43 @@ input:disabled,
         overflow: visible !important;
     }
 
+    @page {
+        margin: 28mm 12mm 16mm;
+    }
+
+    .print-filter-notice,
+    .notes-print-meta {
+        display: block;
+    }
+
+    .notes-print-meta {
+        position: fixed;
+        bottom: 4mm;
+        left: 12mm;
+        right: 12mm;
+        font-size: 11px;
+        color: #212121;
+        background: #fff;
+    }
+
+    .patient-banner-sticky {
+        position: fixed;
+        top: 6mm;
+        left: 12mm;
+        right: 12mm;
+        background: #fff !important;
+        z-index: 50;
+    }
+
+    .note-card,
+    .note-card.mud-paper {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        box-shadow: none !important;
+        background: #fff !important;
+    }
+
+    .note-row-actions,
     .notes-toolbar,
     .mud-appbar,
     .mud-drawer,
@@ -664,13 +711,24 @@ input:disabled,
         display: none !important;
     }
 
+    html,
+    body,
     .mud-layout,
     .mud-main-content,
+    .mud-paper,
+    .mud-card,
+    .mud-card-content,
     .chart-main {
         margin: 0 !important;
-        padding: 0 !important;
+        background: #fff !important;
+        box-shadow: none !important;
         width: 100% !important;
         max-width: none !important;
+    }
+
+    .mud-main-content,
+    .chart-main {
+        padding: 0 !important;
     }
 }
 

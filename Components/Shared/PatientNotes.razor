@@ -24,6 +24,12 @@
         </MudStack>
     </MudStack>
 
+    @if (!string.IsNullOrWhiteSpace(_query))
+    {
+        <p class="print-filter-notice">Filtered: showing notes that match "@_query".</p>
+    }
+    <p class="notes-print-meta">Printed @ClinicTime.Format(DateTime.UtcNow, "MMM dd, yyyy h:mm tt")@(_query is { Length: > 0 } ? $" · Filtered to \"{_query}\"" : "")</p>
+
     <!-- Notes List -->
     <MudCard Elevation="2">
         <MudCardContent>

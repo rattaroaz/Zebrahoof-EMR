@@ -190,15 +190,21 @@ builder.Services.AddHostedService<PlaywrightTestUserSeeder>();
 builder.Services.AddMudServices();
 builder.Services.AddSignalR(options =>
 {
-    // Notice a dropped browser in about 12s instead of the 30s default.
-    // ClientTimeoutInterval must be at least twice KeepAliveInterval.
-    options.KeepAliveInterval = TimeSpan.FromSeconds(5);
-    options.ClientTimeoutInterval = TimeSpan.FromSeconds(12);
+    // The browser pings every 5s (wwwroot/js/blazor-start.js). This window stays
+    // above twice that ping and twice the server keepalive. A silent client is
+    // dropped at 30s; the browser treats 20s without a server message as a drop.
+    options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
 });
 
 // Add Blazor services
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents()
+    .AddHubOptions(options =>
+    {
+        options.KeepAliveInterval = TimeSpan.FromSeconds(10);
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+    });
 
 // Add mock data services
 builder.Services.AddScoped<AuthStateService>();
